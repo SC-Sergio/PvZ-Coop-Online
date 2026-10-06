@@ -165,6 +165,7 @@ public:
 	GameScenes						mGardenGameScene;
 	BoardResult						mGardenBoardResult;
 	bool							mGardenStateIsolated;
+	bool							mApplyingCooperativeCommand;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
 	DataArray<Projectile>			mProjectiles;

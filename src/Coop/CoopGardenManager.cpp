@@ -11,6 +11,7 @@
 #include "../SexyAppFramework/widget/WidgetManager.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace Coop
 {
@@ -35,6 +36,8 @@ namespace Coop
 		mHasAppStateSnapshot = true;
 		mSession = &session;
 		mCommandProcessor.Reset();
+		mLocalPlayerId = session.GetHostPlayerId();
+		mNextLocalCommandSequence = 1;
 		for (const GardenInstance& garden : session.GetGardens())
 		{
 			Board* board = new Board(mApp);
@@ -77,6 +80,7 @@ namespace Coop
 		mGardens.clear();
 		mViewedGarden.reset();
 		mSession = nullptr;
+		mLocalPlayerId.reset();
 		if (mHasAppStateSnapshot)
 		{
 			mApp->mGameScene = mPreviousGameScene;
@@ -102,6 +106,33 @@ namespace Coop
 		mViewedGarden = gardenId;
 		mApp->mWidgetManager->SetFocus(selected->board);
 		return true;
+	}
+
+	bool CoopGardenManager::SetLocalPlayerId(PlayerId playerId)
+	{
+		if (!mSession || playerId == 0 || std::none_of(mSession->GetSlots().begin(), mSession->GetSlots().end(), [playerId](const PlayerSlot& slot)
+			{ return slot.state == PlayerState::PLAYING && slot.playerId == playerId; }))
+			return false;
+		mLocalPlayerId = playerId;
+		mNextLocalCommandSequence = 1;
+		return true;
+	}
+
+	bool CoopGardenManager::SubmitLocalCommand(Board& board, PlayerCommand command)
+	{
+		if (!mSession || !mLocalPlayerId || !mSession->GetHostPlayerId()
+			|| *mLocalPlayerId != *mSession->GetHostPlayerId()
+			|| mNextLocalCommandSequence == std::numeric_limits<std::uint64_t>::max())
+			return false;
+
+		const auto garden = std::find_if(mGardens.begin(), mGardens.end(), [&board](const ManagedGarden& candidate)
+			{ return candidate.board == &board; });
+		if (garden == mGardens.end() || garden->owner != *mLocalPlayerId)
+			return false;
+		command.senderId = *mLocalPlayerId;
+		command.gardenId = garden->id;
+		command.sequence = mNextLocalCommandSequence++;
+		return ProcessCommand(command) == CommandRejection::NONE;
 	}
 
 	CommandRejection CoopGardenManager::ProcessCommand(const PlayerCommand& command)

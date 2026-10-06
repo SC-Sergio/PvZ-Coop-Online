@@ -23,6 +23,8 @@
 #include "Cutscene.h"
 #include "Challenge.h"
 #include "SeedPacket.h"
+#include "../Coop/CoopGardenManager.h"
+#include "../Coop/PlayerCommand.h"
 #include "../LawnApp.h"
 #include "CursorObject.h"
 #include "../Resources.h"
@@ -735,6 +737,15 @@ bool SeedPacket::CanPickUp()
 void SeedPacket::MouseDown(int x, int y, int theClickCount)
 {
 	(void)x;(void)y;(void)theClickCount;
+	if (mBoard && mBoard->mGardenStateIsolated && !mBoard->mApplyingCooperativeCommand
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
+	{
+		Coop::PlayerCommand command;
+		command.type = Coop::CommandType::SELECT_PLANT;
+		command.value = mIndex;
+		mApp->mCoopGardenManager->SubmitLocalCommand(*mBoard, command);
+		return;
+	}
 	if (mBoard->mPaused || mApp->mGameScene != GameScenes::SCENE_PLAYING || mPacketType == SeedType::SEED_NONE)
 	{
 		return;

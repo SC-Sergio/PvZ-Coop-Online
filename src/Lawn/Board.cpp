@@ -26,6 +26,7 @@
 #include "BoardInclude.h"
 #include "SeedPacket.h"
 #include "../Coop/PlayerCommand.h"
+#include "../Coop/CoopGardenManager.h"
 #include "System/Music.h"
 #include "System/SaveGame.h"
 #include "Widget/LawnDialog.h"
@@ -100,6 +101,23 @@ namespace
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
 		bool mScoped = false;
 	};
+
+	class ScopedCooperativeCommandApplication
+	{
+	public:
+		explicit ScopedCooperativeCommandApplication(Board* board)
+			: mBoard(board), mPrevious(board->mApplyingCooperativeCommand)
+		{
+			mBoard->mApplyingCooperativeCommand = true;
+		}
+		~ScopedCooperativeCommandApplication()
+		{
+			mBoard->mApplyingCooperativeCommand = mPrevious;
+		}
+	private:
+		Board* mBoard;
+		bool mPrevious;
+	};
 }
 
 // GOTY @Patoke: 0x40A3C0
@@ -112,6 +130,7 @@ Board::Board(LawnApp* theApp)
 	mGardenGameScene = mApp->mGameScene;
 	mGardenBoardResult = mApp->mBoardResult;
 	mGardenStateIsolated = false;
+	mApplyingCooperativeCommand = false;
 	TodHesitationTrace("preboard");
 
 	mZombies.DataArrayInitialize(1024U, "zombies");
@@ -3920,6 +3939,21 @@ void Board::MouseDownCobcannonFire(int x, int y, int theClickCount)
 // GOTY @Patoke: 0x4126F0
 void Board::MouseDownWithPlant(int x, int y, int theClickCount)
 {
+	if (theClickCount >= 0 && mGardenStateIsolated && !mApplyingCooperativeCommand
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive()
+		&& mCursorObject->mCursorType == CursorType::CURSOR_TYPE_PLANT_FROM_BANK)
+	{
+		const SeedType seedType = GetSeedTypeInCursor();
+		Coop::PlayerCommand command;
+		command.type = Coop::CommandType::PLACE_PLANT;
+		command.x = static_cast<std::int16_t>(PlantingPixelToGridX(x, y, seedType));
+		command.y = static_cast<std::int16_t>(PlantingPixelToGridY(x, y, seedType));
+		command.value = static_cast<std::int32_t>(seedType);
+		if (command.x >= 0 && command.x < MAX_GRID_SIZE_X && command.y >= 0 && command.y < MAX_GRID_SIZE_Y)
+			mApp->mCoopGardenManager->SubmitLocalCommand(*this, command);
+		return;
+	}
+
 	// 右击鼠标：放下卡牌
 	if (theClickCount < 0)
 	{
@@ -4339,6 +4373,19 @@ void Board::TutorialArrowRemove()
 
 void Board::MouseDownWithTool(int x, int y, int theClickCount, CursorType theCursorType)
 {
+	if (theClickCount >= 0 && mGardenStateIsolated && !mApplyingCooperativeCommand
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive()
+		&& theCursorType == CursorType::CURSOR_TYPE_SHOVEL)
+	{
+		Coop::PlayerCommand command;
+		command.type = Coop::CommandType::REMOVE_PLANT;
+		command.x = static_cast<std::int16_t>(PixelToGridX(x, y));
+		command.y = static_cast<std::int16_t>(PixelToGridY(x, y));
+		if (command.x >= 0 && command.x < MAX_GRID_SIZE_X && command.y >= 0 && command.y < MAX_GRID_SIZE_Y)
+			mApp->mCoopGardenManager->SubmitLocalCommand(*this, command);
+		return;
+	}
+
 	if (theClickCount < 0)
 	{
 		ClearCursor();
@@ -6263,6 +6310,7 @@ bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 		const int previousTimesUsed = packet->mTimesUsed;
 		const int previousPacketCount = mSeedBank->mNumPackets;
 		const bool wasRefreshing = packet->mRefreshing;
+		ScopedCooperativeCommandApplication aApplying(this);
 		MouseDownWithPlant(pixelX, pixelY, 1);
 		const bool planted = packet->mTimesUsed > previousTimesUsed
 			|| (!wasRefreshing && packet->mRefreshing) || mSeedBank->mNumPackets < previousPacketCount;
@@ -6279,6 +6327,7 @@ bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 		Plant* plant = ToolHitTest(pixelX, pixelY);
 		if (plant == nullptr || plant->mMindControlled)
 			return false;
+		ScopedCooperativeCommandApplication aApplying(this);
 		MouseDownWithTool(pixelX, pixelY, 1, CursorType::CURSOR_TYPE_SHOVEL);
 		return true;
 	}
@@ -6287,6 +6336,7 @@ bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 		Coin* coin = mCoins.DataArrayTryToGet(static_cast<CoinID>(command.entityId));
 		if (coin == nullptr || !coin->IsSun() || coin->mDead || coin->mIsBeingCollected)
 			return false;
+		ScopedCooperativeCommandApplication aApplying(this);
 		coin->MouseDown(static_cast<int>(coin->mPosX), static_cast<int>(coin->mPosY), 1);
 		return coin->mIsBeingCollected;
 	}

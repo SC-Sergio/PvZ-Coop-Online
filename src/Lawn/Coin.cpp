@@ -20,6 +20,8 @@
  */
 
 #include "Coin.h"
+#include "../Coop/CoopGardenManager.h"
+#include "../Coop/PlayerCommand.h"
 #include "Board.h"
 #include "Cutscene.h"
 #include "ZenGarden.h"
@@ -1407,6 +1409,16 @@ void Coin::MouseDown(int x, int y, int theClickCount)
     {
         return;
     }
+
+	if (mBoard->mGardenStateIsolated && !mBoard->mApplyingCooperativeCommand
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive() && IsSun())
+	{
+		Coop::PlayerCommand command;
+		command.type = Coop::CommandType::COLLECT_SUN;
+		command.entityId = static_cast<std::uint32_t>(mBoard->mCoins.DataArrayGetID(this));
+		mApp->mCoopGardenManager->SubmitLocalCommand(*mBoard, command);
+		return;
+	}
 
     if (theClickCount >= 0 && !mIsBeingCollected && (!NeedClick() || theClickCount != 999))
     {

@@ -33,6 +33,8 @@ namespace Coop
 		bool Start(CoopSession& session, const ConfigureGarden& configureGarden);
 		void Stop();
 		bool SelectGarden(GardenId gardenId);
+		bool SetLocalPlayerId(PlayerId playerId);
+		bool SubmitLocalCommand(Board& board, PlayerCommand command);
 		CommandRejection ProcessCommand(const PlayerCommand& command);
 		std::vector<CommandRejection> DrainIncomingCommands(INetworkTransport& transport);
 		bool Execute(const PlayerCommand& command) override;
@@ -56,6 +58,8 @@ namespace Coop
 		std::vector<ManagedGarden> mGardens;
 		std::optional<GardenId> mViewedGarden;
 		AuthoritativeCommandProcessor mCommandProcessor;
+		std::optional<PlayerId> mLocalPlayerId;
+		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
 		bool mHasAppStateSnapshot = false;
