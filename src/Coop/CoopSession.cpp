@@ -103,6 +103,14 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopSession::SetRandomSeed(std::uint32_t seed) noexcept
+	{
+		if (mStarted)
+			return false;
+		mRandomSeed = seed;
+		return true;
+	}
+
 	bool CoopSession::ApplySnapshot(const CoopSessionSnapshot& snapshot)
 	{
 		if (!IsValidSessionSnapshot(snapshot))
@@ -115,6 +123,7 @@ namespace Coop
 		mSlots = snapshot.slots;
 		mGardens = snapshot.gardens;
 		mHostPlayerId = snapshot.hostPlayerId;
+		mRandomSeed = snapshot.randomSeed;
 		mStarted = snapshot.started;
 		mNextGardenId = snapshot.nextGardenId;
 		return true;

@@ -14,6 +14,7 @@
 #include "../Sexy.TodLib/Reanimator.h"
 #include "../Sexy.TodLib/TodParticle.h"
 #include "../Sexy.TodLib/Trail.h"
+#include "../SexyAppFramework/misc/MTRand.h"
 #include "../SexyAppFramework/widget/WidgetManager.h"
 
 #include <algorithm>
@@ -49,6 +50,9 @@ namespace Coop
 		mNextLocalCommandSequence = 1;
 		for (const GardenInstance& garden : session.GetGardens())
 		{
+			const std::uint32_t gardenSeed = session.GetRandomSeed()
+				^ (garden.id * 0x9e3779b9U) ^ (garden.owner * 0x85ebca6bU);
+			std::unique_ptr<Sexy::MTRand> randomGenerator = std::make_unique<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
 			std::unique_ptr<EffectSystem> effectSystem = std::make_unique<EffectSystem>();
 			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
 			gEffectSystem = nullptr;
@@ -59,16 +63,22 @@ namespace Coop
 			previousGlobalEffectSystem = gEffectSystem;
 			mApp->mEffectSystem = effectSystem.get();
 			gEffectSystem = effectSystem.get();
-			Board* board = new Board(mApp);
+			Board* board = nullptr;
+			{
+				Sexy::ScopedRandomGenerator randomContext(randomGenerator.get());
+				board = new Board(mApp);
+			}
 			mApp->mEffectSystem = previousAppEffectSystem;
 			gEffectSystem = previousGlobalEffectSystem;
 			board->mGardenEffectSystem = effectSystem.get();
+			board->mGardenRandomGenerator = randomGenerator.get();
+			board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
 			board->EnableGardenStateIsolation(true);
 			board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
 			board->mVisible = false;
 			mApp->mWidgetManager->AddWidget(board);
 			mApp->mWidgetManager->BringToBack(board);
-			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem)});
+			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(randomGenerator)});
 
 			if (!mViewedGarden)
 				mViewedGarden = garden.id;

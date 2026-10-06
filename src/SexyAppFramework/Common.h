@@ -119,6 +119,19 @@ typedef std::vector<char> CharVector;
 
 namespace Sexy
 {
+	class MTRand;
+
+	class ScopedRandomGenerator
+	{
+	public:
+		explicit ScopedRandomGenerator(MTRand* generator);
+		~ScopedRandomGenerator();
+		ScopedRandomGenerator(const ScopedRandomGenerator&) = delete;
+		ScopedRandomGenerator& operator=(const ScopedRandomGenerator&) = delete;
+	private:
+		MTRand* mPrevious = nullptr;
+		bool mScoped = false;
+	};
 
 const ulong SEXY_RAND_MAX = 0x7FFFFFFF;
 

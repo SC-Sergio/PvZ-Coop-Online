@@ -62,6 +62,7 @@ namespace Coop
 	{
 		bool started = false;
 		PlayerId hostPlayerId = 0;
+		std::uint32_t randomSeed = 0;
 		GardenId nextGardenId = 1;
 		std::array<PlayerSlot, MAX_PLAYERS> slots{};
 		std::vector<GardenInstance> gardens;
@@ -75,6 +76,7 @@ namespace Coop
 		bool Leave(PlayerId playerId);
 		bool SetReady(PlayerId playerId, bool ready);
 		bool StartGame(PlayerId requestingPlayerId);
+		bool SetRandomSeed(std::uint32_t seed) noexcept;
 		bool ApplySnapshot(const CoopSessionSnapshot& snapshot);
 	bool MarkGardenDefeated(PlayerId ownerId);
 	bool MarkGardenCompleted(PlayerId ownerId);
@@ -85,6 +87,7 @@ namespace Coop
 		std::size_t GetGardenCount() const noexcept { return mGardens.size(); }
 		std::optional<PlayerId> GetHostPlayerId() const noexcept { return mHostPlayerId; }
 		GardenId GetNextGardenId() const noexcept { return mNextGardenId; }
+		std::uint32_t GetRandomSeed() const noexcept { return mRandomSeed; }
 		bool HasStarted() const noexcept { return mStarted; }
 	TeamResult GetTeamResult() const noexcept;
 
@@ -92,6 +95,7 @@ namespace Coop
 		std::array<PlayerSlot, MAX_PLAYERS> mSlots{};
 		std::vector<GardenInstance> mGardens;
 		GardenId mNextGardenId = 1;
+	std::uint32_t mRandomSeed = 0;
 	std::optional<PlayerId> mHostPlayerId;
 	bool mStarted = false;
 	};

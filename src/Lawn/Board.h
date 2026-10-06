@@ -58,6 +58,7 @@ class CutScene;
 class Challenge;
 class Reanimation;
 class EffectSystem;
+namespace Sexy { class MTRand; }
 class DataSync;
 class TodParticleSystem;
 namespace Coop { struct PlayerCommand; }
@@ -168,6 +169,7 @@ public:
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;
+	Sexy::MTRand*					mGardenRandomGenerator;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
 	DataArray<Projectile>			mProjectiles;

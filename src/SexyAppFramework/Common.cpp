@@ -44,6 +44,7 @@
 
 bool Sexy::gDebug = false;
 static Sexy::MTRand gMTRand;
+static Sexy::MTRand* gActiveMTRand = &gMTRand;
 namespace Sexy
 {
 	std::filesystem::path gAppDataFolder;
@@ -76,22 +77,38 @@ void Sexy::PrintF(const char *text, ...)
 
 int Sexy::Rand()
 {
-	return gMTRand.Next();
+	return gActiveMTRand->Next();
 }
 
 int Sexy::Rand(int range)
 {
-	return gMTRand.Next((unsigned long)range);
+	return gActiveMTRand->Next((unsigned long)range);
 }
 
 float Sexy::Rand(float range)
 {
-	return gMTRand.Next(range);
+	return gActiveMTRand->Next(range);
 }
 
 void Sexy::SRand(ulong theSeed)
 {
-	gMTRand.SRand(theSeed);
+	gActiveMTRand->SRand(theSeed);
+}
+
+Sexy::ScopedRandomGenerator::ScopedRandomGenerator(MTRand* generator)
+{
+	if (generator)
+	{
+		mPrevious = gActiveMTRand;
+		gActiveMTRand = generator;
+		mScoped = true;
+	}
+}
+
+Sexy::ScopedRandomGenerator::~ScopedRandomGenerator()
+{
+	if (mScoped)
+		gActiveMTRand = mPrevious;
 }
 
 std::string Sexy::GetAppDataFolder()

@@ -68,7 +68,8 @@ namespace
 	class ScopedGardenSimulationState
 	{
 	public:
-		explicit ScopedGardenSimulationState(Board* board) : mBoard(board), mApp(board->mApp)
+		explicit ScopedGardenSimulationState(Board* board)
+			: mBoard(board), mApp(board->mApp), mRandomContext(board->mGardenRandomGenerator)
 		{
 			if (!board->mGardenStateIsolated)
 				return;
@@ -115,6 +116,7 @@ namespace
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 		bool mScoped = false;
+		Sexy::ScopedRandomGenerator mRandomContext;
 	};
 
 	class ScopedCooperativeCommandApplication
@@ -147,6 +149,7 @@ Board::Board(LawnApp* theApp)
 	mGardenStateIsolated = false;
 	mApplyingCooperativeCommand = false;
 	mGardenEffectSystem = nullptr;
+	mGardenRandomGenerator = nullptr;
 	TodHesitationTrace("preboard");
 
 	mZombies.DataArrayInitialize(1024U, "zombies");

@@ -19,6 +19,7 @@
 class Board;
 class EffectSystem;
 class LawnApp;
+namespace Sexy { class MTRand; }
 
 namespace Coop
 {
@@ -56,6 +57,7 @@ namespace Coop
 			PlayerId owner;
 			Board* board;
 			std::unique_ptr<EffectSystem> effectSystem;
+			std::unique_ptr<Sexy::MTRand> randomGenerator;
 		};
 
 		LawnApp* mApp;
