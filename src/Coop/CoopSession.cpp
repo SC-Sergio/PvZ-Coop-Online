@@ -40,6 +40,8 @@ namespace Coop
 
 	bool CoopSession::Leave(PlayerId playerId)
 	{
+		if (mStarted)
+			return false;
 		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
 		{
 			return candidate.state != PlayerState::EMPTY && candidate.playerId == playerId;
@@ -97,5 +99,42 @@ namespace Coop
 				slot.state = PlayerState::PLAYING;
 		}
 		return true;
+	}
+
+	bool CoopSession::MarkGardenDefeated(PlayerId ownerId)
+	{
+		const auto garden = std::find_if(mGardens.begin(), mGardens.end(), [ownerId](const GardenInstance& candidate)
+		{
+			return candidate.owner == ownerId;
+		});
+		if (!mStarted || garden == mGardens.end() || garden->completed)
+			return false;
+		garden->defeated = true;
+		return true;
+	}
+
+	bool CoopSession::MarkGardenCompleted(PlayerId ownerId)
+	{
+		const auto garden = std::find_if(mGardens.begin(), mGardens.end(), [ownerId](const GardenInstance& candidate)
+		{
+			return candidate.owner == ownerId;
+		});
+		if (!mStarted || garden == mGardens.end() || garden->defeated)
+			return false;
+		garden->completed = true;
+		return true;
+	}
+
+	TeamResult CoopSession::GetTeamResult() const noexcept
+	{
+		if (!mStarted || mGardens.empty())
+			return TeamResult::NOT_STARTED;
+		if (std::any_of(mGardens.begin(), mGardens.end(), [](const GardenInstance& garden)
+			{ return garden.defeated; }))
+			return TeamResult::TEAM_DEFEAT;
+		if (std::all_of(mGardens.begin(), mGardens.end(), [](const GardenInstance& garden)
+			{ return garden.completed; }))
+			return TeamResult::TEAM_VICTORY;
+		return TeamResult::PLAYING;
 	}
 }

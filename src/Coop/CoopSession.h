@@ -32,6 +32,14 @@ namespace Coop
 		AI_TEMPORARY
 	};
 
+	enum class TeamResult : std::uint8_t
+	{
+		NOT_STARTED,
+		PLAYING,
+		TEAM_DEFEAT,
+		TEAM_VICTORY
+	};
+
 	struct GardenInstance
 	{
 		GardenId id;
@@ -57,6 +65,8 @@ namespace Coop
 		bool Leave(PlayerId playerId);
 		bool SetReady(PlayerId playerId, bool ready);
 		bool StartGame(PlayerId requestingPlayerId);
+	bool MarkGardenDefeated(PlayerId ownerId);
+	bool MarkGardenCompleted(PlayerId ownerId);
 
 		const std::array<PlayerSlot, MAX_PLAYERS>& GetSlots() const noexcept { return mSlots; }
 		const std::vector<GardenInstance>& GetGardens() const noexcept { return mGardens; }
@@ -64,6 +74,7 @@ namespace Coop
 		std::size_t GetGardenCount() const noexcept { return mGardens.size(); }
 		std::optional<PlayerId> GetHostPlayerId() const noexcept { return mHostPlayerId; }
 		bool HasStarted() const noexcept { return mStarted; }
+	TeamResult GetTeamResult() const noexcept;
 
 	private:
 		std::array<PlayerSlot, MAX_PLAYERS> mSlots{};

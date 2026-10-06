@@ -74,6 +74,31 @@ namespace
 		Require(session.StartGame(22), "empty slots do not prevent start");
 		Require(session.GetGardenCount() == 1, "empty lobby slots never create gardens");
 	}
+
+	void TestCooperativeTeamResults()
+	{
+		Coop::CoopSession victory;
+		Require(victory.Join(31, "one").has_value(), "first player joins");
+		Require(victory.Join(32, "two").has_value(), "second player joins");
+		Require(victory.SetReady(31, true) && victory.SetReady(32, true), "all players ready");
+		Require(victory.StartGame(31), "team match starts");
+		Require(victory.GetTeamResult() == Coop::TeamResult::PLAYING, "team begins in progress");
+		Require(!victory.MarkGardenCompleted(99), "foreign player cannot complete another garden");
+		Require(victory.MarkGardenCompleted(31), "owner can complete their garden");
+		Require(victory.GetTeamResult() == Coop::TeamResult::PLAYING, "team continues while any active garden is incomplete");
+		Require(victory.MarkGardenCompleted(32), "last garden can complete");
+		Require(victory.GetTeamResult() == Coop::TeamResult::TEAM_VICTORY, "team wins after every active garden completes");
+		Require(!victory.Leave(31), "lobby leave cannot remove a garden during a match");
+
+		Coop::CoopSession defeat;
+		Require(defeat.Join(41, "one").has_value(), "defeat player joins");
+		Require(defeat.Join(42, "two").has_value(), "second defeat player joins");
+		Require(defeat.SetReady(41, true) && defeat.SetReady(42, true), "defeat team readies");
+		Require(defeat.StartGame(41), "defeat match starts");
+		Require(defeat.MarkGardenDefeated(42), "owner defeat is recorded");
+		Require(defeat.GetTeamResult() == Coop::TeamResult::TEAM_DEFEAT, "one defeated garden defeats the active team");
+		Require(!defeat.MarkGardenCompleted(42), "defeated garden cannot later complete");
+	}
 }
 
 int main()
@@ -82,6 +107,7 @@ int main()
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();
 	TestHostPromotionAndEmptySlotStart();
+	TestCooperativeTeamResults();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }
