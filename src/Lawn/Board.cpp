@@ -24,6 +24,8 @@
 #include <SDL.h>
 #include "ZenGarden.h"
 #include "BoardInclude.h"
+#include "SeedPacket.h"
+#include "../Coop/PlayerCommand.h"
 #include "System/Music.h"
 #include "System/SaveGame.h"
 #include "Widget/LawnDialog.h"
@@ -6212,6 +6214,95 @@ void Board::UpdateSimulation()
 		UpdateLevelEndSequence();
 		mPrevMouseX = mApp->mWidgetManager->mLastMouseX;
 		mPrevMouseY = mApp->mWidgetManager->mLastMouseY;
+	}
+}
+
+bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
+{
+	ScopedGardenSimulationState aGardenState(this);
+	if (!mGardenStateIsolated || command.gardenId == 0 || mPaused
+		|| GetGardenGameScene() != GameScenes::SCENE_PLAYING || mSeedBank == nullptr
+		|| (!mApp->IsAdventureMode() && !mApp->IsSurvivalMode()))
+		return false;
+
+	switch (command.type)
+	{
+	case Coop::CommandType::PLACE_PLANT:
+	{
+		if (command.x < 0 || command.x >= MAX_GRID_SIZE_X || command.y < 0 || command.y >= MAX_GRID_SIZE_Y
+			|| command.value < 0 || command.value >= static_cast<std::int32_t>(SeedType::NUM_SEED_TYPES))
+			return false;
+		const SeedType seedType = static_cast<SeedType>(command.value);
+		SeedPacket* packet = nullptr;
+		const int packetCount = ClampInt(mSeedBank->mNumPackets, 0, SEEDBANK_MAX);
+		for (int i = 0; i < packetCount; ++i)
+		{
+			if (mSeedBank->mSeedPackets[i].mPacketType == seedType
+				|| (mSeedBank->mSeedPackets[i].mPacketType == SeedType::SEED_IMITATER
+					&& mSeedBank->mSeedPackets[i].mImitaterType == seedType))
+			{
+				packet = &mSeedBank->mSeedPackets[i];
+				break;
+			}
+		}
+		if (packet == nullptr || !packet->CanPickUp() || !PlantingRequirementsMet(seedType)
+			|| CanPlantAt(command.x, command.y, seedType) != PlantingReason::PLANTING_OK)
+			return false;
+		const int pixelX = GridToPixelX(command.x, command.y) + 40;
+		const int pixelY = GridToPixelY(command.x, command.y) + (StageHasPool() || StageHasRoof() ? 42 : 50);
+		if (PlantingPixelToGridX(pixelX, pixelY, seedType) != command.x
+			|| PlantingPixelToGridY(pixelX, pixelY, seedType) != command.y)
+			return false;
+
+		mCursorObject->mType = packet->mPacketType;
+		mCursorObject->mImitaterType = packet->mImitaterType;
+		mCursorObject->mCursorType = CursorType::CURSOR_TYPE_PLANT_FROM_BANK;
+		mCursorObject->mSeedBankIndex = packet->mIndex;
+		const int previousTimesUsed = packet->mTimesUsed;
+		const int previousPacketCount = mSeedBank->mNumPackets;
+		const bool wasRefreshing = packet->mRefreshing;
+		MouseDownWithPlant(pixelX, pixelY, 1);
+		const bool planted = packet->mTimesUsed > previousTimesUsed
+			|| (!wasRefreshing && packet->mRefreshing) || mSeedBank->mNumPackets < previousPacketCount;
+		if (!planted)
+			ClearCursor();
+		return planted;
+	}
+	case Coop::CommandType::REMOVE_PLANT:
+	{
+		if (command.x < 0 || command.x >= MAX_GRID_SIZE_X || command.y < 0 || command.y >= MAX_GRID_SIZE_Y)
+			return false;
+		const int pixelX = GridToPixelX(command.x, command.y) + 40;
+		const int pixelY = GridToPixelY(command.x, command.y) + (StageHasPool() || StageHasRoof() ? 42 : 50);
+		Plant* plant = ToolHitTest(pixelX, pixelY);
+		if (plant == nullptr || plant->mMindControlled)
+			return false;
+		MouseDownWithTool(pixelX, pixelY, 1, CursorType::CURSOR_TYPE_SHOVEL);
+		return true;
+	}
+	case Coop::CommandType::COLLECT_SUN:
+	{
+		Coin* coin = mCoins.DataArrayTryToGet(static_cast<CoinID>(command.entityId));
+		if (coin == nullptr || !coin->IsSun() || coin->mDead || coin->mIsBeingCollected)
+			return false;
+		coin->MouseDown(static_cast<int>(coin->mPosX), static_cast<int>(coin->mPosY), 1);
+		return coin->mIsBeingCollected;
+	}
+	case Coop::CommandType::SELECT_PLANT:
+	{
+		if (command.value < 0 || command.value >= mSeedBank->mNumPackets || command.value >= SEEDBANK_MAX)
+			return false;
+		SeedPacket& packet = mSeedBank->mSeedPackets[command.value];
+		if (!packet.CanPickUp())
+			return false;
+		mCursorObject->mType = packet.mPacketType;
+		mCursorObject->mImitaterType = packet.mImitaterType;
+		mCursorObject->mCursorType = CursorType::CURSOR_TYPE_PLANT_FROM_BANK;
+		mCursorObject->mSeedBankIndex = packet.mIndex;
+		return true;
+	}
+	default:
+		return false;
 	}
 }
 

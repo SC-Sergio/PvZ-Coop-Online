@@ -59,6 +59,7 @@ class Challenge;
 class Reanimation;
 class DataSync;
 class TodParticleSystem;
+namespace Coop { struct PlayerCommand; }
 namespace Sexy
 {
 	class Graphics;
@@ -307,6 +308,7 @@ public:
 	void							StartLevel();
 	// Advances this garden's gameplay simulation without requiring it to be the viewed widget.
 	void							UpdateSimulation();
+	bool							ApplyCooperativeCommand(const Coop::PlayerCommand& command);
 	void							EnableGardenStateIsolation(bool enabled);
 	GameScenes						GetGardenGameScene() const noexcept;
 	void							SetGardenGameScene(GameScenes scene) noexcept;

@@ -2,6 +2,7 @@
 #include "../../src/Coop/PlayerCommand.h"
 #include "../../src/Coop/CommandSerialization.h"
 #include "../../src/Coop/NetworkTransport.h"
+#include "../../src/Coop/CommandEndpoint.h"
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
@@ -173,6 +174,52 @@ namespace
 		Coop::PlayerCommand lastCommand;
 	};
 
+	void TestAuthoritativeNetworkIngress()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(81, "host").has_value() && session.Join(82, "guest").has_value(),
+			"network session roster created");
+		Require(session.SetReady(81, true) && session.SetReady(82, true) && session.StartGame(81),
+			"network session starts after ready gate");
+		Coop::LocalTransportHub hub;
+		auto host = hub.CreateTransport(81);
+		auto guest = hub.CreateTransport(82);
+		Require(host && guest, "host and guest local endpoints created");
+
+		Coop::PlayerCommand command;
+		command.senderId = 99;
+		command.gardenId = session.GetGardens()[1].id;
+		command.sequence = 1;
+		command.type = Coop::CommandType::REMOVE_PLANT;
+		command.x = 2;
+		command.y = 3;
+		auto spoofed = Coop::SerializeCommand(command);
+		Require(spoofed && guest->SendTo(81, *spoofed), "guest can submit a packet with spoofed payload identity");
+		Coop::AuthoritativeCommandProcessor processor;
+		RecordingExecutor executor;
+		auto rejected = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		Require(rejected.size() == 1 && rejected[0] == Coop::CommandRejection::SENDER_MISMATCH,
+			"host binds payload identity to the transport peer before validation");
+		Require(executor.executions == 0, "spoofed command never reaches gameplay");
+
+		command.senderId = 82;
+		auto valid = Coop::SerializeCommand(command);
+		Require(valid && guest->SendTo(81, *valid), "guest sends command with matching transport identity");
+		auto accepted = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		Require(accepted.size() == 1 && accepted[0] == Coop::CommandRejection::NONE,
+			"host processes a valid owner command");
+		Require(executor.executions == 1, "validated network command reaches executor once");
+
+		const std::array<std::uint8_t, 3> malformed{0, 1, 2};
+		Require(guest->SendTo(81, malformed), "guest can deliver malformed bytes for decoder validation");
+		auto malformedResult = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		Require(malformedResult.size() == 1 && malformedResult[0] == Coop::CommandRejection::WRONG_PROTOCOL,
+			"host rejects malformed wire frames");
+		auto nonAuthority = Coop::DrainAuthoritativeCommands(*guest, session, processor, executor);
+		Require(nonAuthority.size() == 1 && nonAuthority[0] == Coop::CommandRejection::NOT_AUTHORITY,
+			"guest endpoint cannot act as the authoritative command receiver");
+	}
+
 	void TestAuthoritativeCommandProcessor()
 	{
 		Coop::CoopSession session;
@@ -308,6 +355,7 @@ int main()
 	TestCooperativeTeamResults();
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
+	TestAuthoritativeNetworkIngress();
 	TestCommandSerialization();
 	TestLocalTransportHarness();
 	std::cout << "CoopSession tests passed\n";

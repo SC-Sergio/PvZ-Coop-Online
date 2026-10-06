@@ -68,7 +68,9 @@ namespace Coop
 		INVALID_COORDINATES,
 		INVALID_VALUE,
 		INVALID_TARGET,
-		EXECUTION_FAILED
+	EXECUTION_FAILED,
+	SENDER_MISMATCH,
+	NOT_AUTHORITY
 	};
 
 	// Validates intent only. The authoritative gameplay adapter still checks live resources,

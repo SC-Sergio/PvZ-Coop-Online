@@ -7,6 +7,8 @@
 #define PVZ_COOP_GARDEN_MANAGER_H
 
 #include "CoopSession.h"
+#include "PlayerCommand.h"
+#include "NetworkTransport.h"
 #include "../ConstEnums.h"
 
 #include <functional>
@@ -18,7 +20,7 @@ class LawnApp;
 
 namespace Coop
 {
-	class CoopGardenManager
+	class CoopGardenManager : public IPlayerCommandExecutor
 	{
 	public:
 		using ConfigureGarden = std::function<bool(Board&, const GardenInstance&)>;
@@ -31,6 +33,9 @@ namespace Coop
 		bool Start(CoopSession& session, const ConfigureGarden& configureGarden);
 		void Stop();
 		bool SelectGarden(GardenId gardenId);
+		CommandRejection ProcessCommand(const PlayerCommand& command);
+		std::vector<CommandRejection> DrainIncomingCommands(INetworkTransport& transport);
+		bool Execute(const PlayerCommand& command) override;
 		void SyncTeamResults();
 		void ProcessDeleteQueues();
 		TeamResult GetTeamResult() const noexcept;
@@ -50,6 +55,7 @@ namespace Coop
 		CoopSession* mSession = nullptr;
 		std::vector<ManagedGarden> mGardens;
 		std::optional<GardenId> mViewedGarden;
+		AuthoritativeCommandProcessor mCommandProcessor;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
 		bool mHasAppStateSnapshot = false;
