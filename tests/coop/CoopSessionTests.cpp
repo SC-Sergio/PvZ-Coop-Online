@@ -7,8 +7,10 @@
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 namespace
 {
@@ -469,6 +471,97 @@ namespace
 		Require(!player2->SendTo(71, *bytes), "closed local hub rejects sends");
 	}
 
+	void TestTcpTransportLoopback()
+	{
+		auto host = Coop::TcpNetworkTransport::Listen(701, 0);
+		Require(host && host->GetBoundPort() != 0, "TCP host binds an ephemeral local port");
+		bool accepted = false;
+		std::thread acceptThread([&]
+		{
+			accepted = host->AcceptPeer(702, 3000);
+		});
+		auto guest = Coop::TcpNetworkTransport::Connect(702, 701, "127.0.0.1", host->GetBoundPort());
+		acceptThread.join();
+		Require(guest && accepted, "TCP host binds the handshake identity to its expected lobby player");
+		Require(host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{702}
+			&& guest->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{701},
+			"TCP peers report connected identities symmetrically");
+
+		std::vector<std::uint8_t> payload(4096);
+		for (std::size_t i = 0; i < payload.size(); ++i)
+			payload[i] = static_cast<std::uint8_t>(i & 0xff);
+		Require(guest->SendTo(701, payload), "TCP guest queues bounded gameplay bytes");
+		const std::vector<std::uint8_t> oversized(Coop::MAX_TRANSPORT_MESSAGE_BYTES + 1, 0);
+		Require(!guest->SendTo(701, oversized), "TCP adapter rejects packets above the protocol cap");
+		std::optional<Coop::TransportPacket> received;
+		for (int attempt = 0; attempt < 2000 && !received; ++attempt)
+		{
+			received = host->Receive();
+			if (!received)
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		Require(received && received->senderId == 702 && received->bytes == payload,
+			"TCP framing preserves payload boundaries and socket-authored sender identity");
+		const std::array<std::uint8_t, 4> reply{9, 8, 7, 6};
+		Require(host->SendTo(702, reply), "TCP host sends an ordered response");
+		received.reset();
+		for (int attempt = 0; attempt < 2000 && !received; ++attempt)
+		{
+			received = guest->Receive();
+			if (!received)
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		Require(received && received->senderId == 701 && received->bytes == std::vector<std::uint8_t>(reply.begin(), reply.end()),
+			"TCP host-to-client framing carries bounded responses");
+
+		bool acceptedThird = false;
+		std::thread thirdAcceptThread([&] { acceptedThird = host->AcceptPeer(703, 3000); });
+		auto third = Coop::TcpNetworkTransport::Connect(703, 701, "127.0.0.1", host->GetBoundPort());
+		thirdAcceptThread.join();
+		bool acceptedFourth = false;
+		std::thread fourthAcceptThread([&] { acceptedFourth = host->AcceptPeer(704, 3000); });
+		auto fourth = Coop::TcpNetworkTransport::Connect(704, 701, "127.0.0.1", host->GetBoundPort());
+		fourthAcceptThread.join();
+		Require(third && fourth && acceptedThird && acceptedFourth && host->GetConnectedPeerIds().size() == 3,
+			"TCP host can attach three guest peers for a four-player room");
+		const std::array<std::uint8_t, 2> thirdMessage{7, 3};
+		const std::array<std::uint8_t, 2> fourthMessage{7, 4};
+		Require(third->SendTo(701, thirdMessage) && fourth->SendTo(701, fourthMessage),
+			"additional TCP clients send independently");
+		std::vector<Coop::TransportPlayerId> additionalSenders;
+		for (int packetIndex = 0; packetIndex < 2; ++packetIndex)
+		{
+			received.reset();
+			for (int attempt = 0; attempt < 2000 && !received; ++attempt)
+			{
+				received = host->Receive();
+				if (!received)
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			Require(received.has_value(), "TCP host drains each guest packet");
+			additionalSenders.push_back(received->senderId);
+		}
+		std::sort(additionalSenders.begin(), additionalSenders.end());
+		Require(additionalSenders == std::vector<Coop::TransportPlayerId>{703, 704},
+			"TCP transport preserves the distinct socket identity for three guest peers");
+		guest->Close();
+		for (int attempt = 0; attempt < 2000 && host->GetConnectedPeerIds().size() != 2; ++attempt)
+		{
+			host->Receive();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		Require(host->GetConnectedPeerIds().size() == 2, "TCP peer close is surfaced without dropping other guests");
+		third->Close();
+		fourth->Close();
+		for (int attempt = 0; attempt < 2000 && !host->GetConnectedPeerIds().empty(); ++attempt)
+		{
+			host->Receive();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		Require(host->GetConnectedPeerIds().empty(), "all TCP peer closes are surfaced as disconnects");
+		host->Close();
+	}
+
 	void TestSessionSnapshotSerialization()
 	{
 		for (std::size_t count = 1; count <= Coop::MAX_PLAYERS; ++count)
@@ -548,6 +641,7 @@ int main()
 	TestCommandSerialization();
 	TestAuthorityResponseRoundTrip();
 	TestLocalTransportHarness();
+	TestTcpTransportLoopback();
 	TestSessionSnapshotSerialization();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;

@@ -11,7 +11,7 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 1. `CoopSession` owns dynamic player slots and one logical `GardenInstance` for each joined player. Empty slots own no garden. Player and garden identities are stable IDs, not player-number fields.
 2. The engine adapter will associate each garden with isolated simulation state. A garden's entities, economy, wave state, ownership, defeat state, and random stream must not be shared with another garden.
 3. A session tick advances every active garden independently of which garden is currently displayed. The selected garden is a presentation concern only.
-4. Input becomes validated player commands. A transport interface carries versioned commands and snapshots; the authoritative host applies them through the same gameplay command path used by local play.
+4. Input becomes validated player commands. A transport interface carries versioned commands and snapshots; the authoritative host applies them through the same gameplay command path used by local play. `LocalTransportHub` is the deterministic test transport. `TcpNetworkTransport` adds a bounded, ordered stream for LAN experiments, but its identity handshake is unauthenticated and its payload is unencrypted; never expose it as an Internet-ready transport.
 5. The online provider is an adapter behind transport/session interfaces. Provider identity, relay, lobby, and reconnect do not enter `Board` gameplay rules.
 
 ## Phase 1 slice in this revision
