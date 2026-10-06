@@ -70,16 +70,27 @@ namespace
 	public:
 		explicit ScopedGardenSimulationState(Board* board) : mBoard(board), mApp(board->mApp)
 		{
-			if (!board->mGardenStateIsolated || mApp->mBoard == board)
+			if (!board->mGardenStateIsolated)
+				return;
+			EffectSystem* gardenEffectSystem = board->mGardenEffectSystem;
+			if (mApp->mBoard == board && (!gardenEffectSystem
+				|| (mApp->mEffectSystem == gardenEffectSystem && gEffectSystem == gardenEffectSystem)))
 				return;
 
 			mScoped = true;
 			mPreviousBoard = mApp->mBoard;
 			mPreviousScene = mApp->mGameScene;
 			mPreviousResult = mApp->mBoardResult;
+			mPreviousEffectSystem = mApp->mEffectSystem;
+			mPreviousGlobalEffectSystem = gEffectSystem;
 			mApp->mBoard = board;
 			mApp->mGameScene = board->mGardenGameScene;
 			mApp->mBoardResult = board->mGardenBoardResult;
+			if (gardenEffectSystem)
+			{
+				mApp->mEffectSystem = gardenEffectSystem;
+				gEffectSystem = gardenEffectSystem;
+			}
 		}
 
 		~ScopedGardenSimulationState()
@@ -91,6 +102,8 @@ namespace
 			mApp->mBoard = mPreviousBoard;
 			mApp->mGameScene = mPreviousScene;
 			mApp->mBoardResult = mPreviousResult;
+			mApp->mEffectSystem = mPreviousEffectSystem;
+			gEffectSystem = mPreviousGlobalEffectSystem;
 		}
 
 	private:
@@ -99,6 +112,8 @@ namespace
 		Board* mPreviousBoard = nullptr;
 		GameScenes mPreviousScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
+		EffectSystem* mPreviousEffectSystem = nullptr;
+		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 		bool mScoped = false;
 	};
 
@@ -131,6 +146,7 @@ Board::Board(LawnApp* theApp)
 	mGardenBoardResult = mApp->mBoardResult;
 	mGardenStateIsolated = false;
 	mApplyingCooperativeCommand = false;
+	mGardenEffectSystem = nullptr;
 	TodHesitationTrace("preboard");
 
 	mZombies.DataArrayInitialize(1024U, "zombies");
@@ -6151,6 +6167,7 @@ void Board::Update()
 		UpdateSimulation();
 		return;
 	}
+	ScopedGardenSimulationState aGardenState(this);
 
 	TodHesitationBracket aHesitation("Board::Update");
 
@@ -6192,7 +6209,8 @@ void Board::Update()
 		mStoreButton->Update();
 	}
 
-	mApp->mEffectSystem->Update();
+	if (!mGardenStateIsolated)
+		mApp->mEffectSystem->Update();
 	mAdvice->Update();
 	UpdateTutorial();
 
@@ -6234,6 +6252,8 @@ void Board::Update()
 void Board::UpdateSimulation()
 {
 	ScopedGardenSimulationState aGardenState(this);
+	if (mGardenStateIsolated && mApp->mEffectSystem)
+		mApp->mEffectSystem->Update();
 	if (mTimeStopCounter > 0)
 		return;
 
@@ -8077,6 +8097,7 @@ void Board::Draw(Graphics* g)
 {
 	if (mApp->GetDialog(Dialogs::DIALOG_STORE) || mApp->GetDialog(Dialogs::DIALOG_ALMANAC))
 		return;
+	ScopedGardenSimulationState aGardenState(this);
 
 	g->SetLinearBlend(true);
 

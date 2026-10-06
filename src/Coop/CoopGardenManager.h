@@ -12,10 +12,12 @@
 #include "../ConstEnums.h"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <vector>
 
 class Board;
+class EffectSystem;
 class LawnApp;
 
 namespace Coop
@@ -53,6 +55,7 @@ namespace Coop
 			GardenId id;
 			PlayerId owner;
 			Board* board;
+			std::unique_ptr<EffectSystem> effectSystem;
 		};
 
 		LawnApp* mApp;
@@ -66,6 +69,8 @@ namespace Coop
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
 		bool mHasAppStateSnapshot = false;
+		EffectSystem* mPreviousEffectSystem = nullptr;
+		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 	};
 }
 

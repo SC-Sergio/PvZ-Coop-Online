@@ -57,6 +57,7 @@ class ToolTipWidget;
 class CutScene;
 class Challenge;
 class Reanimation;
+class EffectSystem;
 class DataSync;
 class TodParticleSystem;
 namespace Coop { struct PlayerCommand; }
@@ -166,6 +167,7 @@ public:
 	BoardResult						mGardenBoardResult;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
+	EffectSystem*					mGardenEffectSystem;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
 	DataArray<Projectile>			mProjectiles;

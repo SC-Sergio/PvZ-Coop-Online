@@ -9,6 +9,11 @@
 
 #include "../Lawn/Board.h"
 #include "../LawnApp.h"
+#include "../Sexy.TodLib/Attachment.h"
+#include "../Sexy.TodLib/EffectSystem.h"
+#include "../Sexy.TodLib/Reanimator.h"
+#include "../Sexy.TodLib/TodParticle.h"
+#include "../Sexy.TodLib/Trail.h"
 #include "../SexyAppFramework/widget/WidgetManager.h"
 
 #include <algorithm>
@@ -34,6 +39,8 @@ namespace Coop
 
 		mPreviousGameScene = mApp->mGameScene;
 		mPreviousBoardResult = mApp->mBoardResult;
+		mPreviousEffectSystem = mApp->mEffectSystem;
+		mPreviousGlobalEffectSystem = gEffectSystem;
 		mHasAppStateSnapshot = true;
 		mSession = &session;
 		mTransport = nullptr;
@@ -42,13 +49,26 @@ namespace Coop
 		mNextLocalCommandSequence = 1;
 		for (const GardenInstance& garden : session.GetGardens())
 		{
+			std::unique_ptr<EffectSystem> effectSystem = std::make_unique<EffectSystem>();
+			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
+			gEffectSystem = nullptr;
+			effectSystem->EffectSystemInitialize();
+			gEffectSystem = previousGlobalEffectSystem;
+
+			EffectSystem* previousAppEffectSystem = mApp->mEffectSystem;
+			previousGlobalEffectSystem = gEffectSystem;
+			mApp->mEffectSystem = effectSystem.get();
+			gEffectSystem = effectSystem.get();
 			Board* board = new Board(mApp);
+			mApp->mEffectSystem = previousAppEffectSystem;
+			gEffectSystem = previousGlobalEffectSystem;
+			board->mGardenEffectSystem = effectSystem.get();
 			board->EnableGardenStateIsolation(true);
 			board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
 			board->mVisible = false;
 			mApp->mWidgetManager->AddWidget(board);
 			mApp->mWidgetManager->BringToBack(board);
-			mGardens.push_back({garden.id, garden.owner, board});
+			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem)});
 
 			if (!mViewedGarden)
 				mViewedGarden = garden.id;
@@ -80,6 +100,8 @@ namespace Coop
 			mApp->SafeDeleteWidget(garden.board);
 		}
 		mGardens.clear();
+		mApp->mEffectSystem = mPreviousEffectSystem;
+		gEffectSystem = mPreviousGlobalEffectSystem;
 		mViewedGarden.reset();
 		mSession = nullptr;
 		mLocalPlayerId.reset();
@@ -241,7 +263,16 @@ namespace Coop
 	void CoopGardenManager::ProcessDeleteQueues()
 	{
 		for (const ManagedGarden& garden : mGardens)
+		{
 			garden.board->ProcessDeleteQueue();
+			EffectSystem* previousAppEffectSystem = mApp->mEffectSystem;
+			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
+			mApp->mEffectSystem = garden.effectSystem.get();
+			gEffectSystem = garden.effectSystem.get();
+			garden.effectSystem->ProcessDeleteQueue();
+			mApp->mEffectSystem = previousAppEffectSystem;
+			gEffectSystem = previousGlobalEffectSystem;
+		}
 	}
 
 	TeamResult CoopGardenManager::GetTeamResult() const noexcept
