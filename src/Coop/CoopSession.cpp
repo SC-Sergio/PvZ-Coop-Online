@@ -4,8 +4,10 @@
  */
 
 #include "CoopSession.h"
+#include "SessionSnapshotSerialization.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace Coop
@@ -98,6 +100,23 @@ namespace Coop
 			if (slot.state == PlayerState::READY)
 				slot.state = PlayerState::PLAYING;
 		}
+		return true;
+	}
+
+	bool CoopSession::ApplySnapshot(const CoopSessionSnapshot& snapshot)
+	{
+		if (!IsValidSessionSnapshot(snapshot))
+			return false;
+		GardenId maxGardenId = 0;
+		for (const GardenInstance& garden : snapshot.gardens)
+			maxGardenId = std::max(maxGardenId, garden.id);
+		if (maxGardenId == std::numeric_limits<GardenId>::max())
+			return false;
+		mSlots = snapshot.slots;
+		mGardens = snapshot.gardens;
+		mHostPlayerId = snapshot.hostPlayerId;
+		mStarted = snapshot.started;
+		mNextGardenId = maxGardenId + 1;
 		return true;
 	}
 

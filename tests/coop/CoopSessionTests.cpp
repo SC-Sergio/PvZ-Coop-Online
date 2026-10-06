@@ -3,6 +3,7 @@
 #include "../../src/Coop/CommandSerialization.h"
 #include "../../src/Coop/NetworkTransport.h"
 #include "../../src/Coop/CommandEndpoint.h"
+#include "../../src/Coop/SessionSnapshotSerialization.h"
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
@@ -374,6 +375,54 @@ namespace
 		hub.Close();
 		Require(!player2->SendTo(71, *bytes), "closed local hub rejects sends");
 	}
+
+	void TestSessionSnapshotSerialization()
+	{
+		for (std::size_t count = 1; count <= Coop::MAX_PLAYERS; ++count)
+		{
+			Coop::CoopSession host;
+			for (std::size_t i = 0; i < count; ++i)
+				Require(host.Join(static_cast<Coop::PlayerId>(400 + i), "Player " + std::to_string(i + 1)).has_value(),
+					"snapshot roster player joins");
+			auto bytes = Coop::SerializeSessionSnapshot(host);
+			Require(bytes && bytes->size() <= Coop::MAX_SESSION_SNAPSHOT_BYTES, "bounded lobby snapshot serializes");
+			auto snapshot = Coop::DeserializeSessionSnapshot(*bytes);
+			Require(snapshot.has_value(), "lobby snapshot decodes");
+			Coop::CoopSession client;
+			Require(client.ApplySnapshot(*snapshot) && client.GetGardenCount() == count,
+				"client snapshot reconstructs exactly the active gardens");
+			for (std::size_t i = count; i < Coop::MAX_PLAYERS; ++i)
+				Require(client.GetSlots()[i].state == Coop::PlayerState::EMPTY && !client.GetSlots()[i].gardenId,
+					"snapshot preserves empty slots without creating gardens");
+		}
+
+		Coop::CoopSession host;
+		Require(host.Join(501, "Host").has_value() && host.Join(502, "Guest").has_value(), "started snapshot roster created");
+		Require(host.SetReady(501, true) && host.SetReady(502, true) && host.StartGame(501), "started snapshot session begins");
+		auto startedBytes = Coop::SerializeSessionSnapshot(host);
+		Require(startedBytes.has_value(), "started session snapshot serializes");
+		auto startedSnapshot = Coop::DeserializeSessionSnapshot(*startedBytes);
+		Coop::CoopSession restored;
+		Require(startedSnapshot && restored.ApplySnapshot(*startedSnapshot) && restored.HasStarted(),
+			"client restores started session metadata");
+		Require(restored.MarkGardenCompleted(502) && restored.GetTeamResult() == Coop::TeamResult::PLAYING,
+			"restored session continues to enforce global victory rules");
+
+		auto badVersion = *startedBytes;
+		badVersion[4]++;
+		Require(!Coop::DeserializeSessionSnapshot(badVersion), "snapshot rejects unsupported protocol version");
+		auto badGardenLink = *startedBytes;
+		badGardenLink[20] = 0;
+		Require(!Coop::DeserializeSessionSnapshot(badGardenLink), "snapshot rejects garden ownership mismatch");
+		Require(!Coop::DeserializeSessionSnapshot(std::span<const std::uint8_t>(startedBytes->data(), startedBytes->size() - 1)),
+			"snapshot rejects truncated data");
+		auto trailing = *startedBytes;
+		trailing.push_back(0);
+		Require(!Coop::DeserializeSessionSnapshot(trailing), "snapshot rejects trailing data");
+		auto invalidState = *startedBytes;
+		invalidState[15] = 0xff;
+		Require(!Coop::DeserializeSessionSnapshot(invalidState), "snapshot rejects unknown player states");
+	}
 }
 
 int main()
@@ -388,6 +437,7 @@ int main()
 	TestAuthoritativeNetworkIngress();
 	TestCommandSerialization();
 	TestLocalTransportHarness();
+	TestSessionSnapshotSerialization();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }

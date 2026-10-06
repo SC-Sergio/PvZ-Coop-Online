@@ -16,6 +16,7 @@
 namespace Coop
 {
 	constexpr std::size_t MAX_PLAYERS = 4;
+	constexpr std::size_t MAX_DISPLAY_NAME_BYTES = 48;
 	using PlayerId = std::uint32_t;
 	using GardenId = std::uint32_t;
 	using SlotIndex = std::size_t;
@@ -57,6 +58,14 @@ namespace Coop
 		std::optional<GardenId> gardenId;
 	};
 
+	struct CoopSessionSnapshot
+	{
+		bool started = false;
+		PlayerId hostPlayerId = 0;
+		std::array<PlayerSlot, MAX_PLAYERS> slots{};
+		std::vector<GardenInstance> gardens;
+	};
+
 	// Session-owned dynamic garden collection. Empty lobby slots never own gardens.
 	class CoopSession
 	{
@@ -65,6 +74,7 @@ namespace Coop
 		bool Leave(PlayerId playerId);
 		bool SetReady(PlayerId playerId, bool ready);
 		bool StartGame(PlayerId requestingPlayerId);
+		bool ApplySnapshot(const CoopSessionSnapshot& snapshot);
 	bool MarkGardenDefeated(PlayerId ownerId);
 	bool MarkGardenCompleted(PlayerId ownerId);
 

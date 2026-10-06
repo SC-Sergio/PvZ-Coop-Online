@@ -10,6 +10,8 @@ The next envelope revision must add a message type, session epoch, and bounded p
 
 The command model in `src/Coop/PlayerCommand.*` uses protocol version 1, a player ID, garden ID, increasing sequence, command type, bounded coordinates/value, entity/target IDs, and amount. The validator rejects non-playing senders, unknown/non-owned gardens, duplicate or stale sequences, out-of-range grid coordinates, unknown command types, invalid ping/plant/selection values, invalid view/resource targets, and excessive resource amounts. It accepts sequence gaps but records a sequence only after structural validation succeeds. Gameplay application must still check current plant unlocks/resources, cooldowns, sun entities, and match state. `CommandSerialization.*` has round-trip and malformed-size/version tests; rate limiting, ACK/retry, session epoch, and transport delivery are not implemented yet.
 
+`SessionSnapshotSerialization.*` adds a separate, fixed-schema, length-capped session snapshot for the four lobby slots and garden owner/result/tick metadata. It preserves empty slots without allocating gardens and can rebuild a `CoopSession`. This payload is only lobby/session metadata; it contains no `Board` entities, economy, RNG state, seed-bank state, wave queues, or effects and therefore cannot restore an active game after reconnect.
+
 ## Message families
 
 - Lobby: create/join intent, lobby snapshot, ready state, settings request, start, leave/kick.
