@@ -24,6 +24,8 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 
 `CoopGardenManager` creates exactly one isolated `Board` for each session garden, registers those boards with the widget manager, selects one visible board, cleans up the full set, processes each board's delete queue, and aggregates terminal garden outcomes into the session. `LawnApp` owns the manager, routes cooperative teardown through it, and suppresses single-board campaign end handling while the manager is active. The manager requires a caller-provided garden configuration callback; there is not yet a lobby or playable UI/API path that supplies it. Shared effects, RNG, pool effect, economy services, seed selection, and several app-global mode values remain shared, so creating multiple Boards is an early engine adapter, not proof of independent gameplay. The manager compiles, but actual multi-board execution has not been tested with legal game data.
 
+The existing `SaveGame.cpp` V4 writer already serializes many board-owned chunks, but its public API writes to a file and the V4 reader loads by file path while applying chunks incrementally. It lacks a complete preflight/atomic-apply boundary for hostile network bytes. Do not send SAVE4 bytes as reconnect snapshots until a bounded in-memory API, strict whole-payload validation, and an engine-level recovery strategy are implemented and tested. Existing single-player save IDs and formats remain unchanged.
+
 ## Engine extraction plan
 
 - Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
