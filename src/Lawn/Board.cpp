@@ -60,11 +60,56 @@
 
 bool gShownMoreSunTutorial = false;
 
+namespace
+{
+	class ScopedGardenSimulationState
+	{
+	public:
+		explicit ScopedGardenSimulationState(Board* board) : mBoard(board), mApp(board->mApp)
+		{
+			if (!board->mGardenStateIsolated || mApp->mBoard == board)
+				return;
+
+			mScoped = true;
+			mPreviousBoard = mApp->mBoard;
+			mPreviousScene = mApp->mGameScene;
+			mPreviousResult = mApp->mBoardResult;
+			mApp->mBoard = board;
+			mApp->mGameScene = board->mGardenGameScene;
+			mApp->mBoardResult = board->mGardenBoardResult;
+		}
+
+		~ScopedGardenSimulationState()
+		{
+			if (!mScoped)
+				return;
+			mBoard->mGardenGameScene = mApp->mGameScene;
+			mBoard->mGardenBoardResult = mApp->mBoardResult;
+			mApp->mBoard = mPreviousBoard;
+			mApp->mGameScene = mPreviousScene;
+			mApp->mBoardResult = mPreviousResult;
+		}
+
+	private:
+		Board* mBoard;
+		LawnApp* mApp;
+		Board* mPreviousBoard = nullptr;
+		GameScenes mPreviousScene = GameScenes::SCENE_LOADING;
+		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
+		bool mScoped = false;
+	};
+}
+
 // GOTY @Patoke: 0x40A3C0
 Board::Board(LawnApp* theApp)
 {
 	mApp = theApp;
-	mApp->mBoard = this;
+	mGardenGameScene = mApp->mGameScene;
+	mGardenBoardResult = mApp->mBoardResult;
+	mGardenStateIsolated = false;
+	const bool isPrimaryBoard = mApp->mBoard == nullptr;
+	if (isPrimaryBoard)
+		mApp->mBoard = this;
 	TodHesitationTrace("preboard");
 
 	mZombies.DataArrayInitialize(1024U, "zombies");
@@ -75,7 +120,8 @@ Board::Board(LawnApp* theApp)
 	mGridItems.DataArrayInitialize(128U, "griditems");
 	TodHesitationTrace("board dataarrays");
 
-	mApp->mEffectSystem->EffectSystemFreeAll();
+	if (isPrimaryBoard && mApp->mEffectSystem)
+		mApp->mEffectSystem->EffectSystemFreeAll();
 	mBoardRandSeed = mApp->mAppRandSeed;
 	if (mApp->IsSurvivalMode())
 	{
@@ -237,8 +283,43 @@ Board::Board(LawnApp* theApp)
 	}
 }
 
+void Board::EnableGardenStateIsolation(bool enabled)
+{
+	if (enabled && !mGardenStateIsolated)
+	{
+		mGardenGameScene = mApp->mGameScene;
+		mGardenBoardResult = mApp->mBoardResult;
+	}
+	mGardenStateIsolated = enabled;
+}
+
+GameScenes Board::GetGardenGameScene() const noexcept
+{
+	return mGardenStateIsolated ? mGardenGameScene : mApp->mGameScene;
+}
+
+void Board::SetGardenGameScene(GameScenes scene) noexcept
+{
+	mGardenGameScene = scene;
+	if (!mGardenStateIsolated || mApp->mBoard == this)
+		mApp->mGameScene = scene;
+}
+
+BoardResult Board::GetGardenBoardResult() const noexcept
+{
+	return mGardenStateIsolated ? mGardenBoardResult : mApp->mBoardResult;
+}
+
+void Board::SetGardenBoardResult(BoardResult result) noexcept
+{
+	mGardenBoardResult = result;
+	if (!mGardenStateIsolated || mApp->mBoard == this)
+		mApp->mBoardResult = result;
+}
+
 Board::~Board()
 {
+	ScopedGardenSimulationState aGardenState(this);
 	delete mAdvice;
 	delete mCursorObject;
 	delete mCursorPreview;
@@ -283,6 +364,7 @@ void BoardInitForPlayer()
 // GOTY @Patoke: 0x40B320
 void Board::DisposeBoard()
 {
+	ScopedGardenSimulationState aGardenState(this);
 	if (mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN)
 		mApp->mZenGarden->LeaveGarden();
 	if (mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM)
@@ -378,7 +460,7 @@ bool Board::NeedSaveGame()
 		mApp->mGameMode != GameMode::GAMEMODE_INTRO && 
 		mApp->mGameMode != GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN && 
 		mApp->mGameMode != GameMode::GAMEMODE_TREE_OF_WISDOM && 
-		mApp->mGameScene == GameScenes::SCENE_PLAYING;
+		GetGardenGameScene() == GameScenes::SCENE_PLAYING;
 }
 
 void Board::SaveGame(const std::string& theFileName)
@@ -1358,7 +1440,7 @@ void Board::InitSurvivalStage()
 	FreezeEffectsForCutscene(true);
 	mLevelComplete = false;
 	InitZombieWaves();
-	mApp->mGameScene = GameScenes::SCENE_LEVEL_INTRO;
+	SetGardenGameScene(GameScenes::SCENE_LEVEL_INTRO);
 	mApp->ShowSeedChooserScreen();
 	mCutScene->StartLevelIntro();
 	mSeedBank->UpdateWidth();
@@ -1435,10 +1517,11 @@ void Board::GetZenButtonRect(GameObjectType theObjectType, Rect& theRect)
 // GOTY @Patoke: 0x40D840
 void Board::InitLevel()
 {
+	ScopedGardenSimulationState aGardenState(this);
 	mMainCounter = 0;
 	mEnableGraveStones = false;
 	mSodPosition = 0;
-	mPrevBoardResult = mApp->mBoardResult;
+	mPrevBoardResult = GetGardenBoardResult();
 	
 	GameMode aGameMode = mApp->mGameMode;
 	if (aGameMode != GameMode::GAMEMODE_TREE_OF_WISDOM && aGameMode != GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN)
@@ -1751,6 +1834,7 @@ bool Board::ChooseSeedsOnCurrentLevel()
 // GOTY @Patoke: 0x40E6A0
 void Board::StartLevel()
 {
+	ScopedGardenSimulationState aGardenState(this);
 	mCoinBankFadeCount = 0;
 	mApp->mLastLevelStats->Reset();
 	mChallenge->StartLevel();
@@ -1930,7 +2014,7 @@ void Board::CompleteEndLevelSequenceForSaving()
 
 void Board::FadeOutLevel()
 {
-	if (mApp->mGameScene != GameScenes::SCENE_PLAYING)
+	if (GetGardenGameScene() != GameScenes::SCENE_PLAYING)
 	{
 		RefreshSeedPacketFromCursor();
 		mApp->mLastLevelStats->Reset();
@@ -3155,7 +3239,7 @@ void Board::UpdateCursor()
 	if (mApp->GetDialogCount() > 0)
 		return;
 
-	if (mPaused || mBoardFadeOutCounter >= 0 || mTimeStopCounter > 0 || mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (mPaused || mBoardFadeOutCounter >= 0 || mTimeStopCounter > 0 || GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 	{
 		mApp->SetCursor(Sexy::CURSOR_POINTER);
 		return;
@@ -3269,7 +3353,7 @@ Zombie* Board::ZombieHitTest(int theMouseX, int theMouseY)
 			continue;
 
 		// 排除关卡引入阶段及选卡界面的植物僵尸
-		if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO && Zombie::IsZombotany(aZombie->mZombieType))
+		if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO && Zombie::IsZombotany(aZombie->mZombieType))
 			continue;
 
 		// 范围判定
@@ -3445,7 +3529,7 @@ void Board::UpdateMousePosition()
 
 void Board::UpdateToolTip()
 {
-	if (!mApp->mWidgetManager->mMouseIn || !mApp->mActive || mTimeStopCounter > 0 || mApp->GetDialogCount() > 0 || mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (!mApp->mWidgetManager->mMouseIn || !mApp->mActive || mTimeStopCounter > 0 || mApp->GetDialogCount() > 0 || GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 	{
 		mToolTip->mVisible = false;
 		return;
@@ -3454,7 +3538,7 @@ void Board::UpdateToolTip()
 	int aMouseX = mApp->mWidgetManager->mLastMouseX - mX;
 	int aMouseY = mApp->mWidgetManager->mLastMouseY - mY;
 
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 	{
 		if (!mCutScene->mSeedChoosing)
 		{
@@ -4499,7 +4583,7 @@ bool Board::MouseHitTest(int x, int y, HitResult* theHitResult)
 	if (mApp->IsScaryPotterLevel() && 
 		mCursorObject->mCursorType == CursorType::CURSOR_TYPE_NORMAL &&
 		mChallenge->mChallengeState != ChallengeState::STATECHALLENGE_SCARY_POTTER_MALLETING && 
-		mApp->mGameScene == GameScenes::SCENE_PLAYING &&
+		GetGardenGameScene() == GameScenes::SCENE_PLAYING &&
 		mApp->GetDialog(Dialogs::DIALOG_GAME_OVER) == nullptr && 
 		mApp->GetDialog(Dialogs::DIALOG_CONTINUE) == nullptr)
 	{
@@ -4529,7 +4613,7 @@ bool Board::MouseHitTest(int x, int y, HitResult* theHitResult)
 
 void Board::PickUpTool(GameObjectType theObjectType)
 {
-	if (mPaused || (mApp->mGameScene != GameScenes::SCENE_PLAYING && !mCutScene->IsInShovelTutorial()))
+	if (mPaused || (GetGardenGameScene() != GameScenes::SCENE_PLAYING && !mCutScene->IsInShovelTutorial()))
 		return;
 
 	switch (theObjectType)
@@ -4665,16 +4749,16 @@ void Board::MouseDown(int x, int y, int theClickCount)
 		}
 	}
 
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO && mApp->mSeedChooserScreen)
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO && mApp->mSeedChooserScreen)
 	{
 		mApp->mSeedChooserScreen->CancelLawnView();
 	}
-	if (mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 	{
 		mCutScene->ZombieWonClick();
 		return;
 	}
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 	{
 		mCutScene->MouseDown(x, y);
 	}
@@ -4888,7 +4972,7 @@ void Board::MouseUp(int x, int y, int theClickCount)
 			}
 			else
 			{
-				mApp->mBoardResult = BoardResult::BOARDRESULT_QUIT;
+				SetGardenBoardResult(BoardResult::BOARDRESULT_QUIT);
 				mApp->DoBackToMain();
 			}
 		}
@@ -4954,7 +5038,7 @@ void Board::Pause(bool thePause)
 		ShowCoinBank();
 	}
 
-	if (!thePause || mApp->mGameScene != GameScenes::SCENE_LEVEL_INTRO)
+	if (!thePause || GetGardenGameScene() != GameScenes::SCENE_LEVEL_INTRO)
 	{
 		mApp->mSoundSystem->GamePause(thePause);
 		mApp->mMusic->GameMusicPause(thePause);
@@ -5360,11 +5444,11 @@ void Board::PuzzleSaveStreak()
 
 void Board::ZombiesWon(Zombie* theZombie)
 {
-	if (mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 		return;
 
 	ClearAdvice(AdviceType::ADVICE_NONE);
-	mApp->mBoardResult = BoardResult::BOARDRESULT_LOST;
+	SetGardenBoardResult(BoardResult::BOARDRESULT_LOST);
 
 	Zombie* aZombie = nullptr;
 	while (IterateZombies(aZombie))
@@ -5405,7 +5489,7 @@ void Board::ZombiesWon(Zombie* theZombie)
 	}
 	else
 	{
-		mApp->mGameScene = GameScenes::SCENE_ZOMBIES_WON;
+		SetGardenGameScene(GameScenes::SCENE_ZOMBIES_WON);
 		if (theZombie)  // 原版此处没有对 theZombie 进行空指针判断，但加上判断后便允许绕过僵尸而直接调用游戏失败
 		{
 			theZombie->WalkIntoHouse();
@@ -5953,7 +6037,7 @@ void Board::UpdateGame()
 	if (StageHasFog() && mFogBlownCountDown > 0)
 	{
 		float aMaxFogOffset = 1065.0f - LeftFogColumn() * 80.0f;
-		if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+		if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 		{
 			mFogOffset = TodAnimateCurveFloat(200, 0, mFogBlownCountDown, aMaxFogOffset, 0, TodCurves::CURVE_EASE_OUT);
 		}
@@ -5967,7 +6051,7 @@ void Board::UpdateGame()
 		}
 	}
 
-	if (mApp->mGameScene != GameScenes::SCENE_PLAYING && !mCutScene->ShouldRunUpsellBoard())
+	if (GetGardenGameScene() != GameScenes::SCENE_PLAYING && !mCutScene->ShouldRunUpsellBoard())
 		return;
 
 	mMainCounter++;
@@ -6011,6 +6095,12 @@ void Board::UpdateGame()
 
 void Board::Update()
 {
+	if (mGardenStateIsolated && mApp->mBoard != this)
+	{
+		UpdateSimulation();
+		return;
+	}
+
 	TodHesitationBracket aHesitation("Board::Update");
 
 	Widget::Update();
@@ -6092,11 +6182,12 @@ void Board::Update()
 
 void Board::UpdateSimulation()
 {
+	ScopedGardenSimulationState aGardenState(this);
 	if (mTimeStopCounter > 0)
 		return;
 
 	mEffectCounter++;
-	if (StageHasPool() && !mIceTrapCounter && mApp->mGameScene != GameScenes::SCENE_ZOMBIES_WON && !mCutScene->IsSurvivalRepick())
+	if (StageHasPool() && !mIceTrapCounter && GetGardenGameScene() != GameScenes::SCENE_ZOMBIES_WON && !mCutScene->IsSurvivalRepick())
 	{
 		mApp->mPoolEffect->mPoolCounter++;
 	}
@@ -6235,7 +6326,7 @@ void Board::DrawBackdrop(Graphics* g)
 		}
 	}
 
-	if (mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 	{
 		DrawHouseDoorBottom(g);
 	}
@@ -6252,7 +6343,7 @@ void Board::DrawBackdrop(Graphics* g)
 		aClipG.SetColorizeImages(false);
 	}
 	mChallenge->DrawBackdrop(g);
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO && StageHasGraveStones())
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO && StageHasGraveStones())
 	{
 		g->DrawImage(Sexy::IMAGE_NIGHT_GRAVE_GRAPHIC, 1092, 40);
 	}
@@ -6573,7 +6664,7 @@ void Board::DrawGameObjects(Graphics* g)
 		{
 			aZPos = MakeRenderOrder(RenderLayer::RENDER_LAYER_ABOVE_UI, 0, 0);
 		}
-		else if (mApp->mGameScene == GameScenes::SCENE_PLAYING || mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+		else if (GetGardenGameScene() == GameScenes::SCENE_PLAYING || GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 		{
 			aZPos = MakeRenderOrder(RenderLayer::RENDER_LAYER_UI_BOTTOM, 0, 1);
 		}
@@ -6592,7 +6683,7 @@ void Board::DrawGameObjects(Graphics* g)
 		AddUIRenderItem(aRenderList, aRenderItemCount, RenderObjectType::RENDER_ITEM_TOP_UI, MakeRenderOrder(RenderLayer::RENDER_LAYER_UI_TOP, 0, 0));
 		AddUIRenderItem(aRenderList, aRenderItemCount, RenderObjectType::RENDER_ITEM_SCREEN_FADE, MakeRenderOrder(RenderLayer::RENDER_LAYER_SCREEN_FADE, 0, 0));
 	}
-	if (mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
+	if (GetGardenGameScene() == GameScenes::SCENE_ZOMBIES_WON)
 	{
 		int aZPos;
 		if (StageHasRoof())
@@ -7574,7 +7665,7 @@ void Board::DrawUIBottom(Graphics* g)
 		g->SetDrawMode(Graphics::DRAWMODE_NORMAL);
 	}
 
-	if (mApp->mGameScene != GameScenes::SCENE_ZOMBIES_WON)
+	if (GetGardenGameScene() != GameScenes::SCENE_ZOMBIES_WON)
 	{
 		if (mSeedBank->BeginDraw(g))
 		{
@@ -7597,7 +7688,7 @@ void Board::DrawUIBottom(Graphics* g)
 
 void Board::DrawUICoinBank(Graphics* g)
 {
-	if (mApp->mGameScene != GameScenes::SCENE_PLAYING && mApp->mCrazyDaveState == CrazyDaveState::CRAZY_DAVE_OFF)
+	if (GetGardenGameScene() != GameScenes::SCENE_PLAYING && mApp->mCrazyDaveState == CrazyDaveState::CRAZY_DAVE_OFF)
 		return;
 
 	if (mCoinBankFadeCount <= 0)
@@ -7787,7 +7878,7 @@ void Board::DrawUITop(Graphics* g)
 		g->FillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 	}
 
-	if (mApp->mGameScene == GameScenes::SCENE_PLAYING || mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM)
+	if (GetGardenGameScene() == GameScenes::SCENE_PLAYING || mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM)
 	{
 		DrawProgressMeter(g);
 		DrawLevel(g);
@@ -7812,7 +7903,7 @@ void Board::DrawUITop(Graphics* g)
 		mCutScene->DrawIntro(g);
 	}
 
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO || 
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO ||
 		mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN ||
 		mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM || 
 		IsScaryPotterDaveTalking())
@@ -7980,7 +8071,7 @@ void Board::DoTypingCheck(KeyCode theKey)
 		}
 		else
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_PLAYING)
+			if (GetGardenGameScene() == GameScenes::SCENE_PLAYING)
 			{
 				DisplayAdvice("[CANT_USE_CODE]", MessageStyle::MESSAGE_STYLE_BIG_MIDDLE_FAST, AdviceType::ADVICE_NONE);
 			}
@@ -7997,7 +8088,7 @@ void Board::DoTypingCheck(KeyCode theKey)
 		}
 		else
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_PLAYING)
+			if (GetGardenGameScene() == GameScenes::SCENE_PLAYING)
 			{
 				DisplayAdvice("[CANT_USE_CODE]", MessageStyle::MESSAGE_STYLE_BIG_MIDDLE_FAST, AdviceType::ADVICE_NONE);
 			}
@@ -8014,7 +8105,7 @@ void Board::DoTypingCheck(KeyCode theKey)
 		}
 		else
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_PLAYING)
+			if (GetGardenGameScene() == GameScenes::SCENE_PLAYING)
 			{
 				DisplayAdvice("[CANT_USE_CODE]", MessageStyle::MESSAGE_STYLE_BIG_MIDDLE_FAST, AdviceType::ADVICE_NONE);
 			}
@@ -8033,7 +8124,7 @@ void Board::KeyDown(KeyCode theKey)
 {
 	DoTypingCheck(theKey);
 
-	if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO && 
+	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO &&
 		mApp->mGameMode != GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN && 
 		mApp->mGameMode != GameMode::GAMEMODE_TREE_OF_WISDOM)
 	{
@@ -8061,7 +8152,7 @@ void Board::KeyDown(KeyCode theKey)
 		{
 			RefreshSeedPacketFromCursor();
 		}
-		else if (CanInteractWithBoardButtons() && mApp->mGameScene != GameScenes::SCENE_ZOMBIES_WON)
+		else if (CanInteractWithBoardButtons() && GetGardenGameScene() != GameScenes::SCENE_ZOMBIES_WON)
 		{
 			mApp->DoNewOptions(false);
 		}
@@ -8302,7 +8393,7 @@ void Board::KeyChar(char theChar)
 	{
 		if (mApp->IsSurvivalMode())
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+			if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 			{
 				return;
 			}
@@ -8315,7 +8406,7 @@ void Board::KeyChar(char theChar)
 	}
 	else if (theChar == '!')
 	{
-		mApp->mBoardResult = BoardResult::BOARDRESULT_CHEAT;
+		SetGardenBoardResult(BoardResult::BOARDRESULT_CHEAT);
 		if (IsLastStandStageWithRepick())
 		{
 			if (mNextSurvivalStageCounter == 0)
@@ -8335,7 +8426,7 @@ void Board::KeyChar(char theChar)
 		}
 		else if (mApp->IsSurvivalMode())
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+			if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 			{
 				return;
 			}
@@ -8356,7 +8447,7 @@ void Board::KeyChar(char theChar)
 	}
 	else if (theChar == '+')
 	{
-		mApp->mBoardResult = BoardResult::BOARDRESULT_CHEAT;
+		SetGardenBoardResult(BoardResult::BOARDRESULT_CHEAT);
 		if (IsLastStandStageWithRepick())
 		{
 			if (mNextSurvivalStageCounter == 0)
@@ -8376,7 +8467,7 @@ void Board::KeyChar(char theChar)
 		}
 		else if (mApp->IsSurvivalEndless(mApp->mGameMode))
 		{
-			if (mApp->mGameScene == GameScenes::SCENE_LEVEL_INTRO)
+			if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO)
 			{
 				return;
 			}
@@ -8420,7 +8511,7 @@ void Board::KeyChar(char theChar)
 		}
 	}
 
-	if (mApp->mGameScene != GameScenes::SCENE_PLAYING)
+	if (GetGardenGameScene() != GameScenes::SCENE_PLAYING)
 	{
 		return;
 	}
@@ -9870,7 +9961,7 @@ void Board::UpdateGridItems()
 			aGridItem->mGridItemCounter++;
 		}
 
-		if (aGridItem->mGridItemType == GridItemType::GRIDITEM_CRATER && mApp->mGameScene == GameScenes::SCENE_PLAYING)
+		if (aGridItem->mGridItemType == GridItemType::GRIDITEM_CRATER && GetGardenGameScene() == GameScenes::SCENE_PLAYING)
 		{
 			if (aGridItem->mGridItemCounter > 0)
 			{

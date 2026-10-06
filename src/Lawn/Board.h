@@ -161,6 +161,9 @@ class Board : public Widget, public ButtonListener
 {
 public:
 	LawnApp*						mApp;
+	GameScenes						mGardenGameScene;
+	BoardResult						mGardenBoardResult;
+	bool							mGardenStateIsolated;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
 	DataArray<Projectile>			mProjectiles;
@@ -304,6 +307,11 @@ public:
 	void							StartLevel();
 	// Advances this garden's gameplay simulation without requiring it to be the viewed widget.
 	void							UpdateSimulation();
+	void							EnableGardenStateIsolation(bool enabled);
+	GameScenes						GetGardenGameScene() const noexcept;
+	void							SetGardenGameScene(GameScenes scene) noexcept;
+	BoardResult						GetGardenBoardResult() const noexcept;
+	void							SetGardenBoardResult(BoardResult result) noexcept;
 	Plant*							AddPlant(int theGridX, int theGridY, SeedType theSeedType, SeedType theImitaterType = SeedType::SEED_NONE);
 	Projectile*						AddProjectile(int theX, int theY, int theRenderOrder, int theRow, ProjectileType theProjectileType);
 	Coin*							AddCoin(int theX, int theY, CoinType theCoinType, CoinMotion theCoinMotion);

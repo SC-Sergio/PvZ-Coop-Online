@@ -20,6 +20,8 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 
 `src/Coop/PlayerCommand.*` defines transport-independent gameplay intent and checks sender state, garden ownership, protocol version, monotonic command sequence, grid bounds, enum/value ranges, and target IDs. It does not mutate the game and does not replace host gameplay checks for resources, cooldowns, or current entity state. Serialization and transport remain future work.
 
+`Board` now has an opt-in isolated scene/result pair. `Board::UpdateSimulation()` uses an RAII context to temporarily bind `LawnApp::mBoard`, `mGameScene`, and `mBoardResult` to a non-viewed isolated board, then restores the previously viewed board. Isolated non-viewed widgets skip cursor/UI work and call only their simulation update. `InitLevel`, `StartLevel`, board disposal, and destruction also bind this context. Non-isolated boards continue to read and write the original app fields, preserving the single-player path. This is only a reusable engine boundary: there is not yet a garden factory/session manager that creates, registers, hides, switches, or cleans up multiple Boards, and shared effects/RNG/economy remain app-wide. It has compile evidence but not a multi-board gameplay test.
+
 ## Engine extraction plan
 
 - Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
