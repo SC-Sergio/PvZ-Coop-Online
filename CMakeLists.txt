@@ -235,6 +235,7 @@ if(BUILD_COOP_TESTS)
 	add_test(NAME coop-session-tests COMMAND coop-session-tests)
 	if(WIN32)
 		target_link_libraries(coop-session-tests PRIVATE ws2_32)
+		add_test(NAME coop-tcp-lobby-process COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File ${CMAKE_CURRENT_SOURCE_DIR}/tests/coop/RunTcpLobbySmoke.ps1 -Executable $<TARGET_FILE:coop-session-tests>)
 	endif()
 endif()
 
