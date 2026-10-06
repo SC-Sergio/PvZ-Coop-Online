@@ -1,6 +1,7 @@
 #include "../../src/Coop/CoopSession.h"
 #include "../../src/Coop/PlayerCommand.h"
 #include "../../src/Coop/CommandSerialization.h"
+#include "../../src/Coop/NetworkTransport.h"
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
@@ -246,6 +247,56 @@ namespace
 		command.protocolVersion++;
 		Require(!Coop::SerializeCommand(command), "unsupported protocol version is not serialized");
 	}
+
+	void TestLocalTransportHarness()
+	{
+		Coop::LocalTransportHub hub;
+		Require(!hub.CreateTransport(0), "transport rejects the reserved player ID");
+		auto host = hub.CreateTransport(71);
+		auto player2 = hub.CreateTransport(72);
+		auto player3 = hub.CreateTransport(73);
+		auto player4 = hub.CreateTransport(74);
+		Require(host && player2 && player3 && player4, "local harness creates up to four dynamic peers");
+		Require(!hub.CreateTransport(73), "local harness rejects duplicate peer identity");
+
+		Coop::PlayerCommand command;
+		command.senderId = player2->GetLocalPlayerId();
+		command.gardenId = 2;
+		command.sequence = 1;
+		command.type = Coop::CommandType::COLLECT_SUN;
+		command.entityId = 19;
+		const auto bytes = Coop::SerializeCommand(command);
+		Require(bytes.has_value(), "local harness command serializes");
+		Require(player2->SendTo(71, *bytes), "peer sends a bounded command to host");
+		auto packet = host->Receive();
+		Require(packet.has_value() && packet->senderId == 72, "host receives queue order and transport-authored sender identity");
+		auto receivedCommand = Coop::DeserializeCommand(packet->bytes);
+		Require(receivedCommand && receivedCommand->senderId == packet->senderId,
+			"command identity can be bound to the transport peer");
+		Require(!host->Receive(), "received packet leaves the inbox");
+
+		Require(player3->SendTo(71, *bytes) && player4->SendTo(71, *bytes), "additional peers send independently");
+		auto packet3 = host->Receive();
+		auto packet4 = host->Receive();
+		Require(packet3 && packet4 && packet3->senderId == 73 && packet4->senderId == 74,
+			"host receives each active peer with FIFO ordering");
+		Require(!player2->SendTo(999, *bytes), "unknown transport recipient is rejected");
+		Require(!player2->SendTo(72, *bytes), "self-send is rejected");
+		Require(!player2->SendTo(71, {}), "empty packets are rejected");
+		std::vector<std::uint8_t> oversized(Coop::MAX_TRANSPORT_MESSAGE_BYTES + 1);
+		Require(!player2->SendTo(71, oversized), "transport enforces a maximum packet size");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(player2->SendTo(71, *bytes), "bounded inbox accepts packets until its configured capacity");
+		Require(!player2->SendTo(71, *bytes), "transport applies backpressure when a peer inbox is full");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(host->Receive().has_value(), "host drains every queued packet");
+		Require(!host->Receive(), "drained inbox is empty");
+
+		player3->Close();
+		Require(!player3->SendTo(71, *bytes), "closed peer cannot send");
+		hub.Close();
+		Require(!player2->SendTo(71, *bytes), "closed local hub rejects sends");
+	}
 }
 
 int main()
@@ -258,6 +309,7 @@ int main()
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
 	TestCommandSerialization();
+	TestLocalTransportHarness();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }
