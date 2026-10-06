@@ -210,6 +210,17 @@ namespace
 			"host processes a valid owner command");
 		Require(executor.executions == 1, "validated network command reaches executor once");
 
+		command.sequence = 2;
+		Require(Coop::SendCommandToHost(*guest, 81, command), "client command helper serializes and routes intent to host");
+		auto clientSent = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		Require(clientSent.size() == 1 && clientSent[0] == Coop::CommandRejection::NONE && executor.executions == 2,
+			"host tick ingress accepts the client's next sequenced command");
+		command.sequence = 3;
+		command.senderId = 81;
+		Require(!Coop::SendCommandToHost(*guest, 81, command), "client cannot spoof transport identity in outgoing helper");
+		command.senderId = 82;
+		Require(!Coop::SendCommandToHost(*guest, 82, command), "client cannot route a host-directed command to itself");
+
 		const std::array<std::uint8_t, 3> malformed{0, 1, 2};
 		Require(guest->SendTo(81, malformed), "guest can deliver malformed bytes for decoder validation");
 		auto malformedResult = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);

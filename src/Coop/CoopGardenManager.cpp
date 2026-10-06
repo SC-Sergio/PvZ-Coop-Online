@@ -5,6 +5,7 @@
 
 #include "CoopGardenManager.h"
 #include "CommandEndpoint.h"
+#include "CommandSerialization.h"
 
 #include "../Lawn/Board.h"
 #include "../LawnApp.h"
@@ -35,6 +36,7 @@ namespace Coop
 		mPreviousBoardResult = mApp->mBoardResult;
 		mHasAppStateSnapshot = true;
 		mSession = &session;
+		mTransport = nullptr;
 		mCommandProcessor.Reset();
 		mLocalPlayerId = session.GetHostPlayerId();
 		mNextLocalCommandSequence = 1;
@@ -81,6 +83,7 @@ namespace Coop
 		mViewedGarden.reset();
 		mSession = nullptr;
 		mLocalPlayerId.reset();
+		mTransport = nullptr;
 		if (mHasAppStateSnapshot)
 		{
 			mApp->mGameScene = mPreviousGameScene;
@@ -118,10 +121,17 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopGardenManager::AttachTransport(INetworkTransport& transport)
+	{
+		if (!mSession || !mLocalPlayerId || transport.GetLocalPlayerId() != *mLocalPlayerId)
+			return false;
+		mTransport = &transport;
+		return true;
+	}
+
 	bool CoopGardenManager::SubmitLocalCommand(Board& board, PlayerCommand command)
 	{
 		if (!mSession || !mLocalPlayerId || !mSession->GetHostPlayerId()
-			|| *mLocalPlayerId != *mSession->GetHostPlayerId()
 			|| mNextLocalCommandSequence == std::numeric_limits<std::uint64_t>::max())
 			return false;
 
@@ -132,7 +142,9 @@ namespace Coop
 		command.senderId = *mLocalPlayerId;
 		command.gardenId = garden->id;
 		command.sequence = mNextLocalCommandSequence++;
-		return ProcessCommand(command) == CommandRejection::NONE;
+		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
+			return ProcessCommand(command) == CommandRejection::NONE;
+		return mTransport && SendCommandToHost(*mTransport, *mSession->GetHostPlayerId(), command);
 	}
 
 	CommandRejection CoopGardenManager::ProcessCommand(const PlayerCommand& command)
@@ -147,6 +159,13 @@ namespace Coop
 		if (!mSession)
 			return {CommandRejection::NOT_AUTHORITY};
 		return DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this);
+	}
+
+	void CoopGardenManager::PumpNetwork()
+	{
+		if (mTransport && mSession && mLocalPlayerId && mSession->GetHostPlayerId()
+			&& *mLocalPlayerId == *mSession->GetHostPlayerId())
+			DrainIncomingCommands(*mTransport);
 	}
 
 	bool CoopGardenManager::Execute(const PlayerCommand& command)

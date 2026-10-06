@@ -7,6 +7,17 @@
 
 namespace Coop
 {
+	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command)
+	{
+		if (hostPlayerId == 0 || transport.GetLocalPlayerId() == hostPlayerId
+			|| command.senderId == 0 || command.senderId != transport.GetLocalPlayerId()
+			|| command.protocolVersion != PROTOCOL_VERSION)
+			return false;
+
+		const std::optional<SerializedCommand> bytes = SerializeCommand(command);
+		return bytes && transport.SendTo(hostPlayerId, *bytes);
+	}
+
 	std::vector<CommandRejection> DrainAuthoritativeCommands(INetworkTransport& transport,
 		const CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor)

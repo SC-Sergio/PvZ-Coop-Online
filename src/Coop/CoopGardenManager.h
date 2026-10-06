@@ -34,9 +34,11 @@ namespace Coop
 		void Stop();
 		bool SelectGarden(GardenId gardenId);
 		bool SetLocalPlayerId(PlayerId playerId);
+		bool AttachTransport(INetworkTransport& transport);
 		bool SubmitLocalCommand(Board& board, PlayerCommand command);
 		CommandRejection ProcessCommand(const PlayerCommand& command);
 		std::vector<CommandRejection> DrainIncomingCommands(INetworkTransport& transport);
+		void PumpNetwork();
 		bool Execute(const PlayerCommand& command) override;
 		void SyncTeamResults();
 		void ProcessDeleteQueues();
@@ -59,6 +61,7 @@ namespace Coop
 		std::optional<GardenId> mViewedGarden;
 		AuthoritativeCommandProcessor mCommandProcessor;
 		std::optional<PlayerId> mLocalPlayerId;
+		INetworkTransport* mTransport = nullptr;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;

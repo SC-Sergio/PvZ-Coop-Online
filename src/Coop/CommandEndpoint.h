@@ -13,6 +13,7 @@
 
 namespace Coop
 {
+	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command);
 	std::vector<CommandRejection> DrainAuthoritativeCommands(INetworkTransport& transport,
 		const CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor);
