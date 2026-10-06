@@ -1,0 +1,33 @@
+# Cooperative architecture
+
+## Current engine boundary
+
+The original game is centered on `LawnApp::mBoard`, a single `Board*`. `Board` is a large `Widget` that owns fixed-capacity data arrays for plants, zombies, projectiles, coins, lawn mowers, and grid items. Board construction assigns itself to `LawnApp::mBoard`; much of the engine, UI, save code, and global helpers dereference that pointer. `LawnApp::UpdateFrames` processes and updates that one board, while `WidgetManager` draws it. Therefore, creating multiple `Board` objects today would overwrite the app's active board and cross-wire gameplay state.
+
+## Intended separation
+
+1. `CoopSession` owns dynamic player slots and one logical `GardenInstance` for each joined player. Empty slots own no garden. Player and garden identities are stable IDs, not player-number fields.
+2. The engine adapter will associate each garden with isolated simulation state. A garden's entities, economy, wave state, ownership, defeat state, and random stream must not be shared with another garden.
+3. A session tick advances every active garden independently of which garden is currently displayed. The selected garden is a presentation concern only.
+4. Input becomes validated player commands. A transport interface carries versioned commands and snapshots; the authoritative host applies them through the same gameplay command path used by local play.
+5. The online provider is an adapter behind transport/session interfaces. Provider identity, relay, lobby, and reconnect do not enter `Board` gameplay rules.
+
+## Phase 1 slice in this revision
+
+`src/Coop/CoopSession.*` is an engine-independent roster and garden-ownership core. Its garden records deliberately contain only session-level identity and terminal/tick metadata so far; they are not simulated `Board`s. The unit tests establish counts 1 through 4, no garden for empty slots, capacity, duplicate identity, leave, and slot reuse invariants. This is a foundation, not evidence that multiple game boards are playable.
+
+## Engine extraction plan
+
+- Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
+- Introduce an explicit garden context for simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
+- Separate simulation tick from `Widget::Update`/draw and route board effects to garden-owned or session-owned services.
+- Add a single-player regression harness before introducing a second simulation instance.
+- Only then instantiate N gardens and render one selected garden plus a team overview. Do not use multiple current `Board`s until app-global dependencies are removed or explicitly scoped.
+
+## Victory rules
+
+For Cooperative Classic, only active gardens participate. Any active garden defeat yields team defeat; team victory requires every active garden to complete. An empty roster cannot start. Disconnect state does not create or remove a garden by itself.
+
+## Host migration
+
+The host is authoritative in the initial design. Future migration requires a versioned full snapshot, stable entity IDs, tick/checksum agreement, and transfer of ownership/epoch to a selected peer. No migration is implemented yet.
