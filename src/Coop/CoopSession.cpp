@@ -153,6 +153,17 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopSession::AdvanceSimulationTick()
+	{
+		if (!mStarted || mGardens.empty()
+			|| std::any_of(mGardens.begin(), mGardens.end(), [](const GardenInstance& garden)
+				{ return garden.simulationTicks == std::numeric_limits<std::uint64_t>::max(); }))
+			return false;
+		for (GardenInstance& garden : mGardens)
+			++garden.simulationTicks;
+		return true;
+	}
+
 	TeamResult CoopSession::GetTeamResult() const noexcept
 	{
 		if (!mStarted || mGardens.empty())

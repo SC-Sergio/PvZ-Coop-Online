@@ -43,6 +43,7 @@ namespace Coop
 		CommandRejection ProcessCommand(const PlayerCommand& command);
 		std::vector<CommandRejection> DrainIncomingCommands(INetworkTransport& transport);
 		void PumpNetwork();
+		bool AdvanceSimulationTick();
 		bool Execute(const PlayerCommand& command) override;
 		void SyncTeamResults();
 		void ProcessDeleteQueues();

@@ -78,8 +78,9 @@ namespace Coop
 		bool StartGame(PlayerId requestingPlayerId);
 		bool SetRandomSeed(std::uint32_t seed) noexcept;
 		bool ApplySnapshot(const CoopSessionSnapshot& snapshot);
-	bool MarkGardenDefeated(PlayerId ownerId);
-	bool MarkGardenCompleted(PlayerId ownerId);
+		bool MarkGardenDefeated(PlayerId ownerId);
+		bool MarkGardenCompleted(PlayerId ownerId);
+		bool AdvanceSimulationTick();
 
 		const std::array<PlayerSlot, MAX_PLAYERS>& GetSlots() const noexcept { return mSlots; }
 		const std::vector<GardenInstance>& GetGardens() const noexcept { return mGardens; }

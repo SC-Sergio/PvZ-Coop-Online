@@ -5,6 +5,7 @@
 
 #include "CommandSerialization.h"
 
+#include <algorithm>
 #include <bit>
 #include <type_traits>
 
@@ -13,13 +14,14 @@ namespace Coop
 	namespace
 	{
 		constexpr std::uint8_t MAGIC[4] = {'P', 'V', 'Z', 'C'};
+		constexpr std::uint8_t AUTHORITY_RESPONSE_MAGIC[4] = {'P', 'V', 'Z', 'A'};
 
-		template <typename T>
-		void WriteLittleEndian(SerializedCommand& output, std::size_t& offset, T value)
+		template <typename TArray, typename TValue>
+		void WriteLittleEndian(TArray& output, std::size_t& offset, TValue value)
 		{
-			using Unsigned = std::make_unsigned_t<T>;
+			using Unsigned = std::make_unsigned_t<TValue>;
 			const Unsigned bits = static_cast<Unsigned>(value);
-			for (std::size_t i = 0; i < sizeof(T); ++i)
+			for (std::size_t i = 0; i < sizeof(TValue); ++i)
 				output[offset++] = static_cast<std::uint8_t>(bits >> (i * 8));
 		}
 
@@ -90,5 +92,69 @@ namespace Coop
 		command.targetGardenId = ReadLittleEndian<GardenId>(bytes, offset);
 		command.amount = ReadLittleEndian<std::uint32_t>(bytes, offset);
 		return command;
+	}
+
+	std::optional<SerializedAuthorityResponse> SerializeAuthorityResponse(const CommandAuthorityResponse& response)
+	{
+		if (response.recipientPlayerId == 0
+			|| static_cast<std::uint8_t>(response.rejection) > static_cast<std::uint8_t>(CommandRejection::NOT_AUTHORITY)
+			|| (response.rejection == CommandRejection::NONE) != response.acceptedCommand.has_value())
+			return std::nullopt;
+		if (response.acceptedCommand && (response.acceptedCommand->senderId != response.recipientPlayerId
+			|| response.acceptedCommand->sequence != response.sequence))
+			return std::nullopt;
+
+		SerializedAuthorityResponse output{};
+		std::size_t offset = 0;
+		for (std::uint8_t byte : AUTHORITY_RESPONSE_MAGIC)
+			output[offset++] = byte;
+		WriteLittleEndian(output, offset, PROTOCOL_VERSION);
+		WriteLittleEndian(output, offset, SERIALIZATION_VERSION);
+		WriteLittleEndian(output, offset, response.recipientPlayerId);
+		WriteLittleEndian(output, offset, response.sequence);
+		WriteLittleEndian(output, offset, response.serverTick);
+		WriteLittleEndian(output, offset, static_cast<std::uint8_t>(response.rejection));
+		if (response.acceptedCommand)
+		{
+			const auto serializedCommand = SerializeCommand(*response.acceptedCommand);
+			if (!serializedCommand)
+				return std::nullopt;
+			for (std::uint8_t byte : *serializedCommand)
+				output[offset++] = byte;
+		}
+		return output;
+	}
+
+	std::optional<CommandAuthorityResponse> DeserializeAuthorityResponse(std::span<const std::uint8_t> bytes)
+	{
+		if (bytes.size() != SERIALIZED_AUTHORITY_RESPONSE_SIZE)
+			return std::nullopt;
+		for (std::size_t i = 0; i < sizeof(AUTHORITY_RESPONSE_MAGIC); ++i)
+			if (bytes[i] != AUTHORITY_RESPONSE_MAGIC[i])
+				return std::nullopt;
+
+		std::size_t offset = sizeof(AUTHORITY_RESPONSE_MAGIC);
+		if (ReadLittleEndian<std::uint16_t>(bytes, offset) != PROTOCOL_VERSION
+			|| ReadLittleEndian<std::uint16_t>(bytes, offset) != SERIALIZATION_VERSION)
+			return std::nullopt;
+		CommandAuthorityResponse response;
+		response.recipientPlayerId = ReadLittleEndian<PlayerId>(bytes, offset);
+		response.sequence = ReadLittleEndian<std::uint64_t>(bytes, offset);
+		response.serverTick = ReadLittleEndian<std::uint64_t>(bytes, offset);
+		const std::uint8_t rejection = ReadLittleEndian<std::uint8_t>(bytes, offset);
+		if (response.recipientPlayerId == 0 || rejection > static_cast<std::uint8_t>(CommandRejection::NOT_AUTHORITY))
+			return std::nullopt;
+		response.rejection = static_cast<CommandRejection>(rejection);
+		const std::span<const std::uint8_t> commandBytes = bytes.subspan(offset);
+		if (response.rejection == CommandRejection::NONE)
+		{
+			response.acceptedCommand = DeserializeCommand(commandBytes);
+			if (!response.acceptedCommand || response.acceptedCommand->senderId != response.recipientPlayerId
+				|| response.acceptedCommand->sequence != response.sequence)
+				return std::nullopt;
+		}
+		else if (std::any_of(commandBytes.begin(), commandBytes.end(), [](std::uint8_t byte) { return byte != 0; }))
+			return std::nullopt;
+		return response;
 	}
 }

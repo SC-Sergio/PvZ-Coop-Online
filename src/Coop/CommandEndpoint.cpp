@@ -5,6 +5,8 @@
 
 #include "CommandEndpoint.h"
 
+#include <algorithm>
+
 namespace Coop
 {
 	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command)
@@ -18,7 +20,8 @@ namespace Coop
 		return bytes && transport.SendTo(hostPlayerId, *bytes);
 	}
 
-	std::size_t BroadcastCommandToPeers(INetworkTransport& transport, const PlayerCommand& command)
+	std::size_t BroadcastCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
+		TransportPlayerId excludedPeerId)
 	{
 		const std::optional<SerializedCommand> bytes = SerializeCommand(command);
 		if (!bytes)
@@ -26,6 +29,8 @@ namespace Coop
 		std::size_t sent = 0;
 		for (TransportPlayerId peerId : transport.GetConnectedPeerIds())
 		{
+			if (peerId == excludedPeerId)
+				continue;
 			if (transport.SendTo(peerId, *bytes))
 				++sent;
 		}
@@ -34,7 +39,8 @@ namespace Coop
 
 	std::vector<CommandRejection> DrainAuthoritativeCommands(INetworkTransport& transport,
 		const CoopSession& session, AuthoritativeCommandProcessor& processor,
-		IPlayerCommandExecutor& executor, const AcceptedCommandCallback& onAccepted)
+		IPlayerCommandExecutor& executor, const AcceptedCommandCallback& onAccepted,
+		const AuthorityResponseCallback& onResponse)
 	{
 		std::vector<CommandRejection> results;
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() != *session.GetHostPlayerId())
@@ -60,6 +66,19 @@ namespace Coop
 			results.push_back(result);
 			if (result == CommandRejection::NONE && onAccepted)
 				onAccepted(*command);
+			if (onResponse)
+			{
+				const auto garden = std::find_if(session.GetGardens().begin(), session.GetGardens().end(), [&command](const GardenInstance& candidate)
+					{ return candidate.id == command->gardenId; });
+				CommandAuthorityResponse response;
+				response.recipientPlayerId = command->senderId;
+				response.sequence = command->sequence;
+				response.serverTick = garden == session.GetGardens().end() ? 0 : garden->simulationTicks;
+				response.rejection = result;
+				if (result == CommandRejection::NONE)
+					response.acceptedCommand = *command;
+				onResponse(packet->senderId, response);
+			}
 		}
 		return results;
 	}
@@ -80,6 +99,21 @@ namespace Coop
 			if (packet->senderId != *session.GetHostPlayerId())
 			{
 				results.push_back(CommandRejection::SENDER_MISMATCH);
+				continue;
+			}
+			if (const std::optional<CommandAuthorityResponse> response = DeserializeAuthorityResponse(packet->bytes))
+			{
+				if (response->recipientPlayerId != transport.GetLocalPlayerId())
+				{
+					results.push_back(CommandRejection::SENDER_MISMATCH);
+					continue;
+				}
+				if (response->rejection != CommandRejection::NONE)
+				{
+					results.push_back(response->rejection);
+					continue;
+				}
+				results.push_back(processor.Process(session, *response->acceptedCommand, executor));
 				continue;
 			}
 			const std::optional<PlayerCommand> command = DeserializeCommand(packet->bytes);

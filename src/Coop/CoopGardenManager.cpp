@@ -199,7 +199,12 @@ namespace Coop
 		if (!mSession)
 			return {CommandRejection::NOT_AUTHORITY};
 		return DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this,
-			[&transport](const PlayerCommand& command) { BroadcastCommandToPeers(transport, command); });
+			[&transport](const PlayerCommand& command) { BroadcastCommandToPeers(transport, command, command.senderId); },
+			[&transport](TransportPlayerId peerId, const CommandAuthorityResponse& response)
+			{
+				if (const auto bytes = SerializeAuthorityResponse(response))
+					transport.SendTo(peerId, *bytes);
+			});
 	}
 
 	void CoopGardenManager::PumpNetwork()
@@ -210,6 +215,11 @@ namespace Coop
 			DrainIncomingCommands(*mTransport);
 		else
 			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this);
+	}
+
+	bool CoopGardenManager::AdvanceSimulationTick()
+	{
+		return mSession && mSession->AdvanceSimulationTick();
 	}
 
 	bool CoopGardenManager::Execute(const PlayerCommand& command)

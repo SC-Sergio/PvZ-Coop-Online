@@ -107,6 +107,18 @@ namespace
 		Require(!defeat.MarkGardenCompleted(42), "defeated garden cannot later complete");
 	}
 
+	void TestSessionSimulationTicks()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(45, "host").has_value() && session.Join(46, "guest").has_value(), "tick players join");
+		Require(session.SetReady(45, true) && session.SetReady(46, true) && session.StartGame(45), "tick session starts");
+		Require(session.AdvanceSimulationTick(), "active session advances a simulation tick");
+		Require(session.GetGardens()[0].simulationTicks == 1 && session.GetGardens()[1].simulationTicks == 1,
+			"one authoritative tick advances every active garden");
+		Require(session.AdvanceSimulationTick() && session.GetGardens()[0].simulationTicks == 2
+			&& session.GetGardens()[1].simulationTicks == 2, "tick update advances every garden together");
+	}
+
 	void TestAuthoritativeCommandValidation()
 	{
 		Coop::CoopSession session;
@@ -324,6 +336,87 @@ namespace
 		Require(!Coop::DeserializeCommand(oversized), "oversized frames are rejected");
 		command.protocolVersion++;
 		Require(!Coop::SerializeCommand(command), "unsupported protocol version is not serialized");
+
+		Coop::CommandAuthorityResponse response;
+		response.recipientPlayerId = 82;
+		response.sequence = 19;
+		response.serverTick = 400;
+		response.acceptedCommand = Coop::PlayerCommand{};
+		response.acceptedCommand->senderId = response.recipientPlayerId;
+		response.acceptedCommand->sequence = response.sequence;
+		const auto responseBytes = Coop::SerializeAuthorityResponse(response);
+		Require(responseBytes && responseBytes->size() == Coop::SERIALIZED_AUTHORITY_RESPONSE_SIZE,
+			"accepted authority response has a fixed bounded frame");
+		const auto responseRoundTrip = Coop::DeserializeAuthorityResponse(*responseBytes);
+		Require(responseRoundTrip && responseRoundTrip->serverTick == 400 && responseRoundTrip->acceptedCommand
+			&& responseRoundTrip->acceptedCommand->sequence == 19,
+			"authority response carries canonical tick and accepted intent");
+		response.rejection = Coop::CommandRejection::INVALID_COORDINATES;
+		response.acceptedCommand.reset();
+		const auto rejectedResponse = Coop::SerializeAuthorityResponse(response);
+		const auto rejectedRoundTrip = rejectedResponse ? Coop::DeserializeAuthorityResponse(*rejectedResponse) : std::nullopt;
+		Require(rejectedRoundTrip && rejectedRoundTrip->rejection == response.rejection,
+			"rejected authority response carries an explicit reason");
+		response.acceptedCommand = Coop::PlayerCommand{};
+		Require(!Coop::SerializeAuthorityResponse(response), "rejected response cannot smuggle an accepted command");
+		auto tamperedRejection = *rejectedResponse;
+		tamperedRejection.back() = 1;
+		Require(!Coop::DeserializeAuthorityResponse(tamperedRejection), "rejected response requires a zeroed command area");
+	}
+
+	void TestAuthorityResponseRoundTrip()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(81, "host").has_value() && session.Join(82, "guest").has_value(), "receipt players join");
+		Require(session.SetReady(81, true) && session.SetReady(82, true) && session.StartGame(81), "receipt match starts");
+		Require(session.AdvanceSimulationTick() && session.AdvanceSimulationTick() && session.AdvanceSimulationTick(),
+			"session advances before command authorization");
+		Coop::LocalTransportHub hub;
+		auto host = hub.CreateTransport(81);
+		auto guest = hub.CreateTransport(82);
+		Require(host && guest, "receipt peers connect");
+		Coop::PlayerCommand command;
+		command.senderId = 82;
+		command.gardenId = session.GetGardens()[1].id;
+		command.sequence = 1;
+		command.type = Coop::CommandType::REMOVE_PLANT;
+		command.x = 2;
+		command.y = 3;
+		Require(Coop::SendCommandToHost(*guest, 81, command), "client intent enters host queue");
+		Coop::AuthoritativeCommandProcessor hostProcessor;
+		RecordingExecutor hostExecutor;
+		std::uint64_t observedServerTick = 0;
+		const auto accepted = Coop::DrainAuthoritativeCommands(*host, session, hostProcessor, hostExecutor,
+			[&host](const Coop::PlayerCommand& acceptedCommand)
+			{ Coop::BroadcastCommandToPeers(*host, acceptedCommand, acceptedCommand.senderId); },
+			[&host, &observedServerTick](Coop::TransportPlayerId peer, const Coop::CommandAuthorityResponse& response)
+			{
+				observedServerTick = response.serverTick;
+				if (const auto bytes = Coop::SerializeAuthorityResponse(response))
+					Require(host->SendTo(peer, *bytes), "host returns authorization response to client");
+			});
+		Require(accepted.size() == 1 && accepted[0] == Coop::CommandRejection::NONE && observedServerTick == 3,
+			"host accepts and timestamps the command at its authoritative garden tick");
+		Coop::AuthoritativeCommandProcessor guestProcessor;
+		RecordingExecutor guestExecutor;
+		const auto applied = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
+		Require(applied.size() == 1 && applied[0] == Coop::CommandRejection::NONE && guestExecutor.executions == 1,
+			"client applies the accepted command carried by the host receipt");
+
+		command.sequence = 2;
+		command.x = Coop::BOARD_COLUMNS;
+		Require(Coop::SendCommandToHost(*guest, 81, command), "invalid follow-up intent reaches authority for rejection");
+		const auto rejected = Coop::DrainAuthoritativeCommands(*host, session, hostProcessor, hostExecutor, {},
+			[&host](Coop::TransportPlayerId peer, const Coop::CommandAuthorityResponse& response)
+			{
+				if (const auto bytes = Coop::SerializeAuthorityResponse(response))
+					Require(host->SendTo(peer, *bytes), "host returns explicit rejection receipt");
+			});
+		Require(rejected.size() == 1 && rejected[0] == Coop::CommandRejection::INVALID_COORDINATES,
+			"host rejects malformed gameplay coordinates");
+		const auto rejectedOnClient = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
+		Require(rejectedOnClient.size() == 1 && rejectedOnClient[0] == Coop::CommandRejection::INVALID_COORDINATES
+			&& guestExecutor.executions == 1, "client receives rejection without applying the invalid action");
 	}
 
 	void TestLocalTransportHarness()
@@ -448,10 +541,12 @@ int main()
 	TestReadyAndStartRules();
 	TestHostPromotionAndEmptySlotStart();
 	TestCooperativeTeamResults();
+	TestSessionSimulationTicks();
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
 	TestAuthoritativeNetworkIngress();
 	TestCommandSerialization();
+	TestAuthorityResponseRoundTrip();
 	TestLocalTransportHarness();
 	TestSessionSnapshotSerialization();
 	std::cout << "CoopSession tests passed\n";
