@@ -51,6 +51,7 @@ file(GLOB SOURCES CONFIGURE_DEPENDS
 list(APPEND SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopSession.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/PlayerCommand.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CommandSerialization.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopGardenManager.cpp
 )
 
@@ -219,7 +220,7 @@ set_target_properties(pvz-mod PROPERTIES CXX_EXTENSIONS OFF)
 option(BUILD_COOP_TESTS "Build the standalone cooperative-session tests" ON)
 if(BUILD_COOP_TESTS)
 	enable_testing()
-	add_executable(coop-session-tests tests/coop/CoopSessionTests.cpp src/Coop/CoopSession.cpp src/Coop/PlayerCommand.cpp)
+	add_executable(coop-session-tests tests/coop/CoopSessionTests.cpp src/Coop/CoopSession.cpp src/Coop/PlayerCommand.cpp src/Coop/CommandSerialization.cpp)
 	target_compile_features(coop-session-tests PRIVATE cxx_std_20)
 	set_target_properties(coop-session-tests PROPERTIES CXX_EXTENSIONS OFF)
 	add_test(NAME coop-session-tests COMMAND coop-session-tests)

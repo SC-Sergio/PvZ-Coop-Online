@@ -4,6 +4,7 @@
  */
 
 #include "PlayerCommand.h"
+#include "../ConstEnums.h"
 
 #include <algorithm>
 
@@ -51,7 +52,8 @@ namespace Coop
 		{
 		case CommandType::PLACE_PLANT:
 			if (!validCoordinates()) return CommandRejection::INVALID_COORDINATES;
-			if (command.value <= 0 || command.value >= 100) return CommandRejection::INVALID_VALUE;
+			if (command.value < 0 || command.value >= static_cast<std::int32_t>(SeedType::NUM_SEED_TYPES))
+				return CommandRejection::INVALID_VALUE;
 			break;
 		case CommandType::REMOVE_PLANT:
 			if (!validCoordinates()) return CommandRejection::INVALID_COORDINATES;

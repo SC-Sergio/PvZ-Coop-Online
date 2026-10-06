@@ -1,12 +1,14 @@
-# Cooperative network protocol (design)
+# Cooperative network protocol
 
-No network messages are implemented yet. This document records the initial compatibility and trust boundary before a transport is added.
+Command frames now have a bounded, fixed-width serializer. There is still no socket, LAN, lobby, or Internet transport; the richer envelope below remains the next protocol layer.
 
 ## Version envelope
 
-Every frame will use an explicit bounded header containing magic, protocol version, message type, flags, payload byte length, session epoch, sender player ID, and sequence number. Payload serialization has an independent schema version. Integers use a specified byte order; no raw C++ object layouts, pointers, or unbounded allocations are transmitted. Reject unknown required versions/types, lengths above a configured maximum, invalid enum values, and trailing/short payloads.
+The current command frame is exactly 53 bytes: `PVZC` magic; little-endian protocol version (1); little-endian serialization version (1); command type; sender ID; garden ID; sequence; grid coordinates; value; entity ID; target player and garden IDs; amount. It serializes fields explicitly and never copies a C++ object layout. The decoder rejects bad magic, unsupported versions, and any frame whose length is not exactly 53 bytes. `AuthoritativeCommandProcessor` then validates command enums, identities, ownership, ranges, and sequence before passing it to the gameplay executor.
 
-The initial command model in `src/Coop/PlayerCommand.*` uses protocol version 1, a player ID, garden ID, increasing sequence, command type, bounded coordinates/value, entity/target IDs, and amount. The validator currently rejects non-playing senders, unknown/non-owned gardens, duplicate or stale sequences, out-of-range grid coordinates, unknown command types, invalid ping/plant/selection values, invalid view/resource targets, and excessive resource amounts. It accepts sequence gaps but records a sequence only after validation succeeds. Gameplay application must still check current plant unlocks/resources, cooldowns, sun entities, and match state. Serialization, byte-size limits, rate limiting, ACK/retry, and transport delivery are not implemented yet.
+The next envelope revision must add a message type, session epoch, and bounded payload length so command, lobby, snapshot, and heartbeat messages can share the transport. It must retain a separate schema version and explicit byte order. Reject unknown required versions/types, lengths above the configured maximum, invalid enum values, and trailing/short payloads.
+
+The command model in `src/Coop/PlayerCommand.*` uses protocol version 1, a player ID, garden ID, increasing sequence, command type, bounded coordinates/value, entity/target IDs, and amount. The validator rejects non-playing senders, unknown/non-owned gardens, duplicate or stale sequences, out-of-range grid coordinates, unknown command types, invalid ping/plant/selection values, invalid view/resource targets, and excessive resource amounts. It accepts sequence gaps but records a sequence only after structural validation succeeds. Gameplay application must still check current plant unlocks/resources, cooldowns, sun entities, and match state. `CommandSerialization.*` has round-trip and malformed-size/version tests; rate limiting, ACK/retry, session epoch, and transport delivery are not implemented yet.
 
 ## Message families
 

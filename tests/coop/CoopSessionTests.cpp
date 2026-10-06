@@ -1,6 +1,9 @@
 #include "../../src/Coop/CoopSession.h"
 #include "../../src/Coop/PlayerCommand.h"
+#include "../../src/Coop/CommandSerialization.h"
+#include "../../src/ConstEnums.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -129,10 +132,10 @@ namespace
 		command.x = 9;
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COORDINATES, "out-of-bounds plot is rejected");
 		command.x = 0;
-		command.value = 0;
+		command.value = static_cast<std::int32_t>(SeedType::NUM_SEED_TYPES);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_VALUE, "invalid plant type is rejected");
-		command.value = 1;
-		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "rejected sequence may be corrected and retried");
+		command.value = static_cast<std::int32_t>(SeedType::SEED_PEASHOOTER);
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "seed enum zero is a valid plant intent and rejected sequence may be corrected");
 
 		command.sequence = 3;
 		command.gardenId = secondGarden;
@@ -201,6 +204,48 @@ namespace
 			"live gameplay rejection is reported after structural validation");
 		Require(executor.executions == 2, "live gameplay adapter is called for the next valid sequence");
 	}
+
+	void TestCommandSerialization()
+	{
+		Coop::PlayerCommand command;
+		command.senderId = 0x12345678;
+		command.gardenId = 0x01020304;
+		command.sequence = 0x0102030405060708ULL;
+		command.type = Coop::CommandType::SEND_RESOURCE;
+		command.x = -1;
+		command.y = 5;
+		command.value = -17;
+		command.entityId = 99;
+		command.targetPlayerId = 0x10203040;
+		command.targetGardenId = 0x50607080;
+		command.amount = 2500;
+
+		const auto encoded = Coop::SerializeCommand(command);
+		Require(encoded.has_value() && encoded->size() == Coop::SERIALIZED_COMMAND_SIZE,
+			"command serialization uses the fixed protocol frame size");
+		const auto decoded = Coop::DeserializeCommand(*encoded);
+		Require(decoded.has_value(), "serialized command parses successfully");
+		Require(decoded->protocolVersion == command.protocolVersion && decoded->senderId == command.senderId
+			&& decoded->gardenId == command.gardenId && decoded->sequence == command.sequence
+			&& decoded->type == command.type && decoded->x == command.x && decoded->y == command.y
+			&& decoded->value == command.value && decoded->entityId == command.entityId
+			&& decoded->targetPlayerId == command.targetPlayerId && decoded->targetGardenId == command.targetGardenId
+			&& decoded->amount == command.amount, "fixed-width fields round-trip without host-endian assumptions");
+
+		auto badMagic = *encoded;
+		badMagic[0] = 0;
+		Require(!Coop::DeserializeCommand(badMagic), "incorrect frame magic is rejected");
+		auto badSerializationVersion = *encoded;
+		badSerializationVersion[6]++;
+		Require(!Coop::DeserializeCommand(badSerializationVersion), "unknown serialization version is rejected");
+		Require(!Coop::DeserializeCommand(std::span<const std::uint8_t>(encoded->data(), encoded->size() - 1)),
+			"truncated frames are rejected");
+		std::array<std::uint8_t, Coop::SERIALIZED_COMMAND_SIZE + 1> oversized{};
+		std::copy(encoded->begin(), encoded->end(), oversized.begin());
+		Require(!Coop::DeserializeCommand(oversized), "oversized frames are rejected");
+		command.protocolVersion++;
+		Require(!Coop::SerializeCommand(command), "unsupported protocol version is not serialized");
+	}
 }
 
 int main()
@@ -212,6 +257,7 @@ int main()
 	TestCooperativeTeamResults();
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
+	TestCommandSerialization();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }
