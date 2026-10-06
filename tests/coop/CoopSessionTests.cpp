@@ -1,4 +1,5 @@
 #include "../../src/Coop/CoopSession.h"
+#include "../../src/Coop/PlayerCommand.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -99,6 +100,60 @@ namespace
 		Require(defeat.GetTeamResult() == Coop::TeamResult::TEAM_DEFEAT, "one defeated garden defeats the active team");
 		Require(!defeat.MarkGardenCompleted(42), "defeated garden cannot later complete");
 	}
+
+	void TestAuthoritativeCommandValidation()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(51, "one").has_value(), "command player joins");
+		Require(session.Join(52, "two").has_value(), "command target joins");
+		Require(session.SetReady(51, true) && session.SetReady(52, true), "command players ready");
+		Require(session.StartGame(51), "command session starts");
+		const Coop::GardenId firstGarden = session.GetGardens()[0].id;
+		const Coop::GardenId secondGarden = session.GetGardens()[1].id;
+		Coop::PlayerCommandValidator validator;
+		Coop::PlayerCommand command;
+		command.senderId = 51;
+		command.gardenId = firstGarden;
+		command.sequence = 1;
+		command.type = Coop::CommandType::PLACE_PLANT;
+		command.x = 8;
+		command.y = 5;
+		command.value = 1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "valid owned-plot plant intent passes");
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_SEQUENCE, "duplicate command sequence is rejected");
+
+		command.sequence = 2;
+		command.protocolVersion++;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::WRONG_PROTOCOL, "incompatible protocol is rejected");
+		command.protocolVersion = Coop::PROTOCOL_VERSION;
+		command.x = 9;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COORDINATES, "out-of-bounds plot is rejected");
+		command.x = 0;
+		command.value = 0;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_VALUE, "invalid plant type is rejected");
+		command.value = 1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "rejected sequence may be corrected and retried");
+
+		command.sequence = 3;
+		command.gardenId = secondGarden;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NOT_GARDEN_OWNER, "player cannot control another garden");
+		command.gardenId = firstGarden;
+		command.type = Coop::CommandType::CHANGE_VIEW;
+		command.targetGardenId = secondGarden;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "player may observe another active garden");
+
+		command.sequence = 4;
+		command.type = Coop::CommandType::SEND_RESOURCE;
+		command.targetPlayerId = 52;
+		command.amount = Coop::MAX_RESOURCE_TRANSFER + 1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_VALUE, "resource transfer limit is enforced");
+		command.amount = 100;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "bounded resource transfer intent passes");
+
+		command.sequence = 5;
+		command.type = static_cast<Coop::CommandType>(255);
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COMMAND, "unknown command type is rejected");
+	}
 }
 
 int main()
@@ -108,6 +163,7 @@ int main()
 	TestReadyAndStartRules();
 	TestHostPromotionAndEmptySlotStart();
 	TestCooperativeTeamResults();
+	TestAuthoritativeCommandValidation();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }
