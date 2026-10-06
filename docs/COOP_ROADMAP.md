@@ -4,8 +4,8 @@ Priorities remain P0 through P6: compiling baseline and safe architecture; 1–4
 
 | Phase | Scope | Exit evidence | State |
 |---|---|---|---|
-| 0 | Audit repository, licenses, engine, build and test baseline | Reproducible build/test record and dependency map | In progress |
-| 1 | Multi-garden local simulation, dynamic counts 1–4 | Independent garden updates, ownership, 3 players means 3 gardens, engine run | In progress; Board context boundary, manager not built |
+| 0 | Audit repository, licenses, engine, build and test baseline | Reproducible build/test record and dependency map | Baseline audit documented; actual game run still needs legal assets |
+| 1 | Multi-garden local simulation, dynamic counts 1–4 | Independent garden updates, ownership, 3 players means 3 gardens, engine run | Partial; dynamic manager creates one Board per session garden and wires update/cleanup, but garden services remain shared and no in-game validation yet |
 | 2 | Session, player slots, garden ownership, team result | Unit tests for join/leave, ownership, victory/defeat | In progress; model covers roster, host, ready/start, victory/defeat |
 | 3 | Validated player command boundary | Ownership/resource/state/sequence tests | In progress; command intent and structural validation |
 | 4 | Local multi-client authority harness | Repeatable host/client simulation | Not started |

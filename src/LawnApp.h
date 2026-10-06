@@ -49,6 +49,7 @@ class StoreScreen;
 class AlmanacDialog;
 class TypingCheck;
 struct CustomSurvivalOption;
+namespace Coop { class CoopGardenManager; }
 
 namespace Sexy
 {
@@ -76,6 +77,7 @@ class LawnApp : public SexyApp
 {
 public:
 	Board*							mBoard;
+	Coop::CoopGardenManager*		mCoopGardenManager;
 	TitleScreen*					mTitleScreen;
 	GameSelector*					mGameSelector;
 	SeedChooserScreen*				mSeedChooserScreen;

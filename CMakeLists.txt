@@ -51,6 +51,7 @@ file(GLOB SOURCES CONFIGURE_DEPENDS
 list(APPEND SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopSession.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/PlayerCommand.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopGardenManager.cpp
 )
 
 # these files are included and must not be built in the project

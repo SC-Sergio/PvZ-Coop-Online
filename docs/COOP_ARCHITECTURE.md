@@ -20,7 +20,9 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 
 `src/Coop/PlayerCommand.*` defines transport-independent gameplay intent and checks sender state, garden ownership, protocol version, monotonic command sequence, grid bounds, enum/value ranges, and target IDs. It does not mutate the game and does not replace host gameplay checks for resources, cooldowns, or current entity state. Serialization and transport remain future work.
 
-`Board` now has an opt-in isolated scene/result pair. `Board::UpdateSimulation()` uses an RAII context to temporarily bind `LawnApp::mBoard`, `mGameScene`, and `mBoardResult` to a non-viewed isolated board, then restores the previously viewed board. Isolated non-viewed widgets skip cursor/UI work and call only their simulation update. `InitLevel`, `StartLevel`, board disposal, and destruction also bind this context. Non-isolated boards continue to read and write the original app fields, preserving the single-player path. This is only a reusable engine boundary: there is not yet a garden factory/session manager that creates, registers, hides, switches, or cleans up multiple Boards, and shared effects/RNG/economy remain app-wide. It has compile evidence but not a multi-board gameplay test.
+`Board` now has an opt-in isolated scene/result pair. `Board::UpdateSimulation()` uses an RAII context to temporarily bind `LawnApp::mBoard`, `mGameScene`, and `mBoardResult` to a non-viewed isolated board, then restores the previously viewed board. Isolated non-viewed widgets skip cursor/UI work and call only their simulation update. `InitLevel`, `StartLevel`, board disposal, and destruction also bind this context. Non-isolated boards continue to read and write the original app fields, preserving the single-player path.
+
+`CoopGardenManager` creates exactly one isolated `Board` for each session garden, registers those boards with the widget manager, selects one visible board, cleans up the full set, processes each board's delete queue, and aggregates terminal garden outcomes into the session. `LawnApp` owns the manager, routes cooperative teardown through it, and suppresses single-board campaign end handling while the manager is active. The manager requires a caller-provided garden configuration callback; there is not yet a lobby or playable UI/API path that supplies it. Shared effects, RNG, pool effect, economy services, seed selection, and several app-global mode values remain shared, so creating multiple Boards is an early engine adapter, not proof of independent gameplay. The manager compiles, but actual multi-board execution has not been tested with legal game data.
 
 ## Engine extraction plan
 
@@ -28,7 +30,7 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 - Introduce an explicit garden context for per-board scene/result state and simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
 - Finish separating simulation tick from `Widget::Update`/draw, gate input to the viewed board, and route effects, level completion, save, and random state to garden-owned or session-owned services.
 - Add a single-player regression harness before introducing a second simulation instance.
-- Only then instantiate N gardens and render one selected garden plus a team overview. Do not use multiple current `Board`s until app-global dependencies are removed or explicitly scoped.
+- Validate the manager with legal game data, then continue scoping RNG, shared effects, pool effect, economy, seed selection, mode values, and result handling before treating gardens as independently simulated. Add the lobby/configuration path and a team view after this foundation is exercised in game.
 
 ## Victory rules
 

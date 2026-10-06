@@ -22,6 +22,7 @@
 //#include <corecrt.h>
 #include <time.h>
 #include "LawnApp.h"
+#include "Coop/CoopGardenManager.h"
 #include "Lawn/Board.h"
 #include "Lawn/Plant.h"
 #include "Lawn/Zombie.h"
@@ -107,6 +108,7 @@ bool LawnHasUsedCheatKeys()
 LawnApp::LawnApp()
 {
 	mBoard = nullptr;
+	mCoopGardenManager = new Coop::CoopGardenManager(this);
 	mGameSelector = nullptr;
 	mChallengeScreen = nullptr;
 	mSeedChooserScreen = nullptr;
@@ -187,11 +189,16 @@ LawnApp::~LawnApp()
 
 	if (mBoard)
 	{
-		mBoardResult = BoardResult::BOARDRESULT_QUIT_APP;
-		mBoard->TryToSaveGame();
-		WriteCurrentUserConfig();
+		if (!mCoopGardenManager->IsActive())
+		{
+			mBoardResult = BoardResult::BOARDRESULT_QUIT_APP;
+			mBoard->TryToSaveGame();
+			WriteCurrentUserConfig();
+		}
 		KillBoard();
 	}
+	delete mCoopGardenManager;
+	mCoopGardenManager = nullptr;
 	ProcessSafeDeleteList();
 
 	if (mTitleScreen)
@@ -326,6 +333,13 @@ void LawnApp::Shutdown()
 // GOTY @Patoke : 0x452640
 void LawnApp::KillBoard()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+	{
+		mCoopGardenManager->Stop();
+		SetCursor(CURSOR_POINTER);
+		return;
+	}
+
 	FinishModelessDialogs();
 	KillSeedChooserScreen();
 	if (mBoard)
@@ -1729,7 +1743,11 @@ void LawnApp::UpdateFrames()
 	{
 		mAppCounter++;
 		
-		if (mBoard)
+		if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		{
+			mCoopGardenManager->ProcessDeleteQueues();
+		}
+		else if (mBoard)
 		{
 			mBoard->ProcessDeleteQueue();
 		}
@@ -1739,10 +1757,13 @@ void LawnApp::UpdateFrames()
 		}
 
 		SexyApp::UpdateFrames();
+		if (mCoopGardenManager && mCoopGardenManager->IsActive())
+			mCoopGardenManager->SyncTeamResults();
 
 		mMusic->MusicUpdate();
 
-		CheckForGameEnd();
+		if (!mCoopGardenManager || !mCoopGardenManager->IsActive())
+			CheckForGameEnd();
 	}
 }
 

@@ -26,6 +26,8 @@ Set `-DBUILD_COOP_TESTS=OFF` only when producing an application-only build. A he
 
 `tests/coop/CoopSessionTests.cpp` validates active counts 1, 2, 3, and 4; precisely N gardens for N joined players; empty unused slots; fourth-player capacity; duplicate player IDs; leaving and releasing only the owner's garden; empty-name/unknown-player rejection; host promotion; host-only start after all players ready; empty slots ignored at start; no join/leave after match start; ownership-checked completion/defeat; team defeat after one garden falls; and team victory only after all gardens complete. It also validates protocol-version rejection, sender garden ownership, sequence replay rejection, corrected retry after a rejected command, coordinate/value bounds, invalid command types, observation targets, and bounded resource-transfer intent.
 
+The engine build now includes `CoopGardenManager`, which is wired to `LawnApp` lifecycle/update hooks. This currently has compile coverage only. Tests do not instantiate multiple game Boards because that requires game resources and initialization that must be exercised with legally supplied assets; counts in the current automated suite test the session roster, not actual Board construction or simulation independence.
+
 ## Required expansion
 
 Add focused tests for ready/unready/start rules, ownership, team defeat/victory, commands and resource validation, serialization bounds and protocol version, deterministic difficulty, transport duplicates/order, disconnect/reconnect, and 2–4 process sessions. Use controllable latency/loss/reordering only after a real transport exists. Keep each test claim tied to commands and outcomes recorded in `COOP_PROGRESS.md`.
