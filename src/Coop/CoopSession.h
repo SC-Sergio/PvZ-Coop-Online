@@ -55,16 +55,22 @@ namespace Coop
 	public:
 		std::optional<SlotIndex> Join(PlayerId playerId, std::string displayName);
 		bool Leave(PlayerId playerId);
+		bool SetReady(PlayerId playerId, bool ready);
+		bool StartGame(PlayerId requestingPlayerId);
 
 		const std::array<PlayerSlot, MAX_PLAYERS>& GetSlots() const noexcept { return mSlots; }
 		const std::vector<GardenInstance>& GetGardens() const noexcept { return mGardens; }
 		std::size_t GetActivePlayerCount() const noexcept { return mGardens.size(); }
 		std::size_t GetGardenCount() const noexcept { return mGardens.size(); }
+		std::optional<PlayerId> GetHostPlayerId() const noexcept { return mHostPlayerId; }
+		bool HasStarted() const noexcept { return mStarted; }
 
 	private:
 		std::array<PlayerSlot, MAX_PLAYERS> mSlots{};
 		std::vector<GardenInstance> mGardens;
 		GardenId mNextGardenId = 1;
+	std::optional<PlayerId> mHostPlayerId;
+	bool mStarted = false;
 	};
 }
 
