@@ -2,7 +2,9 @@
 
 ## Current engine boundary
 
-The original game is centered on `LawnApp::mBoard`, a single `Board*`. `Board` is a large `Widget` that owns fixed-capacity data arrays for plants, zombies, projectiles, coins, lawn mowers, and grid items. Board construction assigns itself to `LawnApp::mBoard`; much of the engine, UI, save code, and global helpers dereference that pointer. `LawnApp::UpdateFrames` processes and updates that one board, while `WidgetManager` draws it. Therefore, creating multiple `Board` objects today would overwrite the app's active board and cross-wire gameplay state.
+The original game is centered on `LawnApp::mBoard`, a single `Board*`. `Board` is a large `Widget` that owns fixed-capacity data arrays for plants, zombies, projectiles, coins, lawn mowers, and grid items. Board construction assigns itself to `LawnApp::mBoard`; much of the engine, UI, save code, and global helpers dereference that pointer. `LawnApp::UpdateFrames` invokes the `WidgetManager`, whose widget traversal calls `Update` on every registered board and draws visible widgets. This means widget registration could advance multiple boards, but it also exposes every board to global scene/result state and app-global effects. Merely creating or hiding multiple `Board`s would therefore render incorrectly and cross-wire gameplay state.
+
+The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSystem`, `mPoolEffect`, `mPlayerInfo`, and game-end/save flow. `Board::Update` mixes presentation updates, input/cursor handling, shared effects, and the simulation calls `UpdateGameObjects`, spawning, fog, challenges, and level-end transitions. Entity objects do hold an owning `Board*`, which is a useful starting boundary. A source scan found 66 direct `mApp->mBoard`/`gLawnApp->mBoard` references and 54 `gLawnApp`/global declarations across engine sources; the wider `mBoard` token count includes per-entity and widget owner fields and is not an estimate of edits required.
 
 ## Intended separation
 
@@ -19,8 +21,8 @@ The original game is centered on `LawnApp::mBoard`, a single `Board*`. `Board` i
 ## Engine extraction plan
 
 - Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
-- Introduce an explicit garden context for simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
-- Separate simulation tick from `Widget::Update`/draw and route board effects to garden-owned or session-owned services.
+- Introduce an explicit garden context for per-board scene/result state and simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
+- Separate simulation tick from `Widget::Update`/draw, gate input to the viewed board, and route effects, level completion, save, and random state to garden-owned or session-owned services.
 - Add a single-player regression harness before introducing a second simulation instance.
 - Only then instantiate N gardens and render one selected garden plus a team overview. Do not use multiple current `Board`s until app-global dependencies are removed or explicitly scoped.
 

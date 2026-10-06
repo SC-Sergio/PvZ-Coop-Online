@@ -38,6 +38,7 @@
 #include "../Sexy.TodLib/Attachment.h"
 #include "../Sexy.TodLib/TodParticle.h"
 
+#include <array>
 #include <climits>
 
 constinit const ZombieDefinition gZombieDefs[NUM_ZOMBIE_TYPES] = {
@@ -10728,9 +10729,9 @@ void Zombie::BossStompAttack()
     mBossStompCounter = RandRangeInt(5500, 6500);
 
     int aRowsCount = 0;
-    int rowchoices = mBoard->StageHas6Rows() ? 5 : 4;
-    intptr_t aRowArray[rowchoices];
-    for (int i = 0; i < rowchoices; i++)
+    const int aRowChoices = mBoard->StageHas6Rows() ? 5 : 4;
+    std::array<intptr_t, 5> aRowArray{};
+    for (int i = 0; i < aRowChoices; i++)
     {
         if (BossCanStompRow(i))
         {
@@ -10742,7 +10743,7 @@ void Zombie::BossStompAttack()
     if (aRowsCount == 0)
         return;
 
-    mTargetRow = TodPickFromArray(aRowArray, aRowsCount);
+    mTargetRow = TodPickFromArray(aRowArray.data(), aRowsCount);
 
     const char* aTrackName;
     switch (mTargetRow)

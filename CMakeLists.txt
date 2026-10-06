@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.12...4.0)
+if(POLICY CMP0091)
+	cmake_policy(SET CMP0091 NEW)
+endif()
 
 project(pvz-mod LANGUAGES C CXX ASM)
 
@@ -26,7 +29,7 @@ if(MSVC)
 	if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "-static")
 		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 	elseif(DEFINED VCPKG_TARGET_TRIPLET)
-		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 	endif()
 endif()
 
