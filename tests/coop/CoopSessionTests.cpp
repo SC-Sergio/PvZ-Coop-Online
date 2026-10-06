@@ -5,6 +5,7 @@
 #include "../../src/Coop/CommandEndpoint.h"
 #include "../../src/Coop/SessionSnapshotSerialization.h"
 #include "../../src/Coop/LobbyProtocol.h"
+#include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
@@ -219,6 +220,30 @@ namespace
 		Require(Coop::KickLobbyPlayer(*kickHost, kickSession, 102) && kickSession.GetGardenCount() == 1
 			&& kickHost->GetConnectedPeerIds().empty() && kickGuest->GetConnectedPeerIds().empty(),
 			"host kick removes the lobby slot and disconnects both local transport endpoints");
+	}
+
+	void TestLobbyController()
+	{
+		Coop::LocalTransportHub hub;
+		auto hostTransport = hub.CreateTransport(201);
+		auto guestTransport = hub.CreateTransport(202);
+		auto host = Coop::CoopLobbyController::CreateHost(std::move(hostTransport), "Onset");
+		auto guest = Coop::CoopLobbyController::Join(std::move(guestTransport), 201, "Psycker");
+		Require(host && guest && host->IsHost() && !guest->IsHost(), "controller creates a host and joining client");
+		Require(host->PumpLobby() == 1 && guest->PumpLobby() == 1,
+			"lobby pumping accepts a join and distributes the authoritative roster");
+		Require(host->GetSession().GetGardenCount() == 2 && guest->GetSession().GetGardenCount() == 2
+			&& guest->GetSession().GetSlots()[2].state == Coop::PlayerState::EMPTY,
+			"controller allocates only active gardens and preserves empty slots");
+
+		Require(guest->SetLocalReady(true) && host->PumpLobby() == 1 && guest->PumpLobby() == 1,
+			"client ready intent is applied and replicated by the host");
+		Require(host->SetLocalReady(true) && !guest->StartGame() && host->StartGame(),
+			"host starts only after all active players are ready");
+		Require(guest->PumpLobby() >= 1 && host->GetSession().HasStarted() && guest->GetSession().HasStarted()
+			&& guest->GetSession().GetGardenCount() == 2,
+			"started authoritative session reaches every client with its garden roster");
+		Require(!host->SetLocalReady(false) && !host->Kick(202), "lobby controls close when gameplay starts");
 	}
 
 	void TestAuthoritativeCommandValidation()
@@ -742,6 +767,7 @@ int main()
 	TestCooperativeTeamResults();
 	TestSessionSimulationTicks();
 	TestLobbyProtocol();
+	TestLobbyController();
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
 	TestAuthoritativeNetworkIngress();

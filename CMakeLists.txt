@@ -58,6 +58,7 @@ list(APPEND SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopGardenManager.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/TcpNetworkTransport.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/LobbyProtocol.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopLobbyController.cpp
 )
 
 # these files are included and must not be built in the project
@@ -228,7 +229,7 @@ endif()
 option(BUILD_COOP_TESTS "Build the standalone cooperative-session tests" ON)
 if(BUILD_COOP_TESTS)
 	enable_testing()
-	add_executable(coop-session-tests tests/coop/CoopSessionTests.cpp src/Coop/CoopSession.cpp src/Coop/PlayerCommand.cpp src/Coop/CommandSerialization.cpp src/Coop/SessionSnapshotSerialization.cpp src/Coop/NetworkTransport.cpp src/Coop/TcpNetworkTransport.cpp src/Coop/LobbyProtocol.cpp src/Coop/CommandEndpoint.cpp)
+	add_executable(coop-session-tests tests/coop/CoopSessionTests.cpp src/Coop/CoopSession.cpp src/Coop/PlayerCommand.cpp src/Coop/CommandSerialization.cpp src/Coop/SessionSnapshotSerialization.cpp src/Coop/NetworkTransport.cpp src/Coop/TcpNetworkTransport.cpp src/Coop/LobbyProtocol.cpp src/Coop/CoopLobbyController.cpp src/Coop/CommandEndpoint.cpp)
 	target_compile_features(coop-session-tests PRIVATE cxx_std_20)
 	set_target_properties(coop-session-tests PROPERTIES CXX_EXTENSIONS OFF)
 	add_test(NAME coop-session-tests COMMAND coop-session-tests)
