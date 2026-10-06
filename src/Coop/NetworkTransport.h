@@ -36,6 +36,7 @@ namespace Coop
 		virtual std::vector<TransportPlayerId> GetConnectedPeerIds() const = 0;
 		virtual bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) = 0;
 		virtual std::optional<TransportPacket> Receive() = 0;
+		virtual bool DisconnectPeer(TransportPlayerId peerId) noexcept = 0;
 		virtual void Close() noexcept = 0;
 	};
 
@@ -49,6 +50,7 @@ namespace Coop
 		std::vector<TransportPlayerId> GetConnectedPeerIds() const override;
 		bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) override;
 		std::optional<TransportPacket> Receive() override;
+		bool DisconnectPeer(TransportPlayerId peerId) noexcept override;
 		void Close() noexcept override;
 
 	private:
@@ -88,13 +90,17 @@ namespace Coop
 		std::vector<TransportPlayerId> GetConnectedPeerIds() const override;
 		bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) override;
 		std::optional<TransportPacket> Receive() override;
+		bool DisconnectPeer(TransportPlayerId peerId) noexcept override;
 		void Close() noexcept override;
 		std::uint16_t GetBoundPort() const noexcept;
 		bool AcceptPeer(TransportPlayerId expectedPlayerId, std::uint32_t timeoutMilliseconds);
+		std::optional<TransportPlayerId> AcceptNextPeer(std::uint32_t timeoutMilliseconds);
 
 		struct State;
 	private:
 		explicit TcpNetworkTransport(std::unique_ptr<State> state);
+		std::optional<TransportPlayerId> AcceptPeerInternal(std::optional<TransportPlayerId> expectedPlayerId,
+			std::uint32_t timeoutMilliseconds);
 		std::unique_ptr<State> mState;
 	};
 }

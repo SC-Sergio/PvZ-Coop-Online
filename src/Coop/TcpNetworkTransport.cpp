@@ -485,6 +485,22 @@ namespace Coop
 		return std::nullopt;
 	}
 
+	bool TcpNetworkTransport::DisconnectPeer(TransportPlayerId peerId) noexcept
+	{
+		if (!mState || peerId == 0 || peerId == mState->localPlayerId)
+			return false;
+		std::lock_guard<std::mutex> lock(mState->mutex);
+		if (mState->closed)
+			return false;
+		const auto peer = std::find_if(mState->peers.begin(), mState->peers.end(), [peerId](const State::Peer& candidate)
+			{ return candidate.id == peerId; });
+		if (peer == mState->peers.end())
+			return false;
+		ClosePeer(*peer);
+		mState->peers.erase(peer);
+		return true;
+	}
+
 	void TcpNetworkTransport::Close() noexcept
 	{
 		if (!mState)
@@ -507,13 +523,24 @@ namespace Coop
 
 	bool TcpNetworkTransport::AcceptPeer(TransportPlayerId expectedPlayerId, std::uint32_t timeoutMilliseconds)
 	{
-		if (!mState || expectedPlayerId == 0 || expectedPlayerId == mState->localPlayerId)
-			return false;
+		return expectedPlayerId != 0 && AcceptPeerInternal(expectedPlayerId, timeoutMilliseconds) == expectedPlayerId;
+	}
+
+	std::optional<TransportPlayerId> TcpNetworkTransport::AcceptNextPeer(std::uint32_t timeoutMilliseconds)
+	{
+		return AcceptPeerInternal(std::nullopt, timeoutMilliseconds);
+	}
+
+	std::optional<TransportPlayerId> TcpNetworkTransport::AcceptPeerInternal(
+		std::optional<TransportPlayerId> expectedPlayerId, std::uint32_t timeoutMilliseconds)
+	{
+		if (!mState || (expectedPlayerId && (*expectedPlayerId == 0 || *expectedPlayerId == mState->localPlayerId)))
+			return std::nullopt;
 		std::unique_lock<std::mutex> lock(mState->mutex);
 		if (mState->closed || mState->listenSocket == INVALID_SOCKET_HANDLE || mState->peers.size() >= MAX_TCP_PEERS
-			|| std::any_of(mState->peers.begin(), mState->peers.end(), [expectedPlayerId](const State::Peer& peer)
-				{ return peer.id == expectedPlayerId; }))
-			return false;
+			|| (expectedPlayerId && std::any_of(mState->peers.begin(), mState->peers.end(), [expectedPlayerId](const State::Peer& peer)
+				{ return peer.id == *expectedPlayerId; })))
+			return std::nullopt;
 		const SocketHandle listener = mState->listenSocket;
 		lock.unlock();
 		fd_set readSet;
@@ -528,7 +555,7 @@ namespace Coop
 		const int ready = select(listener + 1, &readSet, nullptr, nullptr, &timeout);
 #endif
 		if (ready <= 0)
-			return false;
+			return std::nullopt;
 		sockaddr_storage remote{};
 #if defined(_WIN32)
 		int remoteSize = sizeof(remote);
@@ -537,11 +564,18 @@ namespace Coop
 #endif
 		SocketHandle accepted = accept(listener, reinterpret_cast<sockaddr*>(&remote), &remoteSize);
 		if (accepted == INVALID_SOCKET_HANDLE)
-			return false;
+			return std::nullopt;
 		std::array<std::uint8_t, 8> hello{};
-		const bool valid = ReceiveExactBlocking(accepted, hello.data(), hello.size(), timeoutMilliseconds)
-			&& std::equal(HANDSHAKE_MAGIC.begin(), HANDSHAKE_MAGIC.end(), hello.begin())
-			&& ReadU32LE(hello.data() + 4) == expectedPlayerId;
+		const bool receivedHello = ReceiveExactBlocking(accepted, hello.data(), hello.size(), timeoutMilliseconds)
+			&& std::equal(HANDSHAKE_MAGIC.begin(), HANDSHAKE_MAGIC.end(), hello.begin());
+		const TransportPlayerId claimedPlayerId = receivedHello ? ReadU32LE(hello.data() + 4) : 0;
+		bool valid = receivedHello && claimedPlayerId != 0
+			&& (!expectedPlayerId || claimedPlayerId == *expectedPlayerId);
+		lock.lock();
+		valid = valid && mState->peers.size() < MAX_TCP_PEERS
+			&& std::none_of(mState->peers.begin(), mState->peers.end(), [claimedPlayerId](const State::Peer& peer)
+				{ return peer.id == claimedPlayerId; });
+		lock.unlock();
 		std::array<std::uint8_t, 5> reply{};
 		std::copy(HANDSHAKE_REPLY_MAGIC.begin(), HANDSHAKE_REPLY_MAGIC.end(), reply.begin());
 		reply[4] = valid ? 1 : 0;
@@ -549,21 +583,21 @@ namespace Coop
 		if (!valid || !replied || !SetNonBlocking(accepted))
 		{
 			CloseSocket(accepted);
-			return false;
+			return std::nullopt;
 		}
 		lock.lock();
 		if (mState->closed || mState->peers.size() >= MAX_TCP_PEERS
-			|| std::any_of(mState->peers.begin(), mState->peers.end(), [expectedPlayerId](const State::Peer& peer)
-				{ return peer.id == expectedPlayerId; }))
+			|| std::any_of(mState->peers.begin(), mState->peers.end(), [claimedPlayerId](const State::Peer& peer)
+				{ return peer.id == claimedPlayerId; }))
 		{
 			lock.unlock();
 			CloseSocket(accepted);
-			return false;
+			return std::nullopt;
 		}
 		State::Peer peer;
-		peer.id = expectedPlayerId;
+		peer.id = claimedPlayerId;
 		peer.socket = accepted;
 		mState->peers.push_back(std::move(peer));
-		return true;
+		return claimedPlayerId;
 	}
 }

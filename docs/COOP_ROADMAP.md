@@ -10,7 +10,7 @@ Priorities remain P0 through P6: compiling baseline and safe architecture; 1–4
 | 3 | Validated player command boundary | Ownership/resource/state/sequence tests | Partial; host ingress, ownership/sequence gate, Board-backed classic actions, sun transfer, host-side local input, guest command send, accepted-command broadcast, fixed-width accepted/rejected authority responses with per-garden ticks, and client host-identity validation are wired; snapshots, drift correction, retries and gameplay runtime validation remain |
 | 4 | Local multi-client authority harness | Repeatable host/client simulation | Partial; four-peer FIFO transport and a host-to-guest accepted-command echo are unit tested; no playable local multi-client match or simulation drift recovery yet |
 | 5 | LAN transport | Two then three/four process play | Partial; bounded TCP stream adapter and four-peer localhost same-process test; no lobby integration, multi-process play, authentication, or physical-LAN evidence |
-| 6 | Private lobby and ready flow | Create/join/settings/ready/start/leave evidence | Not started |
+| 6 | Private lobby and ready flow | Create/join/settings/ready/start/leave evidence | Partial; bounded JOIN/READY/UNREADY/START/LEAVE requests, host-authored session snapshots, kick and transport identity checks are unit tested; no room codes, settings, UI, or lobby-over-TCP play |
 | 7 | Internet backend | Cross-network session without routine port forwarding | Not started |
 | 8 | Heartbeat, grace, reconnect, full snapshot | Fault-injected reconnect evidence | Not started |
 | 9–17 | Difficulty, coop support, stats, achievements, modes, modifiers, profiles, resilience, polish | Phase-specific tests and playable evidence | Not started |

@@ -4,6 +4,7 @@
 #include "../../src/Coop/NetworkTransport.h"
 #include "../../src/Coop/CommandEndpoint.h"
 #include "../../src/Coop/SessionSnapshotSerialization.h"
+#include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/ConstEnums.h"
 
 #include <algorithm>
@@ -119,6 +120,105 @@ namespace
 			"one authoritative tick advances every active garden");
 		Require(session.AdvanceSimulationTick() && session.GetGardens()[0].simulationTicks == 2
 			&& session.GetGardens()[1].simulationTicks == 2, "tick update advances every garden together");
+	}
+
+	void TestLobbyProtocol()
+	{
+		Coop::LobbyRequest wireJoin{Coop::LobbyRequestType::JOIN, 92, "Psycker", false};
+		const auto wireJoinBytes = Coop::SerializeLobbyRequest(wireJoin);
+		Require(wireJoinBytes && Coop::DeserializeLobbyRequest(*wireJoinBytes)->displayName == "Psycker",
+			"bounded lobby request fields round-trip");
+		auto invalidLobbyVersion = *wireJoinBytes;
+		invalidLobbyVersion[4]++;
+		Require(!Coop::DeserializeLobbyRequest(invalidLobbyVersion), "lobby decoder rejects unknown protocol versions");
+		wireJoin.displayName.assign(1, '\n');
+		Require(!Coop::SerializeLobbyRequest(wireJoin), "lobby rejects control characters in display names");
+
+		Coop::CoopSession hostSession;
+		Require(hostSession.Join(91, "Onset").has_value(), "lobby host establishes the room roster");
+		Coop::CoopSession clientSession;
+		Coop::LocalTransportHub hub;
+		auto host = hub.CreateTransport(91);
+		auto guest = hub.CreateTransport(92);
+		Require(host && guest, "lobby transport endpoints created");
+
+		Coop::LobbyRequest join{Coop::LobbyRequestType::JOIN, 92, "Psycker", false};
+		Require(Coop::SendLobbyRequest(*guest, 91, join), "client can request a lobby slot with its display name");
+		auto joined = Coop::DrainLobbyRequests(*host, hostSession);
+		Require(joined.size() == 1 && joined[0] == Coop::LobbyRequestRejection::NONE
+			&& hostSession.GetGardenCount() == 2 && hostSession.GetSlots()[1].displayName == "Psycker",
+			"host allocates one owned garden and roster slot for a valid join");
+		auto joinedSnapshot = Coop::DrainLobbySnapshots(*guest, 91, clientSession);
+		Require(joinedSnapshot.size() == 1 && joinedSnapshot[0] == Coop::LobbyRequestRejection::NONE
+			&& clientSession.GetGardenCount() == 2 && clientSession.GetSlots()[2].state == Coop::PlayerState::EMPTY,
+			"joining client applies the authoritative roster while unused slots stay empty");
+
+		Coop::LobbyRequest ready{Coop::LobbyRequestType::READY, 92, {}, true};
+		Require(Coop::SendLobbyRequest(*guest, 91, ready), "client can ready in the lobby");
+		Require(Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::NONE,
+			"host applies client ready intent");
+		Require(Coop::DrainLobbySnapshots(*guest, 91, clientSession)[0] == Coop::LobbyRequestRejection::NONE
+			&& clientSession.GetSlots()[1].state == Coop::PlayerState::READY, "ready state replicates to the client");
+		ready.ready = false;
+		Require(Coop::SendLobbyRequest(*guest, 91, ready), "client can unready before match start");
+		Require(Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::NONE
+			&& hostSession.GetSlots()[1].state == Coop::PlayerState::CONNECTED, "host applies unready intent");
+		Coop::DrainLobbySnapshots(*guest, 91, clientSession);
+
+		Coop::LobbyRequest unauthorizedStart{Coop::LobbyRequestType::START, 92, {}, false};
+		Require(Coop::SendLobbyRequest(*guest, 91, unauthorizedStart), "client can submit a malformed start intent for authorization checks");
+		Require(Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::NOT_HOST
+			&& !hostSession.HasStarted(), "host rejects a remote start request");
+		Coop::DrainLobbySnapshots(*guest, 91, clientSession);
+
+		Coop::LobbyRequest spoofed{Coop::LobbyRequestType::READY, 93, {}, true};
+		auto spoofedBytes = Coop::SerializeLobbyRequest(spoofed);
+		Require(spoofedBytes && guest->SendTo(91, *spoofedBytes), "test can send a mismatched lobby identity");
+		Require(Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::SENDER_MISMATCH
+			&& hostSession.GetSlots()[1].state == Coop::PlayerState::CONNECTED,
+			"host binds lobby identity to the transport-authored peer ID");
+		Coop::DrainLobbySnapshots(*guest, 91, clientSession);
+
+		Require(hostSession.SetReady(91, true) && hostSession.SetReady(92, true) && hostSession.StartGame(91),
+			"host starts the room only after every connected roster entry is ready");
+		Require(Coop::BroadcastLobbySnapshot(*host, hostSession) == 1, "host sends the started match snapshot to peers");
+		Require(Coop::DrainLobbySnapshots(*guest, 91, clientSession)[0] == Coop::LobbyRequestRejection::NONE
+			&& clientSession.HasStarted() && clientSession.GetGardenCount() == 2,
+			"client restores the authoritative started session");
+		Require(!Coop::KickLobbyPlayer(*host, hostSession, 92), "host cannot remove a player from an active match");
+
+		Coop::CoopSession leaveSession;
+		Require(leaveSession.Join(111, "Host").has_value(), "leave test host joins");
+		Coop::LocalTransportHub leaveHub;
+		auto leaveHost = leaveHub.CreateTransport(111);
+		auto leavingGuest = leaveHub.CreateTransport(112);
+		Coop::LobbyRequest leaveJoin{Coop::LobbyRequestType::JOIN, 112, "Guest", false};
+		Require(Coop::SendLobbyRequest(*leavingGuest, 111, leaveJoin)
+			&& Coop::DrainLobbyRequests(*leaveHost, leaveSession)[0] == Coop::LobbyRequestRejection::NONE,
+			"leave test client joins its host lobby");
+		Coop::CoopSession leaveClientSession;
+		Coop::DrainLobbySnapshots(*leavingGuest, 111, leaveClientSession);
+		Coop::LobbyRequest leave{Coop::LobbyRequestType::LEAVE, 112, {}, false};
+		Require(Coop::SendLobbyRequest(*leavingGuest, 111, leave)
+			&& Coop::DrainLobbyRequests(*leaveHost, leaveSession)[0] == Coop::LobbyRequestRejection::NONE
+			&& leaveSession.GetGardenCount() == 1 && leaveHost->GetConnectedPeerIds().empty()
+			&& leavingGuest->GetConnectedPeerIds().empty(),
+			"client leave releases its garden and closes the peer relationship");
+
+		Coop::CoopSession kickSession;
+		Require(kickSession.Join(101, "Host").has_value(), "kick test host joins");
+		Coop::LocalTransportHub kickHub;
+		auto kickHost = kickHub.CreateTransport(101);
+		auto kickGuest = kickHub.CreateTransport(102);
+		Coop::LobbyRequest kickJoin{Coop::LobbyRequestType::JOIN, 102, "Guest", false};
+		Require(Coop::SendLobbyRequest(*kickGuest, 101, kickJoin)
+			&& Coop::DrainLobbyRequests(*kickHost, kickSession)[0] == Coop::LobbyRequestRejection::NONE,
+			"kick test guest joins the host lobby");
+		Coop::CoopSession kickClientSession;
+		Coop::DrainLobbySnapshots(*kickGuest, 101, kickClientSession);
+		Require(Coop::KickLobbyPlayer(*kickHost, kickSession, 102) && kickSession.GetGardenCount() == 1
+			&& kickHost->GetConnectedPeerIds().empty() && kickGuest->GetConnectedPeerIds().empty(),
+			"host kick removes the lobby slot and disconnects both local transport endpoints");
 	}
 
 	void TestAuthoritativeCommandValidation()
@@ -464,6 +564,12 @@ namespace
 		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
 			Require(host->Receive().has_value(), "host drains every queued packet");
 		Require(!host->Receive(), "drained inbox is empty");
+		Require(player4->SendTo(71, *bytes), "peer has an unprocessed packet before disconnection");
+		Require(host->DisconnectPeer(74), "host can disconnect a specific local peer");
+		const auto player4Peers = player4->GetConnectedPeerIds();
+		Require(std::find(player4Peers.begin(), player4Peers.end(), 71) == player4Peers.end()
+			&& !player4->SendTo(71, *bytes) && !host->Receive(),
+			"local transport disconnect removes both peer links and drops queued packets from the disconnected peer");
 
 		player3->Close();
 		Require(!player3->SendTo(71, *bytes), "closed peer cannot send");
@@ -514,15 +620,15 @@ namespace
 		Require(received && received->senderId == 701 && received->bytes == std::vector<std::uint8_t>(reply.begin(), reply.end()),
 			"TCP host-to-client framing carries bounded responses");
 
-		bool acceptedThird = false;
-		std::thread thirdAcceptThread([&] { acceptedThird = host->AcceptPeer(703, 3000); });
+		std::optional<Coop::TransportPlayerId> acceptedThird;
+		std::thread thirdAcceptThread([&] { acceptedThird = host->AcceptNextPeer(3000); });
 		auto third = Coop::TcpNetworkTransport::Connect(703, 701, "127.0.0.1", host->GetBoundPort());
 		thirdAcceptThread.join();
-		bool acceptedFourth = false;
-		std::thread fourthAcceptThread([&] { acceptedFourth = host->AcceptPeer(704, 3000); });
+		std::optional<Coop::TransportPlayerId> acceptedFourth;
+		std::thread fourthAcceptThread([&] { acceptedFourth = host->AcceptNextPeer(3000); });
 		auto fourth = Coop::TcpNetworkTransport::Connect(704, 701, "127.0.0.1", host->GetBoundPort());
 		fourthAcceptThread.join();
-		Require(third && fourth && acceptedThird && acceptedFourth && host->GetConnectedPeerIds().size() == 3,
+		Require(third && fourth && acceptedThird == 703 && acceptedFourth == 704 && host->GetConnectedPeerIds().size() == 3,
 			"TCP host can attach three guest peers for a four-player room");
 		const std::array<std::uint8_t, 2> thirdMessage{7, 3};
 		const std::array<std::uint8_t, 2> fourthMessage{7, 4};
@@ -635,6 +741,7 @@ int main()
 	TestHostPromotionAndEmptySlotStart();
 	TestCooperativeTeamResults();
 	TestSessionSimulationTicks();
+	TestLobbyProtocol();
 	TestAuthoritativeCommandValidation();
 	TestAuthoritativeCommandProcessor();
 	TestAuthoritativeNetworkIngress();
