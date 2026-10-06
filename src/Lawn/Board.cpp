@@ -106,12 +106,12 @@ namespace
 Board::Board(LawnApp* theApp)
 {
 	mApp = theApp;
+	Board* previousAppBoard = mApp->mBoard;
+	const bool isPrimaryBoard = previousAppBoard == nullptr;
+	mApp->mBoard = this;
 	mGardenGameScene = mApp->mGameScene;
 	mGardenBoardResult = mApp->mBoardResult;
 	mGardenStateIsolated = false;
-	const bool isPrimaryBoard = mApp->mBoard == nullptr;
-	if (isPrimaryBoard)
-		mApp->mBoard = this;
 	TodHesitationTrace("preboard");
 
 	mZombies.DataArrayInitialize(1024U, "zombies");
@@ -283,6 +283,8 @@ Board::Board(LawnApp* theApp)
 		mStoreButton->mBtnNoDraw = true;
 		mStoreButton->SetLabel("[GET_FULL_VERSION_BUTTON]");
 	}
+	if (!isPrimaryBoard)
+		mApp->mBoard = previousAppBoard;
 }
 
 void Board::EnableGardenStateIsolation(bool enabled)
