@@ -27,6 +27,24 @@ namespace Coop
 		Close();
 	}
 
+	std::vector<TransportPlayerId> LocalTransport::GetConnectedPeerIds() const
+	{
+		std::vector<TransportPlayerId> peers;
+		if (mClosed.load())
+			return peers;
+		std::lock_guard<std::mutex> lock(mState->mutex);
+		if (mState->closed || mState->inboxes.find(mPlayerId) == mState->inboxes.end())
+			return peers;
+		peers.reserve(mState->inboxes.size() - 1);
+		for (const auto& [playerId, inbox] : mState->inboxes)
+		{
+			(void)inbox;
+			if (playerId != mPlayerId)
+				peers.push_back(playerId);
+		}
+		return peers;
+	}
+
 	bool LocalTransport::SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes)
 	{
 		if (mClosed.load() || recipientId == 0 || recipientId == mPlayerId || bytes.empty()

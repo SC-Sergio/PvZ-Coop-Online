@@ -33,6 +33,7 @@ namespace Coop
 	public:
 		virtual ~INetworkTransport() = default;
 		virtual TransportPlayerId GetLocalPlayerId() const noexcept = 0;
+		virtual std::vector<TransportPlayerId> GetConnectedPeerIds() const = 0;
 		virtual bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) = 0;
 		virtual std::optional<TransportPacket> Receive() = 0;
 		virtual void Close() noexcept = 0;
@@ -45,6 +46,7 @@ namespace Coop
 	public:
 		~LocalTransport() override;
 		TransportPlayerId GetLocalPlayerId() const noexcept override { return mPlayerId; }
+		std::vector<TransportPlayerId> GetConnectedPeerIds() const override;
 		bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) override;
 		std::optional<TransportPacket> Receive() override;
 		void Close() noexcept override;

@@ -184,7 +184,8 @@ namespace
 		Coop::LocalTransportHub hub;
 		auto host = hub.CreateTransport(81);
 		auto guest = hub.CreateTransport(82);
-		Require(host && guest, "host and guest local endpoints created");
+		auto unrelatedPeer = hub.CreateTransport(83);
+		Require(host && guest && unrelatedPeer, "host, guest, and unrelated local endpoints created");
 
 		Coop::PlayerCommand command;
 		command.senderId = 99;
@@ -205,21 +206,39 @@ namespace
 		command.senderId = 82;
 		auto valid = Coop::SerializeCommand(command);
 		Require(valid && guest->SendTo(81, *valid), "guest sends command with matching transport identity");
-		auto accepted = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		auto accepted = Coop::DrainAuthoritativeCommands(*host, session, processor, executor,
+			[&host](const Coop::PlayerCommand& acceptedCommand)
+			{ Require(Coop::BroadcastCommandToPeers(*host, acceptedCommand) == 2, "host broadcasts accepted command to connected peers"); });
 		Require(accepted.size() == 1 && accepted[0] == Coop::CommandRejection::NONE,
 			"host processes a valid owner command");
 		Require(executor.executions == 1, "validated network command reaches executor once");
+		Coop::AuthoritativeCommandProcessor guestProcessor;
+		RecordingExecutor guestExecutor;
+		auto replicated = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
+		Require(replicated.size() == 1 && replicated[0] == Coop::CommandRejection::NONE
+			&& guestExecutor.executions == 1 && guestExecutor.lastCommand.senderId == 82,
+			"client accepts and applies a command only after host replication");
 
 		command.sequence = 2;
 		Require(Coop::SendCommandToHost(*guest, 81, command), "client command helper serializes and routes intent to host");
-		auto clientSent = Coop::DrainAuthoritativeCommands(*host, session, processor, executor);
+		auto clientSent = Coop::DrainAuthoritativeCommands(*host, session, processor, executor,
+			[&host](const Coop::PlayerCommand& acceptedCommand) { Coop::BroadcastCommandToPeers(*host, acceptedCommand); });
 		Require(clientSent.size() == 1 && clientSent[0] == Coop::CommandRejection::NONE && executor.executions == 2,
 			"host tick ingress accepts the client's next sequenced command");
+		auto replicatedClientSent = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
+		Require(replicatedClientSent.size() == 1 && replicatedClientSent[0] == Coop::CommandRejection::NONE
+			&& guestExecutor.executions == 2,
+			"client applies its accepted command when the host returns the authoritative echo");
 		command.sequence = 3;
 		command.senderId = 81;
 		Require(!Coop::SendCommandToHost(*guest, 81, command), "client cannot spoof transport identity in outgoing helper");
 		command.senderId = 82;
 		Require(!Coop::SendCommandToHost(*guest, 82, command), "client cannot route a host-directed command to itself");
+		Require(unrelatedPeer->SendTo(82, *valid), "unrelated peer can send a frame for authority-origin validation");
+		auto spoofedHost = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
+		Require(spoofedHost.size() == 1 && spoofedHost[0] == Coop::CommandRejection::SENDER_MISMATCH
+			&& guestExecutor.executions == 2,
+			"client rejects replicated gameplay frames not delivered by the authoritative host");
 
 		const std::array<std::uint8_t, 3> malformed{0, 1, 2};
 		Require(guest->SendTo(81, malformed), "guest can deliver malformed bytes for decoder validation");

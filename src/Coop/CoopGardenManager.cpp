@@ -151,21 +151,29 @@ namespace Coop
 	{
 		if (!mSession)
 			return CommandRejection::PLAYER_NOT_PLAYING;
-		return mCommandProcessor.Process(*mSession, command, *this);
+		const CommandRejection result = mCommandProcessor.Process(*mSession, command, *this);
+		if (result == CommandRejection::NONE && mTransport && mLocalPlayerId && mSession->GetHostPlayerId()
+			&& *mLocalPlayerId == *mSession->GetHostPlayerId())
+			BroadcastCommandToPeers(*mTransport, command);
+		return result;
 	}
 
 	std::vector<CommandRejection> CoopGardenManager::DrainIncomingCommands(INetworkTransport& transport)
 	{
 		if (!mSession)
 			return {CommandRejection::NOT_AUTHORITY};
-		return DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this);
+		return DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this,
+			[&transport](const PlayerCommand& command) { BroadcastCommandToPeers(transport, command); });
 	}
 
 	void CoopGardenManager::PumpNetwork()
 	{
-		if (mTransport && mSession && mLocalPlayerId && mSession->GetHostPlayerId()
-			&& *mLocalPlayerId == *mSession->GetHostPlayerId())
+		if (!mTransport || !mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
+			return;
+		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 			DrainIncomingCommands(*mTransport);
+		else
+			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this);
 	}
 
 	bool CoopGardenManager::Execute(const PlayerCommand& command)
