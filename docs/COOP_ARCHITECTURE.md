@@ -16,13 +16,13 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 
 ## Phase 1 slice in this revision
 
-`src/Coop/CoopSession.*` is an engine-independent roster and garden-ownership core. Its garden records deliberately contain only session-level identity and terminal/tick metadata so far; they are not simulated `Board`s. The unit tests establish counts 1 through 4, no garden for empty slots, capacity, duplicate identity, leave, and slot reuse invariants. This is a foundation, not evidence that multiple game boards are playable.
+`src/Coop/CoopSession.*` is an engine-independent roster and garden-ownership core. Its garden records deliberately contain only session-level identity and terminal/tick metadata so far; they are not simulated `Board`s. The unit tests establish counts 1 through 4, no garden for empty slots, capacity, duplicate identity, leave, and slot reuse invariants. `Board::UpdateSimulation()` now holds the existing gameplay-tick portion of `Board::Update()` behind an explicit call, while the normal widget path invokes it once in the same place as before. That method still reads app-wide scene, effect, and widget state; it is not yet safe as a multi-garden driver. No gameplay regression can be manually ruled out until legal game data is available.
 
 ## Engine extraction plan
 
 - Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
 - Introduce an explicit garden context for per-board scene/result state and simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
-- Separate simulation tick from `Widget::Update`/draw, gate input to the viewed board, and route effects, level completion, save, and random state to garden-owned or session-owned services.
+- Finish separating simulation tick from `Widget::Update`/draw, gate input to the viewed board, and route effects, level completion, save, and random state to garden-owned or session-owned services.
 - Add a single-player regression harness before introducing a second simulation instance.
 - Only then instantiate N gardens and render one selected garden plus a team overview. Do not use multiple current `Board`s until app-global dependencies are removed or explicitly scoped.
 

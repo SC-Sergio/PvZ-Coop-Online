@@ -6086,7 +6086,12 @@ void Board::Update()
 		mCoinBankFadeCount--;
 	}
 	UpdateLayers();
+	UpdateSimulation();
+}
 
+
+void Board::UpdateSimulation()
+{
 	if (mTimeStopCounter > 0)
 		return;
 
