@@ -42,7 +42,7 @@ namespace Coop
 
 		bool IsValidSnapshot(const CoopSessionSnapshot& snapshot)
 		{
-			if (snapshot.hostPlayerId == 0 || snapshot.gardens.empty() || snapshot.gardens.size() > MAX_PLAYERS)
+			if (snapshot.hostPlayerId == 0 || snapshot.nextGardenId == 0 || snapshot.gardens.empty() || snapshot.gardens.size() > MAX_PLAYERS)
 				return false;
 			std::unordered_set<PlayerId> playerIds;
 			std::unordered_set<GardenId> gardenIds;
@@ -75,7 +75,7 @@ namespace Coop
 
 			for (const GardenInstance& garden : snapshot.gardens)
 			{
-				if (garden.id == 0 || garden.owner == 0 || garden.id == std::numeric_limits<GardenId>::max()
+				if (garden.id == 0 || garden.id >= snapshot.nextGardenId || garden.owner == 0 || garden.id == std::numeric_limits<GardenId>::max()
 					|| garden.defeated && garden.completed || !gardenIds.insert(garden.id).second)
 					return false;
 				const auto slot = std::find_if(snapshot.slots.begin(), snapshot.slots.end(), [&garden](const PlayerSlot& candidate)
@@ -97,6 +97,7 @@ namespace Coop
 		CoopSessionSnapshot snapshot;
 		snapshot.started = session.HasStarted();
 		snapshot.hostPlayerId = session.GetHostPlayerId().value_or(0);
+		snapshot.nextGardenId = session.GetNextGardenId();
 		snapshot.slots = session.GetSlots();
 		snapshot.gardens = session.GetGardens();
 		if (!IsValidSessionSnapshot(snapshot))
@@ -109,6 +110,7 @@ namespace Coop
 		WriteLittleEndian(output, SESSION_SNAPSHOT_SERIALIZATION_VERSION);
 		output.push_back(snapshot.started ? 1 : 0);
 		WriteLittleEndian(output, snapshot.hostPlayerId);
+		WriteLittleEndian(output, snapshot.nextGardenId);
 		output.push_back(static_cast<std::uint8_t>(MAX_PLAYERS));
 		output.push_back(static_cast<std::uint8_t>(snapshot.gardens.size()));
 		for (const PlayerSlot& slot : snapshot.slots)
@@ -133,13 +135,14 @@ namespace Coop
 
 	std::optional<CoopSessionSnapshot> DeserializeSessionSnapshot(std::span<const std::uint8_t> bytes)
 	{
-		if (bytes.size() < 13 || bytes.size() > MAX_SESSION_SNAPSHOT_BYTES
+		if (bytes.size() < 17 || bytes.size() > MAX_SESSION_SNAPSHOT_BYTES
 			|| !std::equal(SNAPSHOT_MAGIC.begin(), SNAPSHOT_MAGIC.end(), bytes.begin()))
 			return std::nullopt;
 		std::size_t offset = SNAPSHOT_MAGIC.size();
 		std::uint16_t protocol = 0;
 		std::uint16_t serialization = 0;
 		std::uint32_t hostPlayerId = 0;
+		std::uint32_t nextGardenId = 0;
 		if (!ReadLittleEndian(bytes, offset, protocol) || !ReadLittleEndian(bytes, offset, serialization)
 			|| protocol != PROTOCOL_VERSION || serialization != SESSION_SNAPSHOT_SERIALIZATION_VERSION)
 			return std::nullopt;
@@ -147,9 +150,11 @@ namespace Coop
 			return std::nullopt;
 		CoopSessionSnapshot snapshot;
 		snapshot.started = bytes[offset++] != 0;
-		if (!ReadLittleEndian(bytes, offset, hostPlayerId) || offset + 2 > bytes.size())
+		if (!ReadLittleEndian(bytes, offset, hostPlayerId) || !ReadLittleEndian(bytes, offset, nextGardenId)
+			|| offset + 2 > bytes.size())
 			return std::nullopt;
 		snapshot.hostPlayerId = hostPlayerId;
+		snapshot.nextGardenId = nextGardenId;
 		const std::uint8_t slotCount = bytes[offset++];
 		const std::uint8_t gardenCount = bytes[offset++];
 		if (slotCount != MAX_PLAYERS || gardenCount == 0 || gardenCount > MAX_PLAYERS)

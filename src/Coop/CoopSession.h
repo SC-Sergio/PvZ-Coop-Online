@@ -62,6 +62,7 @@ namespace Coop
 	{
 		bool started = false;
 		PlayerId hostPlayerId = 0;
+		GardenId nextGardenId = 1;
 		std::array<PlayerSlot, MAX_PLAYERS> slots{};
 		std::vector<GardenInstance> gardens;
 	};
@@ -83,6 +84,7 @@ namespace Coop
 		std::size_t GetActivePlayerCount() const noexcept { return mGardens.size(); }
 		std::size_t GetGardenCount() const noexcept { return mGardens.size(); }
 		std::optional<PlayerId> GetHostPlayerId() const noexcept { return mHostPlayerId; }
+		GardenId GetNextGardenId() const noexcept { return mNextGardenId; }
 		bool HasStarted() const noexcept { return mStarted; }
 	TeamResult GetTeamResult() const noexcept;
 

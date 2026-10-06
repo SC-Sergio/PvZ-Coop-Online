@@ -110,13 +110,13 @@ namespace Coop
 		GardenId maxGardenId = 0;
 		for (const GardenInstance& garden : snapshot.gardens)
 			maxGardenId = std::max(maxGardenId, garden.id);
-		if (maxGardenId == std::numeric_limits<GardenId>::max())
+		if (maxGardenId == std::numeric_limits<GardenId>::max() || snapshot.nextGardenId <= maxGardenId)
 			return false;
 		mSlots = snapshot.slots;
 		mGardens = snapshot.gardens;
 		mHostPlayerId = snapshot.hostPlayerId;
 		mStarted = snapshot.started;
-		mNextGardenId = maxGardenId + 1;
+		mNextGardenId = snapshot.nextGardenId;
 		return true;
 	}
 

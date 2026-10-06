@@ -397,9 +397,21 @@ namespace
 		}
 
 		Coop::CoopSession host;
-		Require(host.Join(501, "Host").has_value() && host.Join(502, "Guest").has_value(), "started snapshot roster created");
-		Require(host.SetReady(501, true) && host.SetReady(502, true) && host.StartGame(501), "started snapshot session begins");
-		auto startedBytes = Coop::SerializeSessionSnapshot(host);
+		Require(host.Join(601, "Host").has_value() && host.Join(602, "Departing").has_value()
+			&& host.Join(603, "Guest").has_value() && host.Leave(602),
+			"session with a retired garden identity created");
+		auto gapBytes = Coop::SerializeSessionSnapshot(host);
+		auto gapSnapshot = gapBytes ? Coop::DeserializeSessionSnapshot(*gapBytes) : std::nullopt;
+		Coop::CoopSession restoredGap;
+		Require(gapSnapshot && restoredGap.ApplySnapshot(*gapSnapshot), "snapshot preserves the next garden identity across a hole");
+		auto rejoined = restoredGap.Join(604, "Rejoined");
+		Require(rejoined && restoredGap.GetSlots()[*rejoined].gardenId == 4,
+			"restored session does not reuse a retired garden ID");
+
+		Coop::CoopSession startedHost;
+		Require(startedHost.Join(501, "Host").has_value() && startedHost.Join(502, "Guest").has_value(), "started snapshot roster created");
+		Require(startedHost.SetReady(501, true) && startedHost.SetReady(502, true) && startedHost.StartGame(501), "started snapshot session begins");
+		auto startedBytes = Coop::SerializeSessionSnapshot(startedHost);
 		Require(startedBytes.has_value(), "started session snapshot serializes");
 		auto startedSnapshot = Coop::DeserializeSessionSnapshot(*startedBytes);
 		Coop::CoopSession restored;
@@ -412,7 +424,7 @@ namespace
 		badVersion[4]++;
 		Require(!Coop::DeserializeSessionSnapshot(badVersion), "snapshot rejects unsupported protocol version");
 		auto badGardenLink = *startedBytes;
-		badGardenLink[20] = 0;
+		badGardenLink[24] = 0;
 		Require(!Coop::DeserializeSessionSnapshot(badGardenLink), "snapshot rejects garden ownership mismatch");
 		Require(!Coop::DeserializeSessionSnapshot(std::span<const std::uint8_t>(startedBytes->data(), startedBytes->size() - 1)),
 			"snapshot rejects truncated data");
@@ -420,7 +432,7 @@ namespace
 		trailing.push_back(0);
 		Require(!Coop::DeserializeSessionSnapshot(trailing), "snapshot rejects trailing data");
 		auto invalidState = *startedBytes;
-		invalidState[15] = 0xff;
+		invalidState[19] = 0xff;
 		Require(!Coop::DeserializeSessionSnapshot(invalidState), "snapshot rejects unknown player states");
 	}
 }
