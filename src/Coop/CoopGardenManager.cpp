@@ -8,6 +8,7 @@
 #include "CommandSerialization.h"
 
 #include "../Lawn/Board.h"
+#include "../Lawn/System/PoolEffect.h"
 #include "../LawnApp.h"
 #include "../Sexy.TodLib/Attachment.h"
 #include "../Sexy.TodLib/EffectSystem.h"
@@ -53,6 +54,8 @@ namespace Coop
 			const std::uint32_t gardenSeed = session.GetRandomSeed()
 				^ (garden.id * 0x9e3779b9U) ^ (garden.owner * 0x85ebca6bU);
 			std::unique_ptr<Sexy::MTRand> randomGenerator = std::make_unique<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
+			std::unique_ptr<PoolEffect> poolEffect = std::make_unique<PoolEffect>();
+			poolEffect->PoolEffectInitialize();
 			std::unique_ptr<EffectSystem> effectSystem = std::make_unique<EffectSystem>();
 			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
 			gEffectSystem = nullptr;
@@ -71,6 +74,7 @@ namespace Coop
 			mApp->mEffectSystem = previousAppEffectSystem;
 			gEffectSystem = previousGlobalEffectSystem;
 			board->mGardenEffectSystem = effectSystem.get();
+			board->mGardenPoolEffect = poolEffect.get();
 			board->mGardenRandomGenerator = randomGenerator.get();
 			board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
 			board->EnableGardenStateIsolation(true);
@@ -78,7 +82,7 @@ namespace Coop
 			board->mVisible = false;
 			mApp->mWidgetManager->AddWidget(board);
 			mApp->mWidgetManager->BringToBack(board);
-			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(randomGenerator)});
+			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(poolEffect), std::move(randomGenerator)});
 
 			if (!mViewedGarden)
 				mViewedGarden = garden.id;

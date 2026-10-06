@@ -74,8 +74,10 @@ namespace
 			if (!board->mGardenStateIsolated)
 				return;
 			EffectSystem* gardenEffectSystem = board->mGardenEffectSystem;
+			PoolEffect* gardenPoolEffect = board->mGardenPoolEffect;
 			if (mApp->mBoard == board && (!gardenEffectSystem
-				|| (mApp->mEffectSystem == gardenEffectSystem && gEffectSystem == gardenEffectSystem)))
+				|| (mApp->mEffectSystem == gardenEffectSystem && gEffectSystem == gardenEffectSystem))
+				&& (!gardenPoolEffect || mApp->mPoolEffect == gardenPoolEffect))
 				return;
 
 			mScoped = true;
@@ -84,6 +86,7 @@ namespace
 			mPreviousResult = mApp->mBoardResult;
 			mPreviousEffectSystem = mApp->mEffectSystem;
 			mPreviousGlobalEffectSystem = gEffectSystem;
+			mPreviousPoolEffect = mApp->mPoolEffect;
 			mApp->mBoard = board;
 			mApp->mGameScene = board->mGardenGameScene;
 			mApp->mBoardResult = board->mGardenBoardResult;
@@ -92,6 +95,8 @@ namespace
 				mApp->mEffectSystem = gardenEffectSystem;
 				gEffectSystem = gardenEffectSystem;
 			}
+			if (gardenPoolEffect)
+				mApp->mPoolEffect = gardenPoolEffect;
 		}
 
 		~ScopedGardenSimulationState()
@@ -105,6 +110,7 @@ namespace
 			mApp->mBoardResult = mPreviousResult;
 			mApp->mEffectSystem = mPreviousEffectSystem;
 			gEffectSystem = mPreviousGlobalEffectSystem;
+			mApp->mPoolEffect = mPreviousPoolEffect;
 		}
 
 	private:
@@ -115,6 +121,7 @@ namespace
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
+		PoolEffect* mPreviousPoolEffect = nullptr;
 		bool mScoped = false;
 		Sexy::ScopedRandomGenerator mRandomContext;
 	};
@@ -149,6 +156,7 @@ Board::Board(LawnApp* theApp)
 	mGardenStateIsolated = false;
 	mApplyingCooperativeCommand = false;
 	mGardenEffectSystem = nullptr;
+	mGardenPoolEffect = nullptr;
 	mGardenRandomGenerator = nullptr;
 	TodHesitationTrace("preboard");
 

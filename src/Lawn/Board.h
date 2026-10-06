@@ -58,6 +58,7 @@ class CutScene;
 class Challenge;
 class Reanimation;
 class EffectSystem;
+class PoolEffect;
 namespace Sexy { class MTRand; }
 class DataSync;
 class TodParticleSystem;
@@ -169,6 +170,7 @@ public:
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;
+	PoolEffect*					mGardenPoolEffect;
 	Sexy::MTRand*					mGardenRandomGenerator;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
