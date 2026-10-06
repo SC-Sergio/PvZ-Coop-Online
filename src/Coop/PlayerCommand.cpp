@@ -83,4 +83,13 @@ namespace Coop
 		mLastSequenceByPlayer[command.senderId] = command.sequence;
 		return CommandRejection::NONE;
 	}
+
+	CommandRejection AuthoritativeCommandProcessor::Process(const CoopSession& session,
+		const PlayerCommand& command, IPlayerCommandExecutor& executor)
+	{
+		const CommandRejection validation = mValidator.Validate(session, command);
+		if (validation != CommandRejection::NONE)
+			return validation;
+		return executor.Execute(command) ? CommandRejection::NONE : CommandRejection::EXECUTION_FAILED;
+	}
 }

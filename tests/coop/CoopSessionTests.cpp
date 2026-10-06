@@ -154,6 +154,53 @@ namespace
 		command.type = static_cast<Coop::CommandType>(255);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COMMAND, "unknown command type is rejected");
 	}
+
+	class RecordingExecutor final : public Coop::IPlayerCommandExecutor
+	{
+	public:
+		bool Execute(const Coop::PlayerCommand& command) override
+		{
+			++executions;
+			lastCommand = command;
+			return succeeds;
+		}
+		int executions = 0;
+		bool succeeds = true;
+		Coop::PlayerCommand lastCommand;
+	};
+
+	void TestAuthoritativeCommandProcessor()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(61, "one").has_value(), "processor player joins");
+		Require(session.SetReady(61, true) && session.StartGame(61), "processor session starts");
+		Coop::PlayerCommand command;
+		command.senderId = 61;
+		command.gardenId = session.GetGardens()[0].id;
+		command.sequence = 1;
+		command.type = Coop::CommandType::REMOVE_PLANT;
+		command.x = 2;
+		command.y = 3;
+		Coop::AuthoritativeCommandProcessor processor;
+		RecordingExecutor executor;
+
+		command.gardenId++;
+		Require(processor.Process(session, command, executor) == Coop::CommandRejection::UNKNOWN_GARDEN,
+			"invalid command is rejected before gameplay execution");
+		Require(executor.executions == 0, "rejected intent never reaches the gameplay adapter");
+
+		command.gardenId = session.GetGardens()[0].id;
+		Require(processor.Process(session, command, executor) == Coop::CommandRejection::NONE,
+			"validated intent reaches the gameplay adapter");
+		Require(executor.executions == 1 && executor.lastCommand.sequence == 1,
+			"gameplay adapter receives the original validated intent exactly once");
+
+		command.sequence = 2;
+		executor.succeeds = false;
+		Require(processor.Process(session, command, executor) == Coop::CommandRejection::EXECUTION_FAILED,
+			"live gameplay rejection is reported after structural validation");
+		Require(executor.executions == 2, "live gameplay adapter is called for the next valid sequence");
+	}
 }
 
 int main()
@@ -164,6 +211,7 @@ int main()
 	TestHostPromotionAndEmptySlotStart();
 	TestCooperativeTeamResults();
 	TestAuthoritativeCommandValidation();
+	TestAuthoritativeCommandProcessor();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
 }

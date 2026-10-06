@@ -67,7 +67,8 @@ namespace Coop
 		INVALID_COMMAND,
 		INVALID_COORDINATES,
 		INVALID_VALUE,
-		INVALID_TARGET
+		INVALID_TARGET,
+		EXECUTION_FAILED
 	};
 
 	// Validates intent only. The authoritative gameplay adapter still checks live resources,
@@ -80,6 +81,26 @@ namespace Coop
 
 	private:
 		std::unordered_map<PlayerId, std::uint64_t> mLastSequenceByPlayer;
+	};
+
+	class IPlayerCommandExecutor
+	{
+	public:
+		virtual ~IPlayerCommandExecutor() = default;
+		// The authoritative gameplay adapter performs live state, resource, cooldown,
+		// and entity checks before applying the intent.
+		virtual bool Execute(const PlayerCommand& command) = 0;
+	};
+
+	class AuthoritativeCommandProcessor
+	{
+	public:
+		CommandRejection Process(const CoopSession& session, const PlayerCommand& command,
+			IPlayerCommandExecutor& executor);
+		void Reset() { mValidator.Reset(); }
+
+	private:
+		PlayerCommandValidator mValidator;
 	};
 }
 
