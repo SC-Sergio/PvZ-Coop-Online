@@ -757,14 +757,55 @@ namespace Coop
 			return false;
 		if (mQueueCommandExecution && !IsLocalOnlyCommand(command.type))
 		{
+			std::int64_t availableSun = source->board->mSunMoney;
 			switch (command.type)
 			{
 			case CommandType::PLACE_PLANT:
+			{
+				const int plantCost = source->board->GetCooperativePlantCost(command);
+				if (plantCost < 0)
+					return false;
+				for (const ScheduledCommand& scheduled : mScheduledCommands)
+				{
+					if (scheduled.command.gardenId != source->id)
+						continue;
+					if (scheduled.command.type == CommandType::PLACE_PLANT)
+					{
+						if (scheduled.command.value == command.value
+							|| (scheduled.command.x == command.x && scheduled.command.y == command.y))
+							return false;
+						const int reservedCost = source->board->GetCooperativePlantCost(scheduled.command);
+						if (reservedCost < 0)
+							return false;
+						availableSun -= reservedCost;
+					}
+					else if (scheduled.command.type == CommandType::SEND_RESOURCE)
+						availableSun -= scheduled.command.amount;
+				}
+				for (const ScheduledCommand& scheduled : mScheduledCommands)
+					if (scheduled.command.type == CommandType::SEND_RESOURCE && scheduled.command.targetGardenId == source->id)
+						availableSun += scheduled.command.amount;
+				if (plantCost > availableSun || !source->board->CanApplyCooperativeCommand(command))
+					return false;
+				break;
+			}
 			case CommandType::REMOVE_PLANT:
 			case CommandType::COLLECT_SUN:
 			case CommandType::COLLECT_COIN:
 			case CommandType::SELECT_PLANT:
 			case CommandType::FIRE_COB_CANNON:
+				for (const ScheduledCommand& scheduled : mScheduledCommands)
+				{
+					if (scheduled.command.gardenId != source->id)
+						continue;
+					if ((command.type == CommandType::REMOVE_PLANT && scheduled.command.type == command.type
+						&& scheduled.command.x == command.x && scheduled.command.y == command.y)
+						|| ((command.type == CommandType::COLLECT_SUN || command.type == CommandType::COLLECT_COIN)
+							&& scheduled.command.type == command.type && scheduled.command.entityId == command.entityId)
+						|| (command.type == CommandType::FIRE_COB_CANNON && scheduled.command.type == command.type
+							&& scheduled.command.entityId == command.entityId))
+						return false;
+				}
 				if (!source->board->CanApplyCooperativeCommand(command))
 					return false;
 				break;
@@ -777,8 +818,43 @@ namespace Coop
 					return false;
 				const auto target = std::find_if(mGardens.begin(), mGardens.end(), [&targetSlot](const ManagedGarden& garden)
 					{ return garden.id == *targetSlot->gardenId; });
-				if (target == mGardens.end() || source->board->mSunMoney < static_cast<int>(command.amount)
-					|| target->board->mSunMoney > 90000 - static_cast<int>(command.amount))
+				if (target == mGardens.end())
+					return false;
+				std::int64_t targetAvailableSun = target->board->mSunMoney;
+				for (const ScheduledCommand& scheduled : mScheduledCommands)
+				{
+					if (scheduled.command.gardenId == source->id)
+					{
+						if (scheduled.command.type == CommandType::SEND_RESOURCE)
+							availableSun -= scheduled.command.amount;
+						else if (scheduled.command.type == CommandType::PLACE_PLANT)
+						{
+							const int reservedCost = source->board->GetCooperativePlantCost(scheduled.command);
+							if (reservedCost < 0)
+								return false;
+							availableSun -= reservedCost;
+						}
+					}
+					if (scheduled.command.targetGardenId == source->id
+						&& scheduled.command.type == CommandType::SEND_RESOURCE)
+						availableSun += scheduled.command.amount;
+					if (scheduled.command.gardenId == target->id)
+					{
+						if (scheduled.command.type == CommandType::SEND_RESOURCE)
+							targetAvailableSun -= scheduled.command.amount;
+						else if (scheduled.command.type == CommandType::PLACE_PLANT)
+						{
+							const int reservedCost = target->board->GetCooperativePlantCost(scheduled.command);
+							if (reservedCost < 0)
+								return false;
+							targetAvailableSun -= reservedCost;
+						}
+					}
+					if (scheduled.command.type == CommandType::SEND_RESOURCE && scheduled.command.targetGardenId == target->id)
+						targetAvailableSun += scheduled.command.amount;
+				}
+				if (availableSun < static_cast<std::int64_t>(command.amount)
+					|| targetAvailableSun > 90000 - static_cast<std::int64_t>(command.amount))
 					return false;
 				break;
 			}

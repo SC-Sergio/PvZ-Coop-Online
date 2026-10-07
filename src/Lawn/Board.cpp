@@ -6390,6 +6390,26 @@ void Board::UpdateSimulation()
 	}
 }
 
+int Board::GetCooperativePlantCost(const Coop::PlayerCommand& command)
+{
+	ScopedGardenSimulationState aGardenState(this);
+	if (command.type != Coop::CommandType::PLACE_PLANT || mSeedBank == nullptr
+		|| command.value < 0 || command.value >= static_cast<std::int32_t>(SeedType::NUM_SEED_TYPES))
+		return -1;
+	const SeedType seedType = static_cast<SeedType>(command.value);
+	const int packetCount = ClampInt(mSeedBank->mNumPackets, 0, SEEDBANK_MAX);
+	for (int i = 0; i < packetCount; ++i)
+	{
+		const SeedPacket& packet = mSeedBank->mSeedPackets[i];
+		if (packet.mPacketType != seedType && !(packet.mPacketType == SeedType::SEED_IMITATER && packet.mImitaterType == seedType))
+			continue;
+		if (mApp->mEasyPlantingCheat || HasConveyorBeltSeedBank() || mApp->IsSlotMachineLevel())
+			return 0;
+		return GetCurrentPlantCost(packet.mPacketType, packet.mImitaterType);
+	}
+	return -1;
+}
+
 bool Board::CanApplyCooperativeCommand(const Coop::PlayerCommand& command)
 {
 	ScopedGardenSimulationState aGardenState(this);
