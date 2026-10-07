@@ -68,6 +68,8 @@ Restored reanimations validate the definition-backed first-track frame window an
 
 After the attachment chunk is restored, every active reanimation track attachment ID must be null or resolve in the same garden's attachment holder. If the local allocator cannot rebuild the definition-sized track-instance array, loading fails so the snapshot rollback path runs; it never accepts a partially decoded track array.
 
+When SAVE4 resets a preexisting reanimation slot, it first verifies and releases the definition-sized track-instance buffer through its original global allocator. This avoids leaking that buffer on each reconnect snapshot; invalid local allocator metadata rejects the load instead of clearing the pointer.
+
 Board-level ice particle IDs and each row's fwoosh reanimation IDs are also nullable references and must resolve against the app's active particle/reanimation holders before the snapshot is accepted.
 
 Plant potted-plant indexes must be either `-1` or inside the fixed profile array capacity before any plant update or cursor rendering can use them. The check uses the array bound, not the receiving profile's populated count, so it does not assume peer profiles share garden inventory.

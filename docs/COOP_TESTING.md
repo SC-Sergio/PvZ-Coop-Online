@@ -135,6 +135,8 @@ Reanimation SAVE4 helpers cover transform frame-range and base-pose bounds, incl
 
 The post-load entity-reference pass also resolves each active reanimation track's attachment ID after the attachment chunk is available. Reanimation track-instance allocation failure now sets the reader failure state instead of dropping the decoded data. Both Debug configurations build and pass CTest; neither case has Board-backed fault injection yet.
 
+The SAVE4 DataArray reset path verifies and releases existing `Reanimation::mTrackInstances` allocations before clearing each slot. Both app configurations compile this path and full CTest passes; repeated snapshot restore/allocator behavior still needs an initialized-Board runtime test.
+
 Garden-scoped profile, effect, pool, and RNG objects are shared-owned by both the manager and Board. This keeps them alive through `SafeDeleteWidget`'s deferred Board destructor after manager teardown. Both MSVC Debug builds and CTest suites pass with this ownership path; no engine test currently exercises deferred teardown with initialized garden resources.
 
 Cooperative determinism also disables the legacy Board typing-code path and per-Board speed button. Both standard and WebRTC MSVC Debug builds compile the guard and pass CTest (2/2 and 4/4). There is no initialized-Board input test in the current asset-free environment.
