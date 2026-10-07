@@ -740,36 +740,77 @@ namespace
 				"test drains only the packets used to fill the bounded queue");
 		Coop::GardenSnapshotAssembler transferAssembler;
 		Coop::GardenSnapshot transferred;
+		struct DelayedSnapshotPacket
+		{
+			Coop::HeartbeatMonitor::Clock::time_point deliveryTime;
+			Coop::TransportPacket packet;
+		};
+		std::vector<DelayedSnapshotPacket> delayedData;
+		std::vector<DelayedSnapshotPacket> delayedAcks;
 		bool droppedFirstChunk = false;
+		bool queuedDuplicate = false;
+		std::optional<std::uint16_t> firstDeliveredChunk;
 		std::size_t pumpCount = 0;
 		auto now = transferStart;
-		while (sender.IsActive() && pumpCount++ < 64)
+		while ((sender.IsActive() || !delayedData.empty() || !delayedAcks.empty()) && pumpCount++ < 128)
 		{
 			const Coop::SnapshotSendStatus status = sender.Pump(*host, now, 2);
 			Require(status == Coop::SnapshotSendStatus::IN_PROGRESS || status == Coop::SnapshotSendStatus::COMPLETE,
-				"snapshot sender stays active until every fragment receives a remote acknowledgement");
+				"snapshot sender stays active until every fault-injected fragment receives an acknowledgement");
 			while (auto packet = guest->Receive())
 			{
 				Require(packet->senderId == 71, "snapshot transfer preserves transport-authenticated sender identity");
 				const std::uint16_t chunkIndex = Coop::ReadSnapshotU16(packet->bytes, 34);
+				const auto delay = std::chrono::milliseconds(chunkIndex % 2 == 0 ? 350 : 50);
+				delayedData.push_back({now + delay, *packet});
+				if (chunkIndex == 1 && !queuedDuplicate)
+				{
+					queuedDuplicate = true;
+					delayedData.push_back({now + delay + std::chrono::milliseconds(100), *packet});
+				}
+			}
+			for (auto packet = delayedData.begin(); packet != delayedData.end();)
+			{
+				if (packet->deliveryTime > now)
+				{
+					++packet;
+					continue;
+				}
+				const std::uint16_t chunkIndex = Coop::ReadSnapshotU16(packet->packet.bytes, 34);
 				if (chunkIndex == 0 && !droppedFirstChunk)
 				{
 					droppedFirstChunk = true;
+					packet = delayedData.erase(packet);
 					continue;
 				}
-				const auto receive = transferAssembler.Accept(packet->bytes, transferred);
+				if (!firstDeliveredChunk)
+					firstDeliveredChunk = chunkIndex;
+				const auto receive = transferAssembler.Accept(packet->packet.bytes, transferred);
 				Require(receive != Coop::SnapshotReceiveResult::REJECTED,
-					"pumped snapshot frame is accepted by the bounded assembler");
+					"delayed, reordered, and duplicate fragments remain valid for the bounded assembler");
 				const auto ack = Coop::SerializeGardenSnapshotAck({9, 77, chunkIndex});
-				Require(!ack.empty() && guest->SendTo(71, ack), "receiver sends a bounded fragment acknowledgement");
+				Require(!ack.empty(), "receiver creates a bounded acknowledgement for each delivered fragment");
+				delayedAcks.push_back({now + std::chrono::milliseconds(300), {72, ack}});
+				packet = delayedData.erase(packet);
+			}
+			for (auto ack = delayedAcks.begin(); ack != delayedAcks.end();)
+			{
+				if (ack->deliveryTime > now)
+				{
+					++ack;
+					continue;
+				}
+				Require(guest->SendTo(71, ack->packet.bytes), "delayed acknowledgement reaches the sender");
+				ack = delayedAcks.erase(ack);
 			}
 			while (auto ack = host->Receive())
 				Require(sender.HandleAck(*ack), "sender accepts acknowledgements only from its bound recipient");
-			if (sender.GetInFlightFrameCount() != 0 && pumpCount % 2 == 0)
-				now += Coop::COOP_SNAPSHOT_RETRY_INTERVAL;
+			now += std::chrono::milliseconds(100);
 		}
-		Require(droppedFirstChunk && !sender.IsActive() && transferred.bytes == source && transferred.serverTick == 1234,
-			"sender retries a dropped fragment and completes acknowledged multi-peer reassembly");
+		Require(pumpCount < 128 && droppedFirstChunk && queuedDuplicate && firstDeliveredChunk == 1
+			&& !sender.IsActive() && delayedData.empty() && delayedAcks.empty()
+			&& transferred.bytes == source && transferred.serverTick == 1234,
+			"sender completes after latency, reordering, a duplicate, and a dropped-fragment retry");
 		Require(sender.Begin(*host, 72, 10, 77, 1235, source)
 			&& sender.Pump(*host, now) == Coop::SnapshotSendStatus::IN_PROGRESS,
 			"sender begins a second transfer for acknowledgement validation");
