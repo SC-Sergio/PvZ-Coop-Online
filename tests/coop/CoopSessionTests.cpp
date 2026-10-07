@@ -97,6 +97,13 @@ namespace
 			&& !IsValidPortableSaveOptionalIndex(3, 3)
 			&& !IsValidPortableSaveOptionalIndex(-2, 3),
 			"portable save optional indices accept only the null sentinel or an in-range slot");
+		Require(IsValidPortableSaveWaveState(0, 0, 100)
+			&& IsValidPortableSaveWaveState(100, 100, 100)
+			&& IsValidPortableSaveWaveState(10, 9, 100)
+			&& !IsValidPortableSaveWaveState(-1, 0, 100)
+			&& !IsValidPortableSaveWaveState(101, 0, 100)
+			&& !IsValidPortableSaveWaveState(10, 11, 100),
+			"portable save wave cursors stay within wave count and capacity");
 		int aTransactionalValue = 3;
 		Require(!ApplyPortableSaveWithRollback([&]() { aTransactionalValue = 9; return false; },
 			[&]() { aTransactionalValue = 3; })

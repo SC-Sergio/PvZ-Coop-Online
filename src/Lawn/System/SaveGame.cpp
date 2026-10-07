@@ -1980,6 +1980,51 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
 			theContext.mFailed = true;
 			return;
 		}
+		if (!IsValidPortableSaveWaveState(theBoard->mNumWaves, theBoard->mCurrentWave,
+			MAX_ZOMBIE_WAVES))
+		{
+			theContext.mFailed = true;
+			return;
+		}
+		if (!IsValidPortableSaveEnumValue(static_cast<int32_t>(theBoard->mBackground),
+			BACKGROUND_1_DAY, BACKGROUND_TREEOFWISDOM + 1))
+		{
+			theContext.mFailed = true;
+			return;
+		}
+		for (int aX = 0; aX < MAX_GRID_SIZE_X; ++aX)
+		{
+			for (int aY = 0; aY < MAX_GRID_SIZE_Y; ++aY)
+			{
+				const int aSquareType = static_cast<int>(theBoard->mGridSquareType[aX][aY]);
+				if (!IsValidPortableSaveEnumValue(aSquareType, GRIDSQUARE_NONE, GRIDSQUARE_HIGH_GROUND + 1))
+				{
+					theContext.mFailed = true;
+					return;
+				}
+			}
+		}
+		for (int aRow = 0; aRow < MAX_GRID_SIZE_Y; ++aRow)
+		{
+			if (!IsValidPortableSaveEnumValue(static_cast<int32_t>(theBoard->mPlantRow[aRow]),
+				PLANTROW_DIRT, PLANTROW_HIGH_GROUND + 1))
+			{
+				theContext.mFailed = true;
+				return;
+			}
+		}
+		for (int aWave = 0; aWave < MAX_ZOMBIE_WAVES; ++aWave)
+		{
+			for (int aIndex = 0; aIndex < MAX_ZOMBIES_IN_WAVE; ++aIndex)
+			{
+				const int aZombieType = static_cast<int>(theBoard->mZombiesInWave[aWave][aIndex]);
+				if (!IsValidPortableSaveEnumValue(aZombieType, ZOMBIE_INVALID, NUM_CACHED_ZOMBIE_TYPES))
+				{
+					theContext.mFailed = true;
+					return;
+				}
+			}
+		}
 	}
 	else
 	{

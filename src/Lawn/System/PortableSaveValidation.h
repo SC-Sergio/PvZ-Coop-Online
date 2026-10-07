@@ -82,6 +82,14 @@ inline bool IsValidPortableSaveCount(std::int32_t count, std::uint32_t capacity)
 	return count >= 0 && static_cast<std::uint32_t>(count) <= capacity;
 }
 
+inline bool IsValidPortableSaveWaveState(std::int32_t waveCount,
+	std::int32_t currentWave, std::uint32_t capacity) noexcept
+{
+	return IsValidPortableSaveCount(waveCount, capacity)
+		&& IsValidPortableSaveCount(currentWave, capacity)
+		&& currentWave <= waveCount;
+}
+
 inline bool IsValidPortableSaveResourceId(std::int32_t resourceId,
 	std::uint32_t resourceCount, std::int32_t nullResourceId) noexcept
 {
