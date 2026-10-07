@@ -210,6 +210,13 @@ namespace
 			&& !IsValidPortableSaveEnumValue(-1, 0, 4)
 			&& !IsValidPortableSaveEnumValue(4, 0, 4),
 			"portable save enum values stay within their declared range");
+		Require(IsValidPortableSaveReanimationTypeBinding(-1, -1, NUM_REANIMS)
+			&& IsValidPortableSaveReanimationTypeBinding(0, 0, NUM_REANIMS)
+			&& IsValidPortableSaveReanimationTypeBinding(NUM_REANIMS - 1, NUM_REANIMS - 1, NUM_REANIMS)
+			&& !IsValidPortableSaveReanimationTypeBinding(0, 1, NUM_REANIMS)
+			&& !IsValidPortableSaveReanimationTypeBinding(-1, 0, NUM_REANIMS)
+			&& !IsValidPortableSaveReanimationTypeBinding(NUM_REANIMS, NUM_REANIMS, NUM_REANIMS),
+			"portable save reanimation types match their definitions, including the empty sentinel");
 		const std::vector<std::uint32_t> particleIds{0x00010000U, 0x00010002U};
 		Require(IsValidPortableSaveDataIdList(particleIds, 2,
 			[](std::uint32_t id) { return id == 0x00010000U || id == 0x00010002U; }),

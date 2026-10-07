@@ -1583,9 +1583,12 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 	{
 		const std::int32_t availableFrames = aDef && aDef->mTracks.count > 0 && aDef->mTracks.tracks
 			? aDef->mTracks.tracks[0].mTransforms.count : 0;
+		const std::int32_t definitionType = aDef
+			? static_cast<std::int32_t>(aDef - gReanimatorDefArray)
+			: static_cast<std::int32_t>(ReanimationType::REANIM_NONE);
 		if (theContext.mFailed || availableFrames < 0
-			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mReanimationType),
-				REANIM_NONE, NUM_REANIMS)
+			|| !IsValidPortableSaveReanimationTypeBinding(
+				static_cast<std::int32_t>(theReanimation->mReanimationType), definitionType, NUM_REANIMS)
 			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mLoopType),
 				REANIM_LOOP, REANIM_PLAY_ONCE_FULL_LAST_FRAME_AND_HOLD + 1)
 			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mFilterEffect),
@@ -3205,10 +3208,17 @@ static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
 		default:
 			break;
 		}
-		if (aRequiresBodyReanimation
-			&& !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBodyReanimID), false,
-				[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; }))
-			return false;
+		if (aRequiresBodyReanimation)
+		{
+			Reanimation* aBodyReanimation = theBoard->mApp->ReanimationTryToGet(aZombie->mBodyReanimID);
+			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBodyReanimID), false,
+				[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; })
+				|| !aBodyReanimation
+				|| !IsValidPortableSaveReanimationTypeBinding(
+					static_cast<std::int32_t>(aBodyReanimation->mReanimationType),
+					static_cast<std::int32_t>(GetZombieDefinition(aZombie->mZombieType).mReanimationType), NUM_REANIMS))
+				return false;
+		}
 	}
 
 	LawnMower* aMower = nullptr;

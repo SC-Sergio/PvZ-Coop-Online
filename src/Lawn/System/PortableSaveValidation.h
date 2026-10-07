@@ -219,6 +219,16 @@ inline bool IsValidPortableSaveEnumValue(std::int32_t value,
 	return value >= firstValue && value < endValue;
 }
 
+inline bool IsValidPortableSaveReanimationTypeBinding(std::int32_t actualType,
+	std::int32_t expectedType, std::int32_t reanimationTypeCount) noexcept
+{
+	if (actualType == -1 || expectedType == -1)
+		return actualType == -1 && expectedType == -1;
+	return actualType >= 0 && actualType < reanimationTypeCount
+		&& expectedType >= 0 && expectedType < reanimationTypeCount
+		&& actualType == expectedType;
+}
+
 template <typename IsValidId>
 inline bool IsValidPortableSaveDataIdList(const std::vector<std::uint32_t>& ids,
 	std::uint32_t capacity, IsValidId isValidId)
