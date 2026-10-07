@@ -759,15 +759,19 @@ namespace
 	}
 }
 
-int RunTcpLobbyProcess(const char* mode, const char* portText)
+int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playerIdText, const char* playerCountText)
 {
 	const auto parsedPort = std::strtoul(portText, nullptr, 10);
-	if (parsedPort == 0 || parsedPort > 65535)
+	const auto playerId = std::strtoul(playerIdText, nullptr, 10);
+	const auto playerCount = std::strtoul(playerCountText, nullptr, 10);
+	if (parsedPort == 0 || parsedPort > 65535 || playerCount < 2 || playerCount > Coop::MAX_PLAYERS
+		|| playerId == 0 || playerId > UINT32_MAX)
 		return EXIT_FAILURE;
 	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 	if (std::string(mode) == "--tcp-host")
 	{
-		auto host = Coop::CoopLobbyController::CreateTcpHost(301, "Host", static_cast<std::uint16_t>(parsedPort));
+		auto host = Coop::CoopLobbyController::CreateTcpHost(static_cast<Coop::PlayerId>(playerId), "Host",
+			static_cast<std::uint16_t>(parsedPort));
 		if (!host)
 			return EXIT_FAILURE;
 		std::cout << "host-listening" << std::endl;
@@ -775,13 +779,15 @@ int RunTcpLobbyProcess(const char* mode, const char* portText)
 		while (std::chrono::steady_clock::now() < deadline)
 		{
 			host->PumpLobby();
-			if (host->GetSession().GetActivePlayerCount() == 2 && !hostReady)
+			if (host->GetSession().GetActivePlayerCount() == playerCount && !hostReady)
 			{
 				hostReady = host->SetLocalReady(true);
 				std::cout << "host-roster-ready" << std::endl;
 			}
 			const auto& slots = host->GetSession().GetSlots();
-			if (slots[1].state == Coop::PlayerState::READY && host->StartGame())
+			const bool allGuestsReady = std::all_of(slots.begin() + 1, slots.begin() + playerCount,
+				[](const Coop::PlayerSlot& slot) { return slot.state == Coop::PlayerState::READY; });
+			if (allGuestsReady && host->StartGame())
 			{
 				std::cout << "host-match-started" << std::endl;
 				std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -793,7 +799,8 @@ int RunTcpLobbyProcess(const char* mode, const char* portText)
 	}
 	if (std::string(mode) == "--tcp-guest")
 	{
-		auto guest = Coop::CoopLobbyController::JoinTcp(302, 301, "Guest", "127.0.0.1",
+		const Coop::PlayerId guestId = static_cast<Coop::PlayerId>(playerId);
+		auto guest = Coop::CoopLobbyController::JoinTcp(guestId, 301, "Guest", "127.0.0.1",
 			static_cast<std::uint16_t>(parsedPort));
 		if (!guest)
 			return EXIT_FAILURE;
@@ -802,7 +809,7 @@ int RunTcpLobbyProcess(const char* mode, const char* portText)
 		while (std::chrono::steady_clock::now() < deadline)
 		{
 			guest->PumpLobby();
-			if (guest->GetSession().GetActivePlayerCount() == 2 && !guestReady)
+			if (guest->GetSession().GetActivePlayerCount() == playerCount && !guestReady)
 			{
 				guestReady = guest->SetLocalReady(true);
 				std::cout << "guest-ready-sent" << std::endl;
@@ -810,8 +817,10 @@ int RunTcpLobbyProcess(const char* mode, const char* portText)
 			if (guest->GetSession().HasStarted())
 			{
 				std::cout << "guest-match-started" << std::endl;
-				return guest->GetSession().GetGardenCount() == 2
-					&& guest->GetSession().GetSlots()[2].state == Coop::PlayerState::EMPTY
+				const auto& slots = guest->GetSession().GetSlots();
+				const bool emptyRemainder = std::all_of(slots.begin() + playerCount, slots.end(),
+					[](const Coop::PlayerSlot& slot) { return slot.state == Coop::PlayerState::EMPTY; });
+				return guest->GetSession().GetGardenCount() == playerCount && emptyRemainder
 					? EXIT_SUCCESS : EXIT_FAILURE;
 			}
 			if (guest->IsClosed())
@@ -824,8 +833,8 @@ int RunTcpLobbyProcess(const char* mode, const char* portText)
 
 int main(int argc, char** argv)
 {
-	if (argc == 3 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
-		return RunTcpLobbyProcess(argv[1], argv[2]);
+	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
+		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();
