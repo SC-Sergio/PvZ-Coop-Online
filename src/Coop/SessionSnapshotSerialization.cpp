@@ -42,7 +42,8 @@ namespace Coop
 
 		bool IsValidSnapshot(const CoopSessionSnapshot& snapshot)
 		{
-			if (snapshot.hostPlayerId == 0 || snapshot.nextGardenId == 0 || snapshot.gardens.empty() || snapshot.gardens.size() > MAX_PLAYERS)
+			if (snapshot.hostPlayerId == 0 || snapshot.nextGardenId == 0 || snapshot.gardens.empty()
+				|| snapshot.gardens.size() > MAX_PLAYERS || !IsValidLobbySettings(snapshot.settings))
 				return false;
 			std::unordered_set<PlayerId> playerIds;
 			std::unordered_set<GardenId> gardenIds;
@@ -98,6 +99,7 @@ namespace Coop
 		snapshot.started = session.HasStarted();
 		snapshot.hostPlayerId = session.GetHostPlayerId().value_or(0);
 		snapshot.randomSeed = session.GetRandomSeed();
+		snapshot.settings = session.GetLobbySettings();
 		snapshot.nextGardenId = session.GetNextGardenId();
 		snapshot.slots = session.GetSlots();
 		snapshot.gardens = session.GetGardens();
@@ -113,6 +115,9 @@ namespace Coop
 		WriteLittleEndian(output, snapshot.hostPlayerId);
 		WriteLittleEndian(output, snapshot.randomSeed);
 		WriteLittleEndian(output, snapshot.nextGardenId);
+		output.push_back(static_cast<std::uint8_t>(snapshot.settings.map));
+		output.push_back(static_cast<std::uint8_t>(snapshot.settings.difficulty));
+		output.push_back(static_cast<std::uint8_t>(snapshot.settings.mode));
 		output.push_back(static_cast<std::uint8_t>(MAX_PLAYERS));
 		output.push_back(static_cast<std::uint8_t>(snapshot.gardens.size()));
 		for (const PlayerSlot& slot : snapshot.slots)
@@ -137,7 +142,7 @@ namespace Coop
 
 	std::optional<CoopSessionSnapshot> DeserializeSessionSnapshot(std::span<const std::uint8_t> bytes)
 	{
-		if (bytes.size() < 21 || bytes.size() > MAX_SESSION_SNAPSHOT_BYTES
+		if (bytes.size() < 24 || bytes.size() > MAX_SESSION_SNAPSHOT_BYTES
 			|| !std::equal(SNAPSHOT_MAGIC.begin(), SNAPSHOT_MAGIC.end(), bytes.begin()))
 			return std::nullopt;
 		std::size_t offset = SNAPSHOT_MAGIC.size();
@@ -160,6 +165,13 @@ namespace Coop
 		snapshot.hostPlayerId = hostPlayerId;
 		snapshot.randomSeed = randomSeed;
 		snapshot.nextGardenId = nextGardenId;
+		if (offset + 3 > bytes.size())
+			return std::nullopt;
+		snapshot.settings.map = static_cast<CoopMapId>(bytes[offset++]);
+		snapshot.settings.difficulty = static_cast<CoopDifficulty>(bytes[offset++]);
+		snapshot.settings.mode = static_cast<CoopMode>(bytes[offset++]);
+		if (!IsValidLobbySettings(snapshot.settings))
+			return std::nullopt;
 		const std::uint8_t slotCount = bytes[offset++];
 		const std::uint8_t gardenCount = bytes[offset++];
 		if (slotCount != MAX_PLAYERS || gardenCount == 0 || gardenCount > MAX_PLAYERS)

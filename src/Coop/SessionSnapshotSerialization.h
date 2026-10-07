@@ -15,7 +15,7 @@
 
 namespace Coop
 {
-	constexpr std::uint16_t SESSION_SNAPSHOT_SERIALIZATION_VERSION = 1;
+	constexpr std::uint16_t SESSION_SNAPSHOT_SERIALIZATION_VERSION = 2;
 	constexpr std::size_t MAX_SESSION_SNAPSHOT_BYTES = 512;
 
 	bool IsValidSessionSnapshot(const CoopSessionSnapshot& snapshot);

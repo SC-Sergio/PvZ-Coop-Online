@@ -34,6 +34,7 @@ namespace Coop
 
 		std::size_t PumpLobby();
 		bool SetLocalReady(bool ready);
+	bool SetLobbySettings(const CoopLobbySettings& settings);
 		bool StartGame();
 		bool Kick(PlayerId targetPlayerId);
 		bool Leave();

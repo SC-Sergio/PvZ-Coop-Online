@@ -127,6 +127,15 @@ namespace Coop
 			LobbyRequest{LobbyRequestType::READY, localId, {}, ready});
 	}
 
+	bool CoopLobbyController::SetLobbySettings(const CoopLobbySettings& settings)
+	{
+		if (!mIsHost || mClosed || !mTransport
+			|| !mSession.SetLobbySettings(mTransport->GetLocalPlayerId(), settings))
+			return false;
+		BroadcastLobbySnapshot(*mTransport, mSession);
+		return true;
+	}
+
 	bool CoopLobbyController::StartGame()
 	{
 		if (!mIsHost || mClosed || !mTransport || !mSession.StartGame(mTransport->GetLocalPlayerId()))

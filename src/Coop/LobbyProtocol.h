@@ -17,15 +17,16 @@
 
 namespace Coop
 {
-	constexpr std::uint16_t LOBBY_SERIALIZATION_VERSION = 1;
-	constexpr std::size_t MAX_LOBBY_REQUEST_BYTES = 15 + MAX_DISPLAY_NAME_BYTES;
+	constexpr std::uint16_t LOBBY_SERIALIZATION_VERSION = 2;
+	constexpr std::size_t MAX_LOBBY_REQUEST_BYTES = 18 + MAX_DISPLAY_NAME_BYTES;
 
 	enum class LobbyRequestType : std::uint8_t
 	{
 		JOIN,
 		READY,
 		START,
-		LEAVE
+		LEAVE,
+		SETTINGS
 	};
 
 	struct LobbyRequest
@@ -34,6 +35,7 @@ namespace Coop
 		PlayerId senderId = 0;
 		std::string displayName;
 		bool ready = false;
+		CoopLobbySettings settings{};
 	};
 
 	enum class LobbyRequestRejection : std::uint8_t

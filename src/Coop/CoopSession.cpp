@@ -111,6 +111,14 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopSession::SetLobbySettings(PlayerId requestingPlayerId, const CoopLobbySettings& settings) noexcept
+	{
+		if (mStarted || !mHostPlayerId || requestingPlayerId != *mHostPlayerId || !IsValidLobbySettings(settings))
+			return false;
+		mLobbySettings = settings;
+		return true;
+	}
+
 	bool CoopSession::ApplySnapshot(const CoopSessionSnapshot& snapshot)
 	{
 		if (!IsValidSessionSnapshot(snapshot))
@@ -124,6 +132,7 @@ namespace Coop
 		mGardens = snapshot.gardens;
 		mHostPlayerId = snapshot.hostPlayerId;
 		mRandomSeed = snapshot.randomSeed;
+		mLobbySettings = snapshot.settings;
 		mStarted = snapshot.started;
 		mNextGardenId = snapshot.nextGardenId;
 		return true;

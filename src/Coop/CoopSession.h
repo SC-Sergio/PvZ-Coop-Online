@@ -41,6 +41,23 @@ namespace Coop
 		TEAM_VICTORY
 	};
 
+	enum class CoopMapId : std::uint8_t { DAY, NIGHT, POOL, FOG, ROOF };
+	enum class CoopDifficulty : std::uint8_t { RELAXED, NORMAL, HARD, NIGHTMARE, INSANE, CUSTOM };
+	enum class CoopMode : std::uint8_t { CLASSIC, SURVIVAL, ENDLESS, CHALLENGE, CUSTOM };
+
+	struct CoopLobbySettings
+	{
+		CoopMapId map = CoopMapId::DAY;
+		CoopDifficulty difficulty = CoopDifficulty::NORMAL;
+		CoopMode mode = CoopMode::CLASSIC;
+	};
+
+	inline bool IsValidLobbySettings(const CoopLobbySettings& settings) noexcept
+	{
+		return settings.map <= CoopMapId::ROOF && settings.difficulty <= CoopDifficulty::CUSTOM
+			&& settings.mode <= CoopMode::CUSTOM;
+	}
+
 	struct GardenInstance
 	{
 		GardenId id;
@@ -63,6 +80,7 @@ namespace Coop
 		bool started = false;
 		PlayerId hostPlayerId = 0;
 		std::uint32_t randomSeed = 0;
+		CoopLobbySettings settings{};
 		GardenId nextGardenId = 1;
 		std::array<PlayerSlot, MAX_PLAYERS> slots{};
 		std::vector<GardenInstance> gardens;
@@ -77,6 +95,7 @@ namespace Coop
 		bool SetReady(PlayerId playerId, bool ready);
 		bool StartGame(PlayerId requestingPlayerId);
 		bool SetRandomSeed(std::uint32_t seed) noexcept;
+		bool SetLobbySettings(PlayerId requestingPlayerId, const CoopLobbySettings& settings) noexcept;
 		bool ApplySnapshot(const CoopSessionSnapshot& snapshot);
 		bool MarkGardenDefeated(PlayerId ownerId);
 		bool MarkGardenCompleted(PlayerId ownerId);
@@ -89,6 +108,7 @@ namespace Coop
 		std::optional<PlayerId> GetHostPlayerId() const noexcept { return mHostPlayerId; }
 		GardenId GetNextGardenId() const noexcept { return mNextGardenId; }
 		std::uint32_t GetRandomSeed() const noexcept { return mRandomSeed; }
+		const CoopLobbySettings& GetLobbySettings() const noexcept { return mLobbySettings; }
 		bool HasStarted() const noexcept { return mStarted; }
 	TeamResult GetTeamResult() const noexcept;
 
@@ -97,6 +117,7 @@ namespace Coop
 		std::vector<GardenInstance> mGardens;
 		GardenId mNextGardenId = 1;
 	std::uint32_t mRandomSeed = 0;
+	CoopLobbySettings mLobbySettings{};
 	std::optional<PlayerId> mHostPlayerId;
 	bool mStarted = false;
 	};

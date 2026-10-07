@@ -48,10 +48,11 @@ namespace Coop
 
 	std::optional<std::vector<std::uint8_t>> SerializeLobbyRequest(const LobbyRequest& request)
 	{
-		if (request.senderId == 0 || request.type > LobbyRequestType::LEAVE
+		if (request.senderId == 0 || request.type > LobbyRequestType::SETTINGS
 			|| (request.type == LobbyRequestType::JOIN ? !IsValidDisplayName(request.displayName)
 				: !request.displayName.empty())
-			|| (request.type != LobbyRequestType::READY && request.ready))
+			|| (request.type != LobbyRequestType::READY && request.ready)
+			|| (request.type == LobbyRequestType::SETTINGS && !IsValidLobbySettings(request.settings)))
 			return std::nullopt;
 		std::vector<std::uint8_t> output;
 		output.reserve(LOBBY_HEADER_BYTES + request.displayName.size());
@@ -63,6 +64,12 @@ namespace Coop
 		output.push_back(request.ready ? 1 : 0);
 		output.push_back(static_cast<std::uint8_t>(request.displayName.size()));
 		output.insert(output.end(), request.displayName.begin(), request.displayName.end());
+		if (request.type == LobbyRequestType::SETTINGS)
+		{
+			output.push_back(static_cast<std::uint8_t>(request.settings.map));
+			output.push_back(static_cast<std::uint8_t>(request.settings.difficulty));
+			output.push_back(static_cast<std::uint8_t>(request.settings.mode));
+		}
 		return output;
 	}
 
@@ -83,16 +90,25 @@ namespace Coop
 			|| offset >= bytes.size())
 			return std::nullopt;
 		type = bytes[offset++];
-		if (type > static_cast<std::uint8_t>(LobbyRequestType::LEAVE)
+		if (type > static_cast<std::uint8_t>(LobbyRequestType::SETTINGS)
 			|| !ReadLittleEndian(bytes, offset, request.senderId) || offset + 2 > bytes.size())
 			return std::nullopt;
 		ready = bytes[offset++];
 		nameLength = bytes[offset++];
-		if (ready > 1 || nameLength > MAX_DISPLAY_NAME_BYTES || offset + nameLength != bytes.size())
+		const std::size_t settingsBytes = type == static_cast<std::uint8_t>(LobbyRequestType::SETTINGS) ? 3 : 0;
+		if (ready > 1 || nameLength > MAX_DISPLAY_NAME_BYTES
+			|| offset + nameLength + settingsBytes != bytes.size())
 			return std::nullopt;
 		request.type = static_cast<LobbyRequestType>(type);
 		request.ready = ready != 0;
 		request.displayName.assign(reinterpret_cast<const char*>(bytes.data() + offset), nameLength);
+		offset += nameLength;
+		if (settingsBytes != 0)
+		{
+			request.settings.map = static_cast<CoopMapId>(bytes[offset++]);
+			request.settings.difficulty = static_cast<CoopDifficulty>(bytes[offset++]);
+			request.settings.mode = static_cast<CoopMode>(bytes[offset++]);
+		}
 		if (!SerializeLobbyRequest(request))
 			return std::nullopt;
 		return request;
@@ -180,6 +196,12 @@ namespace Coop
 						{ return slot.state != PlayerState::EMPTY && slot.playerId == request->senderId; })
 					|| !transport.DisconnectPeer(request->senderId)
 					|| !session.Leave(request->senderId))
+					result = LobbyRequestRejection::SESSION_REJECTED;
+				break;
+			case LobbyRequestType::SETTINGS:
+				if (request->senderId != transport.GetLocalPlayerId())
+					result = LobbyRequestRejection::NOT_HOST;
+				else if (!session.SetLobbySettings(request->senderId, request->settings))
 					result = LobbyRequestRejection::SESSION_REJECTED;
 				break;
 			default:

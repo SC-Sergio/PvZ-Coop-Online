@@ -133,8 +133,21 @@ namespace
 		auto invalidLobbyVersion = *wireJoinBytes;
 		invalidLobbyVersion[4]++;
 		Require(!Coop::DeserializeLobbyRequest(invalidLobbyVersion), "lobby decoder rejects unknown protocol versions");
+		auto invalidLobbySchema = *wireJoinBytes;
+		invalidLobbySchema[6]++;
+		Require(!Coop::DeserializeLobbyRequest(invalidLobbySchema), "lobby decoder rejects unknown serialization schemas");
 		wireJoin.displayName.assign(1, '\n');
 		Require(!Coop::SerializeLobbyRequest(wireJoin), "lobby rejects control characters in display names");
+		Coop::LobbyRequest settingsWire{Coop::LobbyRequestType::SETTINGS, 91, {}, false};
+		settingsWire.settings = {Coop::CoopMapId::NIGHT, Coop::CoopDifficulty::NIGHTMARE, Coop::CoopMode::CLASSIC};
+		const auto settingsBytes = Coop::SerializeLobbyRequest(settingsWire);
+		const auto decodedSettings = settingsBytes ? Coop::DeserializeLobbyRequest(*settingsBytes) : std::nullopt;
+		Require(decodedSettings && decodedSettings->settings.map == Coop::CoopMapId::NIGHT
+			&& decodedSettings->settings.difficulty == Coop::CoopDifficulty::NIGHTMARE,
+			"bounded host lobby settings request round-trips map and difficulty");
+		auto invalidSettings = *settingsBytes;
+		invalidSettings.back() = 0xff;
+		Require(!Coop::DeserializeLobbyRequest(invalidSettings), "lobby settings decoder rejects unknown mode values");
 
 		Coop::CoopSession hostSession;
 		Require(hostSession.Join(91, "Onset").has_value(), "lobby host establishes the room roster");
@@ -179,6 +192,14 @@ namespace
 		Require(Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::SENDER_MISMATCH
 			&& hostSession.GetSlots()[1].state == Coop::PlayerState::CONNECTED,
 			"host binds lobby identity to the transport-authored peer ID");
+		Coop::DrainLobbySnapshots(*guest, 91, clientSession);
+		Coop::LobbyRequest guestSettings{Coop::LobbyRequestType::SETTINGS, 92, {}, false};
+		guestSettings.settings = {Coop::CoopMapId::POOL, Coop::CoopDifficulty::INSANE, Coop::CoopMode::CLASSIC};
+		const auto guestSettingsBytes = Coop::SerializeLobbyRequest(guestSettings);
+		Require(guestSettingsBytes && guest->SendTo(91, *guestSettingsBytes)
+			&& Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::NOT_HOST
+			&& hostSession.GetLobbySettings().map == Coop::CoopMapId::DAY,
+			"host rejects guest attempts to replace canonical lobby settings");
 		Coop::DrainLobbySnapshots(*guest, 91, clientSession);
 
 		Require(hostSession.SetReady(91, true) && hostSession.SetReady(92, true) && hostSession.StartGame(91),
@@ -236,6 +257,15 @@ namespace
 		Require(host->GetSession().GetGardenCount() == 2 && guest->GetSession().GetGardenCount() == 2
 			&& guest->GetSession().GetSlots()[2].state == Coop::PlayerState::EMPTY,
 			"controller allocates only active gardens and preserves empty slots");
+		Coop::CoopLobbySettings settings;
+		settings.map = Coop::CoopMapId::POOL;
+		settings.difficulty = Coop::CoopDifficulty::HARD;
+		settings.mode = Coop::CoopMode::CLASSIC;
+		Require(host->SetLobbySettings(settings) && !guest->SetLobbySettings(settings)
+			&& guest->PumpLobby() == 1
+			&& guest->GetSession().GetLobbySettings().map == Coop::CoopMapId::POOL
+			&& guest->GetSession().GetLobbySettings().difficulty == Coop::CoopDifficulty::HARD,
+			"host-selected map and difficulty replicate while guest changes are rejected");
 
 		Require(guest->SetLocalReady(true) && host->PumpLobby() == 1 && guest->PumpLobby() == 1,
 			"client ready intent is applied and replicated by the host");
@@ -244,7 +274,8 @@ namespace
 		Require(guest->PumpLobby() >= 1 && host->GetSession().HasStarted() && guest->GetSession().HasStarted()
 			&& guest->GetSession().GetGardenCount() == 2,
 			"started authoritative session reaches every client with its garden roster");
-		Require(!host->SetLocalReady(false) && !host->Kick(202), "lobby controls close when gameplay starts");
+		Require(!host->SetLocalReady(false) && !host->Kick(202) && !host->SetLobbySettings(settings),
+			"lobby controls close when gameplay starts");
 	}
 
 	void TestAuthoritativeCommandValidation()
@@ -703,6 +734,8 @@ namespace
 			for (std::size_t i = 0; i < count; ++i)
 				Require(host.Join(static_cast<Coop::PlayerId>(400 + i), "Player " + std::to_string(i + 1)).has_value(),
 					"snapshot roster player joins");
+			Coop::CoopLobbySettings lobbySettings{Coop::CoopMapId::FOG, Coop::CoopDifficulty::NIGHTMARE, Coop::CoopMode::CLASSIC};
+			Require(host.SetLobbySettings(400, lobbySettings), "host applies pre-match map and difficulty settings");
 			auto bytes = Coop::SerializeSessionSnapshot(host);
 			Require(bytes && bytes->size() <= Coop::MAX_SESSION_SNAPSHOT_BYTES, "bounded lobby snapshot serializes");
 			auto snapshot = Coop::DeserializeSessionSnapshot(*bytes);
@@ -711,6 +744,10 @@ namespace
 			Require(client.ApplySnapshot(*snapshot) && client.GetGardenCount() == count,
 				"client snapshot reconstructs exactly the active gardens");
 			Require(client.GetRandomSeed() == host.GetRandomSeed(), "session snapshot preserves the shared garden seed");
+			Require(client.GetLobbySettings().map == lobbySettings.map
+				&& client.GetLobbySettings().difficulty == lobbySettings.difficulty
+				&& client.GetLobbySettings().mode == lobbySettings.mode,
+				"session snapshot preserves host-selected lobby settings");
 			for (std::size_t i = count; i < Coop::MAX_PLAYERS; ++i)
 				Require(client.GetSlots()[i].state == Coop::PlayerState::EMPTY && !client.GetSlots()[i].gardenId,
 					"snapshot preserves empty slots without creating gardens");
@@ -746,7 +783,7 @@ namespace
 		badVersion[4]++;
 		Require(!Coop::DeserializeSessionSnapshot(badVersion), "snapshot rejects unsupported protocol version");
 		auto badGardenLink = *startedBytes;
-		badGardenLink[28] = 0;
+		badGardenLink[31] = 0;
 		Require(!Coop::DeserializeSessionSnapshot(badGardenLink), "snapshot rejects garden ownership mismatch");
 		Require(!Coop::DeserializeSessionSnapshot(std::span<const std::uint8_t>(startedBytes->data(), startedBytes->size() - 1)),
 			"snapshot rejects truncated data");
@@ -754,8 +791,11 @@ namespace
 		trailing.push_back(0);
 		Require(!Coop::DeserializeSessionSnapshot(trailing), "snapshot rejects trailing data");
 		auto invalidState = *startedBytes;
-		invalidState[23] = 0xff;
+		invalidState[26] = 0xff;
 		Require(!Coop::DeserializeSessionSnapshot(invalidState), "snapshot rejects unknown player states");
+		auto invalidLobbySettingsSnapshot = *startedBytes;
+		invalidLobbySettingsSnapshot[21] = 0xff;
+		Require(!Coop::DeserializeSessionSnapshot(invalidLobbySettingsSnapshot), "snapshot rejects unknown lobby settings enums");
 	}
 }
 
