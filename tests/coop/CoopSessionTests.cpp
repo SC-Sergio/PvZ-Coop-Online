@@ -1488,6 +1488,15 @@ namespace
 				"byte-capped reliable queue retries each retained packet");
 		}
 		Require(reliableQueue.GetPendingCount(71) == 0, "byte-capped queue drains to empty");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(player3->SendTo(71, *bytes), "fill receiver queue before disconnected-peer cleanup assertion");
+		Require(reliableQueue.SendOrQueue(*player3, 71, reliableA)
+			&& reliableQueue.GetPendingCount(71) == 1,
+			"reliable queue retains a pending packet for a backpressured peer");
+		Require(host->DisconnectPeer(73), "host can disconnect a peer with pending reliable data");
+		reliableQueue.Pump(*player3);
+		Require(reliableQueue.GetPendingCount(73) == 0,
+			"reliable queue discards retained packets after a peer disconnects");
 		Require(player4->SendTo(71, *bytes), "peer has an unprocessed packet before disconnection");
 		Require(host->DisconnectPeer(74), "host can disconnect a specific local peer");
 		const auto player4Peers = player4->GetConnectedPeerIds();

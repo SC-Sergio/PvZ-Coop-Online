@@ -132,5 +132,5 @@
 
 - **Change:** Added a bounded per-peer FIFO retry queue for command intents and authority receipts when `SendTo` reports local backpressure. The manager pumps retries on network updates; a full queue disconnects that peer so snapshot rejoin can recover instead of silently dropping commands. The harness checks FIFO delivery and 256-message / 512-KiB caps.
 - **Limit:** This handles local queue backpressure only. End-to-end receipt acknowledgements/retransmission, missed-tick recovery, and general drift correction remain pending.
-- **Verification:** Both MSVC Debug application builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC.
+- **Verification:** Both MSVC Debug application builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. A follow-up test also confirms pending frames are dropped when a peer disconnects.
 - **Next:** complete initialized-Board recovery/runtime validation and secure deployment plus cross-network Internet evidence.
