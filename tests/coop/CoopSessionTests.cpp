@@ -228,6 +228,15 @@ namespace
 		validPayload.insert(validPayload.end(), plants.begin(), plants.end());
 		Require(ValidatePortableSavePayload(validPayload.data(), validPayload.size(), 21, 1, 1),
 			"a fully framed SAVE4 payload with its required base chunk is accepted");
+		std::vector<std::uint8_t> completeSnapshotPayload;
+		for (std::uint32_t chunkType = 1; chunkType <= 21; ++chunkType)
+		{
+			const auto chunk = makeChunk(chunkType, 1, {{1, {0x01}}});
+			completeSnapshotPayload.insert(completeSnapshotPayload.end(), chunk.begin(), chunk.end());
+		}
+		Require(ValidatePortableSavePayload(completeSnapshotPayload.data(), completeSnapshotPayload.size(), 21, 1, 1, true)
+			&& !ValidatePortableSavePayload(validPayload.data(), validPayload.size(), 21, 1, 1, true),
+			"network SAVE4 snapshots require every known state chunk while save compatibility can remain optional");
 		std::vector<std::uint8_t> outOfOrderPayload = plants;
 		outOfOrderPayload.insert(outOfOrderPayload.end(), base.begin(), base.end());
 		Require(!ValidatePortableSavePayload(outOfOrderPayload.data(), outOfOrderPayload.size(), 21, 1, 1),

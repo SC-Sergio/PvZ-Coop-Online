@@ -31,10 +31,10 @@ class Board;
 bool				LawnLoadGame(Board* theBoard, const std::string& theFilePath);
 bool				LawnSaveGame(Board* theBoard, const std::string& theFilePath);
 bool				LawnSerializeGameV4(Board* theBoard, std::vector<unsigned char>& theBytes);
-// Checks exact SAVE4 framing, checksum, chunk ordering, versions, and TLV bounds without mutating a Board.
+// Checks exact SAVE4 framing and the complete known chunk set for network snapshots without mutating a Board.
 bool				LawnValidateGameV4Memory(std::span<const unsigned char> theBytes);
 // Captures a bounded SAVE4 backup and attempts to restore it if semantic decoding fails.
-// The payload still is not safe for untrusted network use until field validation is complete.
+// Network callers must still authenticate the peer and validate the transfer protocol.
 bool				LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes);
 
 #endif

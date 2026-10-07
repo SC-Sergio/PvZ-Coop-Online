@@ -2847,10 +2847,11 @@ static ChunkSyncFn GetChunkSyncFn(uint32_t theChunkType)
 	}
 }
 
-static bool ValidateV4PayloadStructure(const unsigned char* thePayload, size_t thePayloadSize)
+static bool ValidateV4PayloadStructure(const unsigned char* thePayload, size_t thePayloadSize,
+	bool theRequireAllKnownChunks = false)
 {
 	return ValidatePortableSavePayload(thePayload, thePayloadSize, SAVE4_CHUNK_CUSTOMSURVIVALOPTION,
-		SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_VERSION);
+		SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_VERSION, theRequireAllKnownChunks);
 }
 
 static bool WriteChunkV4(std::vector<unsigned char>& thePayload, uint32_t theChunkType, Board* theBoard)
@@ -3001,6 +3002,9 @@ static bool ValidateV4ZombieReferences(Board* theBoard)
 
 static bool ValidateV4EntityReferences(Board* theBoard)
 {
+	if (!theBoard || !theBoard->mApp || !theBoard->mApp->mEffectSystem
+		|| !theBoard->mApp->mEffectSystem->mAttachmentHolder)
+		return false;
 	auto aValidPlant = [&](uint32_t id) { return theBoard->mPlants.DataArrayTryToGet(id) != nullptr; };
 	auto aValidZombie = [&](uint32_t id) { return theBoard->mZombies.DataArrayTryToGet(id) != nullptr; };
 	auto aValidCoin = [&](uint32_t id) { return theBoard->mCoins.DataArrayTryToGet(id) != nullptr; };
@@ -3086,7 +3090,8 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 
 static bool ValidateV4SeedBankIndices(Board* theBoard)
 {
-	if (!IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
+	if (!theBoard || !theBoard->mSeedBank || !theBoard->mCursorObject
+		|| !IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
 		|| !IsValidPortableSaveOptionalIndex(theBoard->mCursorObject->mSeedBankIndex,
 			static_cast<uint32_t>(theBoard->mSeedBank->mNumPackets)))
 		return false;
@@ -3269,7 +3274,9 @@ static void FixBoardAfterLoad(Board* theBoard)
 static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	std::span<const unsigned char> theBytes, bool theRequireExactSize)
 {
-	if (theBytes.size() < sizeof(SaveFileHeaderV4)
+	if (!theBoard || !theBoard->mApp || !theBoard->mAdvice || !theBoard->mCursorObject
+		|| !theBoard->mCursorPreview || !theBoard->mSeedBank || !theBoard->mChallenge
+		|| !theBoard->mApp->mMusic || theBytes.size() < sizeof(SaveFileHeaderV4)
 		|| theBytes.size() - sizeof(SaveFileHeaderV4) > MAX_PORTABLE_SAVE_PAYLOAD_BYTES
 		|| theBytes.size() - sizeof(SaveFileHeaderV4) > std::numeric_limits<uint32_t>::max())
 		return false;
@@ -3293,7 +3300,7 @@ static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	uint32_t aCrc = crc32(0, reinterpret_cast<const Bytef*>(aPayload), aHeader.mPayloadSize);
 	if (aCrc != aHeader.mPayloadCrc)
 		return false;
-	if (!ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize))
+	if (!ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize, theRequireExactSize))
 		return false;
 
 	TLVReader aReader(aPayload, aHeader.mPayloadSize);
@@ -3335,7 +3342,7 @@ static bool IsStructurallyValidV4Bytes(std::span<const unsigned char> theBytes,
 {
 	return IsStructurallyValidPortableSaveV4Bytes(theBytes.data(), theBytes.size(),
 		SAVE4_CHUNK_CUSTOMSURVIVALOPTION, SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_VERSION,
-		theRequireExactSize);
+		theRequireExactSize, theRequireExactSize);
 }
 
 static bool LawnLoadGameV4FromBytes(Board* theBoard,

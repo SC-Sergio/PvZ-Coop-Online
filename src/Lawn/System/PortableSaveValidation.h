@@ -184,7 +184,7 @@ inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 
 inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t payloadSize,
 	std::uint32_t highestKnownChunk, std::uint32_t requiredChunk,
-	std::uint32_t expectedChunkVersion) noexcept
+	std::uint32_t expectedChunkVersion, bool requireAllKnownChunks = false) noexcept
 {
 	constexpr std::size_t MAX_TRACKED_CHUNKS = 64;
 	if ((!payload && payloadSize != 0) || highestKnownChunk > MAX_TRACKED_CHUNKS
@@ -248,7 +248,15 @@ inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t
 		if (chunkType == requiredChunk)
 			requiredChunkSeen = true;
 	}
-	return requiredChunkSeen;
+	if (!requiredChunkSeen)
+		return false;
+	if (requireAllKnownChunks)
+	{
+		for (std::uint32_t chunkType = 1; chunkType <= highestKnownChunk; ++chunkType)
+			if (!seenChunks[chunkType])
+				return false;
+	}
+	return true;
 }
 
 inline constexpr auto PORTABLE_SAVE_CRC32_TABLE = []
@@ -275,7 +283,8 @@ inline std::uint32_t CalculatePortableSaveCrc32(const std::uint8_t* bytes,
 
 inline bool IsStructurallyValidPortableSaveV4Bytes(const std::uint8_t* bytes,
 	std::size_t size, std::uint32_t highestKnownChunk, std::uint32_t requiredChunk,
-	std::uint32_t expectedChunkVersion, bool requireExactSize = true) noexcept
+	std::uint32_t expectedChunkVersion, bool requireExactSize = true,
+	bool requireAllKnownChunks = false) noexcept
 {
 	constexpr std::size_t headerSize = 24;
 	constexpr std::uint8_t magic[12] = {'P', 'V', 'Z', 'P', '_', 'S', 'A', 'V', 'E', '4', 0, 0};
@@ -297,7 +306,7 @@ inline bool IsStructurallyValidPortableSaveV4Bytes(const std::uint8_t* bytes,
 	const std::uint8_t* payload = bytes + headerSize;
 	return CalculatePortableSaveCrc32(payload, payloadSize) == readU32(20)
 		&& ValidatePortableSavePayload(payload, payloadSize, highestKnownChunk,
-			requiredChunk, expectedChunkVersion);
+			requiredChunk, expectedChunkVersion, requireAllKnownChunks);
 }
 
 #endif
