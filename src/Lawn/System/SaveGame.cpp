@@ -1030,6 +1030,8 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombieType), 0, NUM_ZOMBIE_TYPES)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombiePhase),
 			PHASE_ZOMBIE_NORMAL, PHASE_SQUASH_DONE_FALLING + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombotomyState),
+			STATE_NOTREADY, STATE_LILYPAD_INVULNERABLE + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombieHeight),
 			HEIGHT_ZOMBIE_NORMAL, HEIGHT_ZOMBIQUARIUM + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mHelmType),
@@ -1117,6 +1119,7 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mSeedType), 0, SeedType::NUM_SEED_TYPES)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mState),
 			STATE_NOTREADY, STATE_LILYPAD_INVULNERABLE + 1)
+		|| !IsValidPortableSaveEnumValue(thePlant.mSubclass, SUBCLASS_NORMAL, SUBCLASS_SHOOTER + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mOnBungeeState),
 			NOT_ON_BUNGEE, RISING_WITH_BUNGEE + 1)
 		|| (thePlant.mImitaterType != SeedType::SEED_NONE
@@ -1161,7 +1164,8 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mMotionType),
 			MOTION_STRAIGHT, MOTION_HOMING + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mProjectileType),
-			PROJECTILE_PEA, NUM_PROJECTILES)))
+			PROJECTILE_PEA, NUM_PROJECTILES)
+		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)))
 		theContext.mFailed = true;
 }
 
@@ -1224,6 +1228,7 @@ static void SyncLawnMowerTailPortable(PortableSaveContext& theContext, LawnMower
 			LAWNMOWER_LAWN, NUM_MOWER_TYPES)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerHeight),
 			MOWER_HEIGHT_LAND, MOWER_HEIGHT_UP_TO_LAND + 1)
+		|| !IsValidPortableSaveOptionalIndex(theMower.mLastPortalX, MAX_GRID_SIZE_X)
 		|| !IsValidPortableSaveGridPosition(0, theMower.mRow, 1, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }
@@ -3042,10 +3047,18 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 	while (theBoard->mZombies.IterateNext(aZombie))
 	{
 		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mTargetPlantID), true, aValidPlant)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mAttachmentID), true,
+				[&](uint32_t id) { return theBoard->mApp->mEffectSystem->mAttachmentHolder->mAttachments.DataArrayTryToGet(id) != nullptr; })
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBodyReanimID), true, aValidReanimation)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBossFireBallReanimID), true, aValidReanimation)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mSpecialHeadReanimID), true, aValidReanimation)
-			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mMoweredReanimID), true, aValidReanimation))
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mMoweredReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveOptionalIndex(aZombie->mTargetRow, MAX_GRID_SIZE_Y)
+			|| !IsValidPortableSaveOptionalIndex(aZombie->mFireballRow, MAX_GRID_SIZE_Y)
+			|| !IsValidPortableSaveOptionalIndex(aZombie->mUseLadderCol, MAX_GRID_SIZE_X)
+			|| !IsValidPortableSaveOptionalIndex(aZombie->mLastPortalX, MAX_GRID_SIZE_X)
+			|| (aZombie->mZombieType == ZombieType::ZOMBIE_BUNGEE
+				&& !IsValidPortableSaveOptionalIndex(aZombie->mTargetCol, MAX_GRID_SIZE_X)))
 			return false;
 	}
 	Projectile* aProjectile = nullptr;
