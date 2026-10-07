@@ -64,7 +64,8 @@ list(APPEND SOURCES
 
 if(COOP_ENABLE_WEBRTC)
 	find_package(LibDataChannel CONFIG REQUIRED)
-	list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/WebRtcNetworkTransport.cpp)
+	find_package(nlohmann_json CONFIG REQUIRED)
+	list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/WebRtcNetworkTransport.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/WebRtcSignalingTransport.cpp)
 endif()
 
 # these files are included and must not be built in the project
@@ -229,7 +230,7 @@ target_compile_definitions(pvz-mod PRIVATE
 target_compile_features(pvz-mod PRIVATE cxx_std_20)
 if(COOP_ENABLE_WEBRTC)
 	target_compile_definitions(pvz-mod PRIVATE PVZ_COOP_HAS_WEBRTC=1)
-	target_link_libraries(pvz-mod PRIVATE LibDataChannel::LibDataChannel)
+	target_link_libraries(pvz-mod PRIVATE LibDataChannel::LibDataChannel nlohmann_json::nlohmann_json)
 endif()
 set_target_properties(pvz-mod PROPERTIES CXX_EXTENSIONS OFF)
 if(WIN32)
@@ -249,12 +250,26 @@ if(BUILD_COOP_TESTS)
 	endif()
 	if(COOP_ENABLE_WEBRTC)
 		add_executable(coop-webrtc-transport-tests tests/coop/WebRtcTransportTests.cpp
-			src/Coop/WebRtcNetworkTransport.cpp)
+			src/Coop/CoopSession.cpp src/Coop/PlayerCommand.cpp src/Coop/CommandSerialization.cpp
+			src/Coop/SessionSnapshotSerialization.cpp src/Coop/NetworkTransport.cpp
+			src/Coop/TcpNetworkTransport.cpp src/Coop/LobbyProtocol.cpp src/Coop/CoopLobbyController.cpp
+			src/Coop/CommandEndpoint.cpp src/Coop/WebRtcNetworkTransport.cpp src/Coop/WebRtcSignalingTransport.cpp)
 		target_include_directories(coop-webrtc-transport-tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 		target_compile_features(coop-webrtc-transport-tests PRIVATE cxx_std_20)
 		set_target_properties(coop-webrtc-transport-tests PROPERTIES CXX_EXTENSIONS OFF)
-		target_link_libraries(coop-webrtc-transport-tests PRIVATE LibDataChannel::LibDataChannel)
+		target_link_libraries(coop-webrtc-transport-tests PRIVATE LibDataChannel::LibDataChannel nlohmann_json::nlohmann_json)
+		if(WIN32)
+			target_link_libraries(coop-webrtc-transport-tests PRIVATE ws2_32)
+		endif()
 		add_test(NAME coop-webrtc-transport-tests COMMAND coop-webrtc-transport-tests)
+		find_program(COOP_NODE_EXECUTABLE node)
+		if(WIN32 AND COOP_NODE_EXECUTABLE)
+			add_test(NAME coop-webrtc-signaling-process COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
+				${CMAKE_CURRENT_SOURCE_DIR}/tests/coop/RunWebRtcSignalingSmoke.ps1
+				-NodeExecutable ${COOP_NODE_EXECUTABLE}
+				-ServerScript ${CMAKE_CURRENT_SOURCE_DIR}/services/coop-signaling/server.js
+				-ClientExecutable $<TARGET_FILE:coop-webrtc-transport-tests>)
+		endif()
 	endif()
 endif()
 

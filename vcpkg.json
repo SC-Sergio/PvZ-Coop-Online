@@ -16,7 +16,8 @@
     "coop-webrtc": {
       "description": "Build the optional WebRTC data-channel transport",
       "dependencies": [
-        "libdatachannel"
+        "libdatachannel",
+        "nlohmann-json"
       ]
     }
   }

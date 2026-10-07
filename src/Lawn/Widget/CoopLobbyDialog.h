@@ -42,6 +42,9 @@ private:
 	LawnStoneButton* mLeaveButton;
 	LawnStoneButton* mMapButton;
 	LawnStoneButton* mDifficultyButton;
+	LawnStoneButton* mTransportButton;
+	bool mUseInternet;
+	std::string mRoomCode;
 	std::unique_ptr<Coop::CoopLobbyController> mLobby;
 	Coop::CoopLobbySettings mSelectedSettings;
 	std::string mStatus;
