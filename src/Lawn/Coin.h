@@ -59,6 +59,7 @@ public:
     bool                    mHasBouncyArrow;
     bool                    mHitGround;
     int32_t                 mTimesDropped;
+    int32_t                 mCoopCollectionRequestCooldown = 0;
 
 public:
     Coin();

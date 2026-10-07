@@ -784,6 +784,7 @@ namespace Coop
 		case CommandType::PLACE_PLANT:
 		case CommandType::REMOVE_PLANT:
 		case CommandType::COLLECT_SUN:
+		case CommandType::COLLECT_COIN:
 		case CommandType::SELECT_PLANT:
 			return source->board->ApplyCooperativeCommand(command);
 		case CommandType::PING:

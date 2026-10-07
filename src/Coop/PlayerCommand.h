@@ -14,7 +14,7 @@
 
 namespace Coop
 {
-	constexpr std::uint16_t PROTOCOL_VERSION = 1;
+	constexpr std::uint16_t PROTOCOL_VERSION = 2;
 	constexpr std::uint32_t MAX_RESOURCE_TRANSFER = 2500;
 	constexpr double COMMAND_RATE_LIMIT_PER_SECOND = 20.0;
 	constexpr double COMMAND_RATE_BURST = 32.0;
@@ -32,7 +32,8 @@ namespace Coop
 		CHANGE_VIEW,
 		PING,
 		SEND_RESOURCE,
-		FIRE_COB_CANNON
+		FIRE_COB_CANNON,
+		COLLECT_COIN
 	};
 
 	inline constexpr bool IsLocalOnlyCommand(CommandType type) noexcept

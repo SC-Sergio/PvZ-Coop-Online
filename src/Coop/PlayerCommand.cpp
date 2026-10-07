@@ -81,6 +81,9 @@ namespace Coop
 		case CommandType::COLLECT_SUN:
 			if (command.entityId == 0) return CommandRejection::INVALID_ID;
 			break;
+		case CommandType::COLLECT_COIN:
+			if (command.entityId == 0) return CommandRejection::INVALID_ID;
+			break;
 		case CommandType::SELECT_PLANT:
 			if (command.value < 0 || command.value >= 10) return CommandRejection::INVALID_VALUE;
 			break;

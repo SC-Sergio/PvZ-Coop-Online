@@ -6443,9 +6443,11 @@ bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 		return true;
 	}
 	case Coop::CommandType::COLLECT_SUN:
+	case Coop::CommandType::COLLECT_COIN:
 	{
 		Coin* coin = mCoins.DataArrayTryToGet(static_cast<CoinID>(command.entityId));
-		if (coin == nullptr || !coin->IsSun() || coin->mDead || coin->mIsBeingCollected)
+		const bool isSunCommand = command.type == Coop::CommandType::COLLECT_SUN;
+		if (coin == nullptr || coin->IsSun() != isSunCommand || coin->mDead || coin->mIsBeingCollected)
 			return false;
 		ScopedCooperativeCommandApplication aApplying(this);
 		coin->MouseDown(static_cast<int>(coin->mPosX), static_cast<int>(coin->mPosY), 1);

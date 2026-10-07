@@ -70,6 +70,7 @@ void Coin::CoinInitialize(int theX, int theY, CoinType theCoinType, CoinMotion t
 	mHasBouncyArrow = false;
 	mHitGround = false;
 	mTimesDropped = 0;
+    mCoopCollectionRequestCooldown = 0;
 	mPottedPlantSpec.InitializePottedPlant(SeedType::SEED_NONE);
 
     if (IsSun())
@@ -750,6 +751,8 @@ void Coin::UpdateCollected()
 void Coin::Update()
 {
     mCoinAge++;
+    if (mCoopCollectionRequestCooldown > 0)
+        mCoopCollectionRequestCooldown--;
     if (mApp->mGameScene != GameScenes::SCENE_PLAYING && mApp->mGameScene != GameScenes::SCENE_AWARD && mBoard && !mBoard->mCutScene->ShouldRunUpsellBoard())
     {
         return;
@@ -1411,12 +1414,17 @@ void Coin::MouseDown(int x, int y, int theClickCount)
     }
 
 	if (mBoard->mGardenStateIsolated && !mBoard->mApplyingCooperativeCommand
-		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive() && IsSun())
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
 	{
-		Coop::PlayerCommand command;
-		command.type = Coop::CommandType::COLLECT_SUN;
-		command.entityId = static_cast<std::uint32_t>(mBoard->mCoins.DataArrayGetID(this));
-		mApp->mCoopGardenManager->SubmitLocalCommand(*mBoard, command);
+		if (theClickCount >= 0 && !mIsBeingCollected && mCoopCollectionRequestCooldown == 0
+			&& (!NeedClick() || theClickCount != 999))
+		{
+			Coop::PlayerCommand command;
+			command.type = IsSun() ? Coop::CommandType::COLLECT_SUN : Coop::CommandType::COLLECT_COIN;
+			command.entityId = static_cast<std::uint32_t>(mBoard->mCoins.DataArrayGetID(this));
+			mCoopCollectionRequestCooldown = 30;
+			mApp->mCoopGardenManager->SubmitLocalCommand(*mBoard, command);
+		}
 		return;
 	}
 

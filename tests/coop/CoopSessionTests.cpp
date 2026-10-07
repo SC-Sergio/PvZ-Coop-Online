@@ -1021,6 +1021,20 @@ namespace
 		command.value = static_cast<std::int32_t>(SeedType::SEED_PEASHOOTER);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "seed enum zero is a valid plant intent and rejected sequence may be corrected");
 
+		Coop::PlayerCommandValidator coinValidator;
+		Coop::PlayerCommand coinCommand;
+		coinCommand.senderId = 51;
+		coinCommand.gardenId = firstGarden;
+		coinCommand.sequence = 1;
+		coinCommand.type = Coop::CommandType::COLLECT_COIN;
+		coinCommand.entityId = 7;
+		Require(coinValidator.Validate(session, coinCommand) == Coop::CommandRejection::NONE,
+			"non-sun collectible intent is accepted for its owning garden");
+		coinCommand.sequence = 2;
+		coinCommand.entityId = 0;
+		Require(coinValidator.Validate(session, coinCommand) == Coop::CommandRejection::INVALID_ID,
+			"non-sun collectible intent requires an entity ID");
+
 		command.sequence = 3;
 		command.gardenId = secondGarden;
 		Require(validator.Validate(session, command) == Coop::CommandRejection::NOT_GARDEN_OWNER, "player cannot control another garden");
@@ -1301,6 +1315,11 @@ namespace
 			&& decoded->value == command.value && decoded->entityId == command.entityId
 			&& decoded->targetPlayerId == command.targetPlayerId && decoded->targetGardenId == command.targetGardenId
 			&& decoded->amount == command.amount, "fixed-width fields round-trip without host-endian assumptions");
+		command.type = Coop::CommandType::COLLECT_COIN;
+		const auto coinCommandBytes = Coop::SerializeCommand(command);
+		const auto coinCommandRoundTrip = coinCommandBytes ? Coop::DeserializeCommand(*coinCommandBytes) : std::nullopt;
+		Require(coinCommandRoundTrip && coinCommandRoundTrip->type == Coop::CommandType::COLLECT_COIN,
+			"non-sun coin collection is represented by the versioned command frame");
 
 		auto badMagic = *encoded;
 		badMagic[0] = 0;
