@@ -451,6 +451,11 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 			board.mSeedBank->RefreshAllPackets();
 			board.StartLevel();
 			board.mSunMoney = startingSun;
+			if (board.mSpeedButton)
+			{
+				board.mSpeedButton->mDisabled = true;
+				board.mSpeedButton->mBtnNoDraw = true;
+			}
 			board.SetGardenGameScene(GameScenes::SCENE_PLAYING);
 			return true;
 		});

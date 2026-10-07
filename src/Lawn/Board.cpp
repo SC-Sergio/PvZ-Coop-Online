@@ -8260,6 +8260,9 @@ void Board::SetSukhbirMode(bool theEnableSukhbir)
 
 void Board::DoTypingCheck(KeyCode theKey)
 {
+	if (mGardenStateIsolated)
+		return;
+
 	if (mApp->mKonamiCheck->Check(theKey))
 	{
 		mApp->PlayFoley(FoleyType::FOLEY_DROP);
