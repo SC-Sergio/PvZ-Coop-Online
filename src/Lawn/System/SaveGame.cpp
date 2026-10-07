@@ -747,6 +747,25 @@ static void SyncAttachmentTailPortable(PortableSaveContext& theContext, Attachme
 		SyncAttachEffectPortable(theContext, theAttachment.mEffectArray[i]);
 	theContext.SyncInt32(theAttachment.mNumEffects);
 	theContext.SyncBool(theAttachment.mDead);
+	if (theContext.mReading)
+	{
+		if (theContext.mFailed || !IsValidPortableSaveCount(theAttachment.mNumEffects,
+			MAX_EFFECTS_PER_ATTACHMENT))
+		{
+			theContext.mFailed = true;
+			return;
+		}
+		for (int i = 0; i < theAttachment.mNumEffects; ++i)
+		{
+			if (!IsValidPortableSaveEnumValue(
+				static_cast<int32_t>(theAttachment.mEffectArray[i].mEffectType),
+				EFFECT_PARTICLE, EFFECT_OTHER + 1))
+			{
+				theContext.mFailed = true;
+				return;
+			}
+		}
+	}
 }
 
 static void SyncCursorObjectTailPortable(PortableSaveContext& theContext, CursorObject& theObject)

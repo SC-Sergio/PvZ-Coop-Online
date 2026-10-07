@@ -32,6 +32,8 @@ The WebRTC signaling service keeps a disconnected guest's slot reserved and stor
 
 SAVE4 plant entities validate `mPlantCol` and inherited `mRow` against the fixed 9×6 board because gameplay reads them as grid-array coordinates. Seed packets require each saved `mIndex` to match its fixed slot, in addition to the cursor's active-slot check. Active mowers, selected special zombies, Stinky, portals, and rakes must resolve their required reanimation IDs before post-load repair. Zombie related/follower IDs must be null or resolve to active zombies before code paths that use `ZombieGet`. These checks run after the complete Board and effect-holder state is decoded and trigger the backup restore path on rejection.
 
+Each SAVE4 attachment is limited to `MAX_EFFECTS_PER_ATTACHMENT` active entries, and each active entry's effect type must be a known enum before the engine's attachment switch runs. Attachment target IDs use `DataArrayTryToGet` and remain subject to cleanup if their target has expired.
+
 `HeartbeatMonitor` adds a transport-level liveness frame handled before gameplay-command decoding. It sends bounded PING/PONG sequence frames, accepts only matching recent PONGs as activity, rate-limits new remote PINGs, and times out peers after 8 seconds. `CoopGardenManager` closes timed-out links; existing roster reconciliation marks the slot disconnected and preserves the garden for rejoin. This detects silent links but does not authenticate, apply a grace-state AI, or restore Board state. The heartbeat monitor and session loop use a real monotonic clock; the monitor's unit tests use a controlled clock.
 
 ## Engine extraction plan
