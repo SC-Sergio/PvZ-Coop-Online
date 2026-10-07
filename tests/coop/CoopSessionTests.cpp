@@ -256,6 +256,14 @@ namespace
 			&& !IsValidPortableSaveGridPosition(9, 5, 9, 6)
 			&& !IsValidPortableSaveGridPosition(8, 6, 9, 6),
 			"portable save grid coordinates stay inside fixed board dimensions");
+		Require(IsValidPortableSaveAnimationTiming(12, 5, false)
+			&& IsValidPortableSaveAnimationTiming(0, 1, true)
+			&& !IsValidPortableSaveAnimationTiming(0, 5, false)
+			&& !IsValidPortableSaveAnimationTiming(12, 0, false)
+			&& !IsValidPortableSaveAnimationTiming(-1, 5, true)
+			&& !IsValidPortableSaveAnimationTiming(10000, 101, false)
+			&& !IsValidPortableSaveAnimationTiming(10001, 1, false),
+			"portable save animation timing rejects zero divisors and unsafe frame products");
 		Require(IsValidPortableSaveGridLook(0) && IsValidPortableSaveGridLook(19)
 			&& !IsValidPortableSaveGridLook(-1) && !IsValidPortableSaveGridLook(20)
 			&& IsValidPortableSaveRow(0, 6) && IsValidPortableSaveRow(5, 6)

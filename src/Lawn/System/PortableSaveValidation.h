@@ -84,6 +84,20 @@ inline bool IsValidPortableSaveWorldExtent(std::int32_t extent) noexcept
 	return extent >= 0 && extent <= MAX_PORTABLE_SAVE_WORLD_COORDINATE;
 }
 
+inline bool IsValidPortableSaveAnimationTiming(std::int32_t ticksPerFrame,
+	std::int32_t frameCount, bool allowDisabled) noexcept
+{
+	constexpr std::int32_t maxTicksPerFrame = 10000;
+	constexpr std::int32_t maxFrameCount = 10000;
+	constexpr std::int32_t maxAnimationTicks = 1000000;
+	if (frameCount < 1 || frameCount > maxFrameCount)
+		return false;
+	if (allowDisabled && ticksPerFrame == 0)
+		return true;
+	return ticksPerFrame >= 1 && ticksPerFrame <= maxTicksPerFrame
+		&& frameCount <= maxAnimationTicks / ticksPerFrame;
+}
+
 inline bool IsValidPortableSaveGridLook(std::int32_t look) noexcept
 {
 	return look >= 0 && look < 20;
