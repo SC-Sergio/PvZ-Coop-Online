@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 class Board;
@@ -70,6 +71,7 @@ namespace Coop
 		AuthoritativeCommandProcessor mCommandProcessor;
 		std::optional<PlayerId> mLocalPlayerId;
 		INetworkTransport* mTransport = nullptr;
+	std::unordered_set<TransportPlayerId> mLastConnectedPeerIds;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;

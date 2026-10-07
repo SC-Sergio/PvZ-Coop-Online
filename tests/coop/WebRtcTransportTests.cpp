@@ -222,10 +222,20 @@ namespace
 			while (std::chrono::steady_clock::now() < disconnectedDeadline
 				&& hostHasReturningPeer())
 				std::this_thread::sleep_for(10ms);
-			auto returnedTransport = Coop::WebRtcSignalingTransport::RejoinRoom(returningPlayerId, roomCode,
-				resumeTokens[returningIndex], signalingUrl, configuration, &error, 20s);
+			const auto controllerReconnectDeadline = std::chrono::steady_clock::now() + 20s;
+			Coop::WebRtcSignalingTransport* returnedTransport = nullptr;
+			while (std::chrono::steady_clock::now() < controllerReconnectDeadline)
+			{
+				guests[returningIndex]->PumpConnection();
+				returnedTransport = dynamic_cast<Coop::WebRtcSignalingTransport*>(guests[returningIndex]->GetTransport());
+				if (returnedTransport && returnedTransport->GetResumeToken() != resumeTokens[returningIndex]
+					&& returnedTransport->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{hostId})
+					break;
+				std::this_thread::sleep_for(10ms);
+			}
 			if (!returnedTransport || returnedTransport->GetResumeToken() == resumeTokens[returningIndex])
-				throw std::runtime_error("guest could not reclaim its slot with a rotated resume token: " + error);
+				throw std::runtime_error("lobby controller could not reclaim its slot with a rotated resume token: "
+					+ guests[returningIndex]->GetConnectionError());
 			const std::vector<std::uint8_t> reconnectProbe{0x52, 0x45, 0x4A, 0x01};
 			if (!returnedTransport->SendTo(hostId, reconnectProbe))
 				throw std::runtime_error("rejoined guest could not send through the new DataChannel");

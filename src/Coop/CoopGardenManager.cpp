@@ -6,6 +6,7 @@
 #include "CoopGardenManager.h"
 #include "CommandEndpoint.h"
 #include "CommandSerialization.h"
+#include "CoopLobbyController.h"
 
 #include "../Lawn/Board.h"
 #include "../Lawn/System/PoolEffect.h"
@@ -46,6 +47,7 @@ namespace Coop
 		mHasAppStateSnapshot = true;
 		mSession = &session;
 		mTransport = nullptr;
+		mLastConnectedPeerIds.clear();
 		mCommandProcessor.Reset();
 		mLocalPlayerId = session.GetHostPlayerId();
 		mNextLocalCommandSequence = 1;
@@ -162,6 +164,8 @@ namespace Coop
 		if (!mSession || !mLocalPlayerId || transport.GetLocalPlayerId() != *mLocalPlayerId)
 			return false;
 		mTransport = &transport;
+		const auto peers = transport.GetConnectedPeerIds();
+		mLastConnectedPeerIds = std::unordered_set<TransportPlayerId>(peers.begin(), peers.end());
 		return true;
 	}
 
@@ -211,20 +215,35 @@ namespace Coop
 
 	void CoopGardenManager::PumpNetwork()
 	{
+		if (mApp && mApp->mCoopLobbyController
+			&& mApp->mCoopLobbyController->GetTransport() != mTransport
+			&& mApp->mCoopLobbyController->GetTransport())
+			AttachTransport(*mApp->mCoopLobbyController->GetTransport());
 		if (!mTransport || !mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
 			return;
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 		{
 			DrainIncomingCommands(*mTransport);
 			const auto connectedPeers = mTransport->GetConnectedPeerIds();
+			const std::unordered_set<TransportPlayerId> connectedSet(connectedPeers.begin(), connectedPeers.end());
 			bool disconnected = false;
 			for (const PlayerSlot& slot : mSession->GetSlots())
 			{
-				if (slot.state != PlayerState::PLAYING || slot.playerId == *mLocalPlayerId)
+				if (slot.playerId == *mLocalPlayerId || slot.state == PlayerState::EMPTY)
 					continue;
-				if (std::find(connectedPeers.begin(), connectedPeers.end(), slot.playerId) == connectedPeers.end())
+				const bool connected = connectedSet.contains(slot.playerId);
+				if (slot.state == PlayerState::PLAYING && !connected)
 					disconnected = mSession->MarkDisconnected(slot.playerId) || disconnected;
+				else if ((slot.state == PlayerState::DISCONNECTED || slot.state == PlayerState::AI_TEMPORARY) && connected)
+				{
+					if (mSession->BeginReconnect(slot.playerId))
+						disconnected = mSession->CompleteReconnect(slot.playerId) || disconnected;
+				}
+				else if (slot.state == PlayerState::PLAYING && connected
+					&& !mLastConnectedPeerIds.contains(slot.playerId))
+					disconnected = true;
 			}
+			mLastConnectedPeerIds = connectedSet;
 			if (disconnected)
 				BroadcastSessionSnapshot(*mTransport, *mSession);
 		}

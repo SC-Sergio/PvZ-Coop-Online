@@ -7,6 +7,11 @@
 
 #include "LobbyProtocol.h"
 
+#if defined(PVZ_COOP_HAS_WEBRTC)
+#include "WebRtcSignalingTransport.h"
+#include <rtc/configuration.hpp>
+#endif
+
 #include <algorithm>
 
 namespace Coop
@@ -15,6 +20,14 @@ namespace Coop
 		PlayerId hostPlayerId)
 		: mTransport(std::move(transport)), mIsHost(isHost), mHostPlayerId(hostPlayerId)
 	{
+#if defined(PVZ_COOP_HAS_WEBRTC)
+		if (auto* internetTransport = dynamic_cast<WebRtcSignalingTransport*>(mTransport.get()))
+		{
+			mRoomCode = internetTransport->GetRoomCode();
+			mSignalingUrl = internetTransport->GetSignalingUrl();
+			mResumeToken = internetTransport->GetResumeToken();
+		}
+#endif
 	}
 
 	CoopLobbyController::~CoopLobbyController()
@@ -90,6 +103,89 @@ namespace Coop
 		const std::size_t requests = DrainLobbyRequests(*mTransport, mSession).size();
 		RemoveDisconnectedLobbyPeers();
 		return accepted + requests;
+	}
+
+	void CoopLobbyController::PumpConnection()
+	{
+#if defined(PVZ_COOP_HAS_WEBRTC)
+		if (mReconnectFuture.valid())
+		{
+			if (mReconnectFuture.wait_for(std::chrono::milliseconds::zero()) != std::future_status::ready)
+				return;
+			ReconnectResult result = mReconnectFuture.get();
+			if (result.transport)
+			{
+				auto* internetTransport = dynamic_cast<WebRtcSignalingTransport*>(result.transport.get());
+				if (internetTransport == nullptr || internetTransport->GetHostPlayerId() != mHostPlayerId
+					|| internetTransport->GetLocalPlayerId() != GetLocalPlayerId())
+				{
+					result.transport->Close();
+					mConnectionError = "Rejoined transport returned an unexpected peer identity.";
+					mNextReconnectAttempt = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+				}
+				else
+				{
+					mResumeToken = internetTransport->GetResumeToken();
+					mTransport = std::move(result.transport);
+					mConnectionError.clear();
+					mNextReconnectAttempt = {};
+				}
+			}
+			else
+			{
+				mConnectionError = std::move(result.error);
+				mNextReconnectAttempt = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+			}
+		}
+
+		if (mIsHost)
+			return;
+		if (!mSession.HasStarted())
+		{
+			mConnectionError = "Waiting for the cooperative session to start.";
+			return;
+		}
+		if (!mTransport)
+		{
+			mConnectionError = "The network transport is unavailable.";
+			return;
+		}
+		auto* internetTransport = dynamic_cast<WebRtcSignalingTransport*>(mTransport.get());
+		if (!internetTransport)
+		{
+			mConnectionError = "Automatic rejoin is available only for Internet sessions.";
+			return;
+		}
+		if (mRoomCode.empty() || mResumeToken.empty() || mSignalingUrl.empty())
+		{
+			mConnectionError = "This Internet session has no saved rejoin credentials.";
+			return;
+		}
+		const auto connectedPeers = internetTransport->GetConnectedPeerIds();
+		if (std::find(connectedPeers.begin(), connectedPeers.end(), mHostPlayerId) != connectedPeers.end())
+		{
+			mConnectionError = "Waiting for the host connection to time out.";
+			return;
+		}
+		if (mReconnectFuture.valid() || std::chrono::steady_clock::now() < mNextReconnectAttempt)
+			return;
+
+		const PlayerId localPlayerId = GetLocalPlayerId();
+		const std::string roomCode = mRoomCode;
+		const std::string resumeToken = mResumeToken;
+		const std::string signalingUrl = mSignalingUrl;
+		mConnectionError = "Reconnecting to the host...";
+		mReconnectFuture = std::async(std::launch::async,
+			[localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
+			{
+				ReconnectResult result;
+				rtc::Configuration configuration;
+				auto transport = WebRtcSignalingTransport::RejoinRoom(localPlayerId, roomCode, resumeToken,
+					signalingUrl, configuration, &result.error, std::chrono::seconds(10));
+				result.transport = std::move(transport);
+				return result;
+			});
+#endif
 	}
 
 	void CoopLobbyController::RemoveDisconnectedLobbyPeers()

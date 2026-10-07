@@ -1865,6 +1865,8 @@ void LawnApp::UpdateFrames()
 		
 		if (mCoopGardenManager && mCoopGardenManager->IsActive())
 		{
+			if (mCoopLobbyController)
+				mCoopLobbyController->PumpConnection();
 			mCoopGardenManager->PumpNetwork();
 			mCoopGardenManager->AdvanceSimulationTick();
 			mCoopGardenManager->ProcessDeleteQueues();

@@ -10,6 +10,8 @@
 #include "NetworkTransport.h"
 
 #include <cstdint>
+#include <chrono>
+#include <future>
 #include <memory>
 #include <string>
 
@@ -33,6 +35,7 @@ namespace Coop
 		CoopLobbyController& operator=(const CoopLobbyController&) = delete;
 
 		std::size_t PumpLobby();
+		void PumpConnection();
 		bool SetLocalReady(bool ready);
 	bool SetLobbySettings(const CoopLobbySettings& settings);
 		bool StartGame();
@@ -45,17 +48,29 @@ namespace Coop
 		CoopSession& GetSession() noexcept { return mSession; }
 		const CoopSession& GetSession() const noexcept { return mSession; }
 		INetworkTransport* GetTransport() noexcept { return mTransport.get(); }
+		const std::string& GetConnectionError() const noexcept { return mConnectionError; }
 
 	private:
 		CoopLobbyController(std::unique_ptr<INetworkTransport> transport, bool isHost, PlayerId hostPlayerId);
 		bool RequestJoin(std::string displayName);
 		void RemoveDisconnectedLobbyPeers();
+		struct ReconnectResult
+		{
+			std::unique_ptr<INetworkTransport> transport;
+			std::string error;
+		};
 
 		std::unique_ptr<INetworkTransport> mTransport;
 		CoopSession mSession;
 		bool mIsHost = false;
 		bool mClosed = false;
 		PlayerId mHostPlayerId = 0;
+		std::string mRoomCode;
+		std::string mSignalingUrl;
+		std::string mResumeToken;
+		std::string mConnectionError;
+		std::future<ReconnectResult> mReconnectFuture;
+		std::chrono::steady_clock::time_point mNextReconnectAttempt{};
 	};
 }
 
