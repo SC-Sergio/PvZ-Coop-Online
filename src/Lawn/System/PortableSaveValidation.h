@@ -257,6 +257,18 @@ inline bool IsValidPortableSaveListForRelease(Node* head, Node* tail,
 	return previous == tail && nodeCount == recordedSize;
 }
 
+template <typename IsActive, typename ReleaseItem>
+inline bool ReleasePortableSaveTruncatedEntries(std::uint32_t previousCount,
+	std::uint32_t incomingCount, IsActive isActive, ReleaseItem releaseItem)
+{
+	for (std::uint32_t index = incomingCount; index < previousCount; ++index)
+	{
+		if (isActive(index) && !releaseItem(index))
+			return false;
+	}
+	return true;
+}
+
 template <typename GetEntryId>
 inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)

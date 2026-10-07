@@ -392,6 +392,36 @@ namespace
 		Require(!IsValidPortableSaveArrayEntries(2, 1, 2,
 			[&validIds](std::uint32_t index) { return validIds[index]; }),
 			"an unreachable free entry is rejected");
+		const std::vector<std::uint32_t> truncatedSlotIds{
+			0x00010000U, 0x00010001U, 0x00010002U, 0U, 0x00010004U, 0x00010005U
+		};
+		std::vector<std::uint32_t> releasedTruncatedSlots;
+		Require(ReleasePortableSaveTruncatedEntries(6, 3,
+			[&truncatedSlotIds](std::uint32_t index) { return (truncatedSlotIds[index] & 0xFFFF0000U) != 0; },
+			[&releasedTruncatedSlots](std::uint32_t index)
+			{
+				releasedTruncatedSlots.push_back(index);
+				return true;
+			}) && releasedTruncatedSlots == std::vector<std::uint32_t>{4, 5},
+			"shrinking a save array releases only active entries beyond the incoming high-water mark");
+		releasedTruncatedSlots.clear();
+		Require(!ReleasePortableSaveTruncatedEntries(6, 3,
+			[&truncatedSlotIds](std::uint32_t index) { return (truncatedSlotIds[index] & 0xFFFF0000U) != 0; },
+			[&releasedTruncatedSlots](std::uint32_t index)
+			{
+				releasedTruncatedSlots.push_back(index);
+				return index != 4;
+			}) && releasedTruncatedSlots == std::vector<std::uint32_t>{4},
+			"a truncated-resource release failure stops further cleanup and rejects the snapshot");
+		releasedTruncatedSlots.clear();
+		Require(ReleasePortableSaveTruncatedEntries(3, 6,
+			[](std::uint32_t) { return true; },
+			[&releasedTruncatedSlots](std::uint32_t index)
+			{
+				releasedTruncatedSlots.push_back(index);
+				return true;
+			}) && releasedTruncatedSlots.empty(),
+			"growing a save array does not release any existing entries");
 		struct ListNode
 		{
 			ListNode* mNext = nullptr;

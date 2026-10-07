@@ -1879,14 +1879,18 @@ static bool SyncDataArrayHeaderPortable(PortableSaveContext& theContext, DataArr
 			theContext.mFailed = true;
 			return false;
 		}
-		for (uint32_t i = aMaxUsedCount; i < theDataArray.mMaxUsedCount; i++)
-		{
-			if ((theDataArray.mBlock[i].mID & DATA_ARRAY_KEY_MASK) != 0
-				&& !ReleaseItemOwnedResourcesForRead(theDataArray.mBlock[i].mItem))
+		if (!ReleasePortableSaveTruncatedEntries(theDataArray.mMaxUsedCount, aMaxUsedCount,
+			[&theDataArray](uint32_t index)
 			{
-				theContext.mFailed = true;
-				return false;
-			}
+				return (theDataArray.mBlock[index].mID & DATA_ARRAY_KEY_MASK) != 0;
+			},
+			[&theDataArray](uint32_t index)
+			{
+				return ReleaseItemOwnedResourcesForRead(theDataArray.mBlock[index].mItem);
+			}))
+		{
+			theContext.mFailed = true;
+			return false;
 		}
 		theDataArray.mFreeListHead = aFreeListHead;
 		theDataArray.mMaxUsedCount = aMaxUsedCount;
