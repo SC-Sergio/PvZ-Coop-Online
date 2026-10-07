@@ -187,6 +187,8 @@ GameSelector::GameSelector(LawnApp* theApp)
 		Sexy::IMAGE_QUICKPLAY_BACK_BUTTON_HIGHLIGHT
 	);
 	mQuickPlayButton->Resize(mApp->mWidth - 150, 455, Sexy::IMAGE_QUICKPLAY_BACK_BUTTON->mWidth, Sexy::IMAGE_QUICKPLAY_BACK_BUTTON->mHeight);
+	mQuickPlayButton->mLabel = "Co-op Online";
+	mQuickPlayButton->mFont = Sexy::FONT_DWARVENTODCRAFT15;
 
 	mZenGardenButton = MakeNewButton(
 		GameSelector::GameSelector_ZenGarden, 
@@ -1030,7 +1032,7 @@ void GameSelector::AddedToManager(WidgetManager* theWidgetManager)
 	//theWidgetManager->AddWidget(mZombatarWidget);
 	theWidgetManager->AddWidget(mAchievementsButton);
 	theWidgetManager->AddWidget(mAchievementsWidget);
-	//theWidgetManager->AddWidget(mQuickPlayButton);
+	theWidgetManager->AddWidget(mQuickPlayButton);
 }
 
 void GameSelector::RemovedFromManager(WidgetManager* theWidgetManager)
@@ -1053,7 +1055,7 @@ void GameSelector::RemovedFromManager(WidgetManager* theWidgetManager)
 	//theWidgetManager->RemoveWidget(mZombatarWidget);
 	theWidgetManager->RemoveWidget(mAchievementsButton);
 	theWidgetManager->RemoveWidget(mAchievementsWidget);
-	//theWidgetManager->RemoveWidget(mQuickPlayButton);
+	theWidgetManager->RemoveWidget(mQuickPlayButton);
 }
 
 void GameSelector::OrderInManagerChanged()
@@ -1073,7 +1075,7 @@ void GameSelector::OrderInManagerChanged()
 	mWidgetManager->PutInfront(mChangeUserButton, this);
 	mWidgetManager->PutInfront(mZombatarButton, this); // @Patoke: z order for new widgets
 	mWidgetManager->PutInfront(mAchievementsButton, this);
-	//mWidgetManager->PutInfront(mQuickPlayButton, this);
+	mWidgetManager->PutInfront(mQuickPlayButton, this);
 }
 
 // GOTY @Patoke: 0x44EB11
@@ -1380,7 +1382,7 @@ void GameSelector::ButtonDepress(int theId)
 		ShowAchievementsScreen();
 		break;
 	case GameSelector::GameSelector_QuickPlay:
-		// GameSelector::ShowQuickPlayScreen();
+		mApp->DoDialog(Dialogs::DIALOG_COOP_LOBBY, true, "Co-op Online", "", "", Dialog::BUTTONS_NONE);
 		break;
 	}
 }

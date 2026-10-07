@@ -23,6 +23,7 @@
 #include <time.h>
 #include "LawnApp.h"
 #include "Coop/CoopGardenManager.h"
+#include "Coop/CoopLobbyController.h"
 #include "Lawn/Board.h"
 #include "Lawn/Plant.h"
 #include "Lawn/Zombie.h"
@@ -48,6 +49,7 @@
 #include "Lawn/Widget/TitleScreen.h"
 #include "Lawn/Widget/StoreScreen.h"
 #include "Lawn/Widget/CheatDialog.h"
+#include "Lawn/Widget/CoopLobbyDialog.h"
 #include "Lawn/Widget/GameSelector.h"
 #include "Lawn/Widget/CreditScreen.h"
 #include "Sexy.TodLib/EffectSystem.h"
@@ -67,6 +69,11 @@
 #include "widget/Checkbox.h"
 #include "widget/Dialog.h"
 #include "SexyAppFramework/resource.h"
+
+#include "Lawn/SeedPacket.h"
+
+#include <array>
+#include <random>
 
 bool gIsPartnerBuild = false; // GOTY @Patoke: 0x729659
 bool gSlowMo = false;
@@ -109,6 +116,8 @@ LawnApp::LawnApp()
 {
 	mBoard = nullptr;
 	mCoopGardenManager = new Coop::CoopGardenManager(this);
+	mSinglePlayerInfoBeforeCoop = nullptr;
+	mSinglePlayerModeBeforeCoop = GameMode::GAMEMODE_ADVENTURE;
 	mGameSelector = nullptr;
 	mChallengeScreen = nullptr;
 	mSeedChooserScreen = nullptr;
@@ -335,7 +344,7 @@ void LawnApp::KillBoard()
 {
 	if (mCoopGardenManager && mCoopGardenManager->IsActive())
 	{
-		mCoopGardenManager->Stop();
+		StopCoopMatch();
 		SetCursor(CURSOR_POINTER);
 		return;
 	}
@@ -368,6 +377,104 @@ void LawnApp::KillBoard()
 	}
 
 	SetCursor(CURSOR_POINTER);
+}
+
+bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
+{
+	if (!lobby || lobby->GetLocalPlayerId() == 0 || !lobby->GetSession().HasStarted()
+		|| mPlayerInfo == nullptr || mCoopGardenManager == nullptr || mCoopGardenManager->IsActive()
+		|| mBoard != nullptr || !mWidgetManager)
+		return false;
+
+	const Coop::CoopLobbySettings settings = lobby->GetSession().GetLobbySettings();
+	if (settings.mode != Coop::CoopMode::CLASSIC || settings.difficulty > Coop::CoopDifficulty::HARD)
+		return false;
+	const int startingSun = settings.difficulty == Coop::CoopDifficulty::RELAXED ? 100
+		: settings.difficulty == Coop::CoopDifficulty::HARD ? 25 : 50;
+	int coopLevel = 0;
+	switch (settings.map)
+	{
+	case Coop::CoopMapId::DAY: coopLevel = 8; break;
+	case Coop::CoopMapId::NIGHT: coopLevel = 18; break;
+	case Coop::CoopMapId::POOL: coopLevel = 28; break;
+	case Coop::CoopMapId::FOG: coopLevel = 38; break;
+	case Coop::CoopMapId::ROOF: coopLevel = 48; break;
+	default: return false;
+	}
+
+	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
+	mSinglePlayerModeBeforeCoop = mGameMode;
+	mCoopSandboxPlayerInfo = std::make_unique<PlayerInfo>(*mPlayerInfo);
+	std::random_device random;
+	do
+	{
+		mCoopSandboxPlayerInfo->mId = static_cast<std::uint32_t>(random()) | 0x80000000U;
+	} while (mCoopSandboxPlayerInfo->mId == mSinglePlayerInfoBeforeCoop->mId);
+	mCoopSandboxPlayerInfo->mName = mPlayerInfo->mName + " (Co-op)";
+	mCoopSandboxPlayerInfo->mLevel = coopLevel;
+	mCoopSandboxPlayerInfo->mFinishedAdventure = 1;
+	mPlayerInfo = mCoopSandboxPlayerInfo.get();
+	mGameMode = GameMode::GAMEMODE_ADVENTURE;
+	mBoardResult = BoardResult::BOARDRESULT_NONE;
+	mCoopLobbyController = std::move(lobby);
+
+	const std::array<SeedType, 6> dayDeck{SeedType::SEED_SUNFLOWER, SeedType::SEED_PEASHOOTER,
+		SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE, SeedType::SEED_SNOWPEA};
+	const std::array<SeedType, 6> nightDeck{SeedType::SEED_PUFFSHROOM, SeedType::SEED_SUNSHROOM,
+		SeedType::SEED_FUMESHROOM, SeedType::SEED_GRAVEBUSTER, SeedType::SEED_POTATOMINE, SeedType::SEED_SUNFLOWER};
+	const std::array<SeedType, 6> poolDeck{SeedType::SEED_LILYPAD, SeedType::SEED_SUNFLOWER,
+		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE};
+	const std::array<SeedType, 6> fogDeck{SeedType::SEED_PLANTERN, SeedType::SEED_SUNFLOWER,
+		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_PUFFSHROOM};
+	const std::array<SeedType, 6> roofDeck{SeedType::SEED_FLOWERPOT, SeedType::SEED_SUNFLOWER,
+		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE};
+	const std::array<SeedType, 6>* deck = &dayDeck;
+	switch (settings.map)
+	{
+	case Coop::CoopMapId::NIGHT: deck = &nightDeck; break;
+	case Coop::CoopMapId::POOL: deck = &poolDeck; break;
+	case Coop::CoopMapId::FOG: deck = &fogDeck; break;
+	case Coop::CoopMapId::ROOF: deck = &roofDeck; break;
+	default: break;
+	}
+
+	const bool gardensStarted = mCoopGardenManager->Start(mCoopLobbyController->GetSession(),
+		[deck, startingSun](Board& board, const Coop::GardenInstance&)
+		{
+			board.InitLevel();
+			if (board.mSeedBank == nullptr || board.mSeedBank->mNumPackets < 3)
+				return false;
+			board.mSeedBank->mNumPackets = static_cast<int>(deck->size());
+			for (std::size_t i = 0; i < deck->size(); ++i)
+				board.mSeedBank->mSeedPackets[i].SetPacketType((*deck)[i]);
+			board.mSeedBank->RefreshAllPackets();
+			board.StartLevel();
+			board.mSunMoney = startingSun;
+			board.SetGardenGameScene(GameScenes::SCENE_PLAYING);
+			return true;
+		});
+	if (!gardensStarted || !mCoopGardenManager->SetLocalPlayerId(mCoopLobbyController->GetLocalPlayerId())
+		|| mCoopLobbyController->GetTransport() == nullptr
+		|| !mCoopGardenManager->AttachTransport(*mCoopLobbyController->GetTransport()))
+	{
+		StopCoopMatch();
+		return false;
+	}
+	return true;
+}
+
+void LawnApp::StopCoopMatch()
+{
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		mCoopGardenManager->Stop();
+	if (mCoopSandboxPlayerInfo)
+	{
+		mPlayerInfo = mSinglePlayerInfoBeforeCoop;
+		mGameMode = mSinglePlayerModeBeforeCoop;
+		mCoopSandboxPlayerInfo.reset();
+		mSinglePlayerInfoBeforeCoop = nullptr;
+	}
+	mCoopLobbyController.reset();
 }
 
 bool LawnApp::CanPauseNow()
@@ -406,7 +513,8 @@ void LawnApp::LostFocus()
 
 void LawnApp::WriteToRegistry()
 {
-	if (mPlayerInfo)
+	const bool coopSessionActive = mCoopGardenManager && mCoopGardenManager->IsActive();
+	if (mPlayerInfo && !coopSessionActive)
 	{
 		RegistryWriteString("CurUser", mPlayerInfo->mName);
 		mPlayerInfo->SaveDetails();
@@ -423,6 +531,8 @@ void LawnApp::ReadFromRegistry()
 // GOTY @Patoke: 0x452800
 bool LawnApp::WriteCurrentUserConfig()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		return true;
 	if (mPlayerInfo)
 		mPlayerInfo->SaveDetails();
 
@@ -1177,6 +1287,12 @@ void LawnApp::DoConfirmSellDialog(const std::string& theMessage)
 
 Dialog* LawnApp::NewDialog(int theDialogId, bool isModal, const std::string& theDialogHeader, const std::string& theDialogLines, const std::string& theDialogFooter, int theButtonMode)
 {
+	if (theDialogId == Dialogs::DIALOG_COOP_LOBBY)
+	{
+		LawnDialog* aDialog = new CoopLobbyDialog(this);
+		CenterDialog(aDialog, aDialog->mWidth, aDialog->mHeight);
+		return aDialog;
+	}
 	LawnDialog* aDialog = new LawnDialog(
 		this, 
 		theDialogId, 
@@ -1760,7 +1876,17 @@ void LawnApp::UpdateFrames()
 
 		SexyApp::UpdateFrames();
 		if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		{
 			mCoopGardenManager->SyncTeamResults();
+			const Coop::TeamResult result = mCoopGardenManager->GetTeamResult();
+			if (result == Coop::TeamResult::TEAM_DEFEAT || result == Coop::TeamResult::TEAM_VICTORY)
+			{
+				const bool victory = result == Coop::TeamResult::TEAM_VICTORY;
+				ShowGameSelector();
+				DoDialog(Dialogs::DIALOG_GAME_OVER, true, "Co-op Result",
+					victory ? "TEAM VICTORY" : "TEAM DEFEAT", "The cooperative session has ended.", Dialog::BUTTONS_OK_CANCEL);
+			}
+		}
 
 		mMusic->MusicUpdate();
 

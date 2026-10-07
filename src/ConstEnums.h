@@ -325,6 +325,7 @@ enum Dialogs : int32_t
     DIALOG_PURCHASE_PACKET_SLOT,                // 50：升级卡槽的格子数量
     DIALOG_CustomSurvival,
     DIALOG_AllowedZombie,
+    DIALOG_COOP_LOBBY,
     NUM_DIALOGS
 };
 enum DebugTextMode : int32_t

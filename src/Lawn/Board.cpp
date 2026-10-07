@@ -504,6 +504,8 @@ void Board::TryToSaveGame()
 
 bool Board::NeedSaveGame()
 {
+	if (mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
+		return false;
 	return 
 		mApp->mGameMode != GameMode::GAMEMODE_CHALLENGE_ICE && 
 		mApp->mGameMode != GameMode::GAMEMODE_UPSELL && 

@@ -26,6 +26,8 @@
 #include "SexyAppFramework/SexyApp.h"
 #include "Sexy.TodLib/TodFoley.h"
 
+#include <memory>
+
 class Board;
 class GameSelector;
 class ChallengeDefinition;
@@ -49,7 +51,7 @@ class StoreScreen;
 class AlmanacDialog;
 class TypingCheck;
 struct CustomSurvivalOption;
-namespace Coop { class CoopGardenManager; }
+namespace Coop { class CoopGardenManager; class CoopLobbyController; }
 
 namespace Sexy
 {
@@ -78,6 +80,10 @@ class LawnApp : public SexyApp
 public:
 	Board*							mBoard;
 	Coop::CoopGardenManager*		mCoopGardenManager;
+	std::unique_ptr<Coop::CoopLobbyController> mCoopLobbyController;
+	std::unique_ptr<PlayerInfo> mCoopSandboxPlayerInfo;
+	PlayerInfo*						mSinglePlayerInfoBeforeCoop;
+	GameMode						mSinglePlayerModeBeforeCoop;
 	TitleScreen*					mTitleScreen;
 	GameSelector*					mGameSelector;
 	SeedChooserScreen*				mSeedChooserScreen;
@@ -191,6 +197,8 @@ public:
 	void							PreNewGame(GameMode theGameMode, CustomSurvivalOption option);
 	void							ShowGameSelector();
 	void							KillGameSelector();
+	bool							StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby);
+	void							StopCoopMatch();
 	void							ShowAwardScreen(AwardType theAwardType, bool theShowAchievements); // @Patoke: add argument
 	void							KillAwardScreen();
 	void							ShowSeedChooserScreen();
