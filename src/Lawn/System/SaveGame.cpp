@@ -1552,16 +1552,21 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 		bool aUseTemp = (theReanimation->mTrackInstances == nullptr);
 		if (theContext.mReading)
 		{
+			const std::size_t allocationSize = static_cast<std::size_t>(aCount) * sizeof(ReanimatorTrackInstance);
+			TodAllocator* allocator = FindGlobalAllocator(allocationSize);
+			if (allocator == nullptr)
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			theReanimation->mTrackInstances = reinterpret_cast<ReanimatorTrackInstance*>(
-				FindGlobalAllocator(aCount * sizeof(ReanimatorTrackInstance))->Calloc(aCount * sizeof(ReanimatorTrackInstance)));
+				allocator->Calloc(allocationSize));
 			if (theReanimation->mTrackInstances == nullptr)
 			{
-				aUseTemp = true;
+				theContext.mFailed = true;
+				return;
 			}
-			else
-			{
-				aUseTemp = false;
-			}
+			aUseTemp = false;
 		}
 		else
 		{
@@ -3156,6 +3161,19 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 	auto aValidCoin = [&](uint32_t id) { return theBoard->mCoins.DataArrayTryToGet(id) != nullptr; };
 	auto aValidParticle = [&](uint32_t id) { return theBoard->mApp->ParticleTryToGet(static_cast<ParticleSystemID>(id)) != nullptr; };
 	auto aValidReanimation = [&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; };
+	Reanimation* aReanimation = nullptr;
+	while (theBoard->mApp->mEffectSystem->mReanimationHolder->mReanimations.IterateNext(aReanimation))
+	{
+		if (aReanimation->mDefinition == nullptr || aReanimation->mDefinition->mTracks.count < 0
+			|| (aReanimation->mDefinition->mTracks.count > 0 && aReanimation->mTrackInstances == nullptr))
+			return false;
+		for (int aTrackIndex = 0; aTrackIndex < aReanimation->mDefinition->mTracks.count; ++aTrackIndex)
+		{
+			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aReanimation->mTrackInstances[aTrackIndex].mAttachmentID),
+				true, [&](uint32_t id) { return theBoard->mApp->mEffectSystem->mAttachmentHolder->mAttachments.DataArrayTryToGet(id) != nullptr; }))
+				return false;
+		}
+	}
 	if (!IsValidPortableSaveReferenceRange(theBoard->mIceParticleID, true, aValidParticle))
 		return false;
 	for (int aRow = 0; aRow < MAX_GRID_SIZE_Y; ++aRow)
