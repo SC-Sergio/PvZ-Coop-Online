@@ -2909,9 +2909,16 @@ static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
 
 static bool ValidateV4SeedBankIndices(Board* theBoard)
 {
-	return IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
-		&& IsValidPortableSaveOptionalIndex(theBoard->mCursorObject->mSeedBankIndex,
-			static_cast<uint32_t>(theBoard->mSeedBank->mNumPackets));
+	if (!IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
+		|| !IsValidPortableSaveOptionalIndex(theBoard->mCursorObject->mSeedBankIndex,
+			static_cast<uint32_t>(theBoard->mSeedBank->mNumPackets)))
+		return false;
+	for (int i = 0; i < SEEDBANK_MAX; ++i)
+	{
+		if (theBoard->mSeedBank->mSeedPackets[i].mIndex != i)
+			return false;
+	}
+	return true;
 }
 
 static void FixBoardAfterLoad(Board* theBoard)
