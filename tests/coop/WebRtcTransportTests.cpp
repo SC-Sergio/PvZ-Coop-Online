@@ -6,6 +6,7 @@
 #include "Coop/WebRtcNetworkTransport.h"
 #include "Coop/WebRtcSignalingTransport.h"
 #include "Coop/CoopLobbyController.h"
+#include "Coop/CommandEndpoint.h"
 
 #include <rtc/rtc.hpp>
 
@@ -15,12 +16,24 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 using namespace std::chrono_literals;
 
 namespace
 {
+	class RecordingCommandExecutor final : public Coop::IPlayerCommandExecutor
+	{
+	public:
+		bool Execute(const Coop::PlayerCommand& command) override
+		{
+			commands.push_back(command);
+			return true;
+		}
+		std::vector<Coop::PlayerCommand> commands;
+	};
+
 	int RunLocalPeerTest()
 	{
 	try
@@ -207,6 +220,99 @@ namespace
 				{ return !guest->GetSession().HasStarted() || guest->GetSession().GetGardenCount() != playerCount; }))
 				throw std::runtime_error("WebRTC lobby did not replicate the started garden session");
 
+			// Exchange owner-bound gameplay intents through the production authority
+			// endpoints before exercising same-ID WebRTC reconnect below.
+			for (const auto& guest : guests)
+			{
+				const Coop::PlayerId guestId = guest->GetLocalPlayerId();
+				const auto ownSlot = std::find_if(guest->GetSession().GetSlots().begin(),
+					guest->GetSession().GetSlots().end(), [guestId](const Coop::PlayerSlot& slot)
+					{ return slot.playerId == guestId && slot.gardenId.has_value(); });
+				if (ownSlot == guest->GetSession().GetSlots().end())
+					throw std::runtime_error("WebRTC guest has no garden before command replication");
+				Coop::PlayerCommand command;
+				command.senderId = guestId;
+				command.gardenId = *ownSlot->gardenId;
+				command.sequence = 1;
+				command.type = Coop::CommandType::PING;
+				command.value = static_cast<std::int32_t>(Coop::PingType::ALL_GOOD);
+				if (!Coop::SendCommandToHost(*guest->GetTransport(), hostId, command))
+					throw std::runtime_error("WebRTC guest could not send its authoritative gameplay intent");
+			}
+
+			Coop::AuthoritativeCommandProcessor hostProcessor;
+			RecordingCommandExecutor hostExecutor;
+			std::size_t acceptedCommandCount = 0;
+			const auto commandDeadline = std::chrono::steady_clock::now() + 10s;
+			while (std::chrono::steady_clock::now() < commandDeadline
+				&& acceptedCommandCount < guests.size())
+			{
+				const auto results = Coop::DrainAuthoritativeCommands(*host->GetTransport(), host->GetSession(),
+					hostProcessor, hostExecutor,
+					[&](const Coop::PlayerCommand& command)
+					{
+						const auto garden = std::find_if(host->GetSession().GetGardens().begin(),
+							host->GetSession().GetGardens().end(), [&command](const Coop::GardenInstance& entry)
+							{ return entry.id == command.gardenId; });
+						if (garden == host->GetSession().GetGardens().end())
+							throw std::runtime_error("WebRTC host could not resolve the command garden");
+						const std::uint64_t executeTick = garden->simulationTicks + Coop::COMMAND_EXECUTION_LEAD_TICKS;
+						if (Coop::BroadcastScheduledCommandToPeers(*host->GetTransport(), command,
+							executeTick, command.senderId) != guests.size() - 1)
+							throw std::runtime_error("WebRTC host could not broadcast the canonical command");
+						++acceptedCommandCount;
+					},
+					[&](Coop::TransportPlayerId recipient, const Coop::CommandAuthorityResponse& response)
+					{
+						Coop::CommandAuthorityResponse scheduled = response;
+						if (scheduled.acceptedCommand)
+							scheduled.serverTick = Coop::COMMAND_EXECUTION_LEAD_TICKS;
+						const auto bytes = Coop::SerializeAuthorityResponse(scheduled);
+						if (!bytes || !host->GetTransport()->SendTo(recipient, *bytes))
+							throw std::runtime_error("WebRTC host could not return the command authority receipt");
+					});
+				if (std::any_of(results.begin(), results.end(), [](Coop::CommandRejection result)
+					{ return result != Coop::CommandRejection::NONE; }))
+					throw std::runtime_error("WebRTC host rejected a valid owner-bound command");
+				std::this_thread::sleep_for(1ms);
+			}
+			if (acceptedCommandCount != guests.size() || hostExecutor.commands.size() != guests.size())
+				throw std::runtime_error("WebRTC host did not process every guest command");
+
+			for (auto& guest : guests)
+			{
+				Coop::AuthoritativeCommandProcessor guestProcessor;
+				RecordingCommandExecutor guestExecutor;
+				std::unordered_set<Coop::PlayerId> observedSenders;
+				std::size_t scheduledCommands = 0;
+				const auto guestCommandDeadline = std::chrono::steady_clock::now() + 10s;
+				while (std::chrono::steady_clock::now() < guestCommandDeadline
+					&& scheduledCommands < guests.size())
+				{
+					const auto results = Coop::DrainReplicatedCommands(*guest->GetTransport(), guest->GetSession(),
+						guestProcessor, guestExecutor, {},
+						[&](const Coop::PlayerCommand& command, std::uint64_t executeTick)
+						{
+							const auto owner = std::find_if(guest->GetSession().GetSlots().begin(),
+								guest->GetSession().GetSlots().end(), [&command](const Coop::PlayerSlot& slot)
+								{ return slot.playerId == command.senderId && slot.gardenId == command.gardenId; });
+							if (owner == guest->GetSession().GetSlots().end()
+								|| command.type != Coop::CommandType::PING || command.sequence != 1
+								|| executeTick != Coop::COMMAND_EXECUTION_LEAD_TICKS)
+								throw std::runtime_error("WebRTC guest rejected a command identity or canonical tick");
+							observedSenders.insert(command.senderId);
+							++scheduledCommands;
+						});
+					if (std::any_of(results.begin(), results.end(), [](Coop::CommandRejection result)
+						{ return result != Coop::CommandRejection::NONE; }))
+						throw std::runtime_error("WebRTC guest rejected a canonical host receipt");
+					std::this_thread::sleep_for(1ms);
+				}
+				if (scheduledCommands != guests.size() || observedSenders.size() != guests.size()
+					|| observedSenders.contains(hostId) || !guestExecutor.commands.empty())
+					throw std::runtime_error("WebRTC guest did not validate the complete team command set");
+			}
+
 			const std::size_t returningIndex = guests.size() - 1;
 			const Coop::PlayerId returningPlayerId = hostId + static_cast<Coop::PlayerId>(returningIndex + 1);
 			auto* oldGuestTransport = dynamic_cast<Coop::WebRtcSignalingTransport*>(guests[returningIndex]->GetTransport());
@@ -250,7 +356,7 @@ namespace
 				throw std::runtime_error("rejoined peer did not deliver its packet over the replacement DataChannel");
 			returnedTransport->Close();
 		}
-		std::cout << "Three/four-player signaling, lobby ready/start, and WebRTC transport tests passed\n";
+		std::cout << "Three/four-player signaling, lobby, authoritative commands, and WebRTC reconnect tests passed\n";
 		return 0;
 	}
 	catch (const std::exception& exception)
