@@ -23,6 +23,7 @@
 #include <time.h>
 #include "LawnApp.h"
 #include "Coop/CoopGardenManager.h"
+#include "Coop/CoopDifficulty.h"
 #include "Coop/CoopLobbyController.h"
 #include "Lawn/Board.h"
 #include "Lawn/Plant.h"
@@ -387,10 +388,13 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 		return false;
 
 	const Coop::CoopLobbySettings settings = lobby->GetSession().GetLobbySettings();
-	if (settings.mode != Coop::CoopMode::CLASSIC || settings.difficulty > Coop::CoopDifficulty::HARD)
+	if (settings.mode != Coop::CoopMode::CLASSIC)
 		return false;
-	const int startingSun = settings.difficulty == Coop::CoopDifficulty::RELAXED ? 100
-		: settings.difficulty == Coop::CoopDifficulty::HARD ? 25 : 50;
+	const std::optional<int> configuredStartingSun = Coop::GetCoopStartingSun(settings.difficulty,
+		lobby->GetSession().GetActivePlayerCount());
+	if (!configuredStartingSun)
+		return false;
+	const int startingSun = *configuredStartingSun;
 	int coopLevel = 0;
 	switch (settings.map)
 	{

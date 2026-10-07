@@ -43,6 +43,8 @@ Those tests cover local room allocation, four-player admission, host-only star-t
 
 When the manifest feature and CMake option are enabled, CTest also builds `coop-webrtc-transport-tests`. It creates two local libdatachannel peers, negotiates an ICE DataChannel, and verifies transport peer identity and binary packet bytes. This validates the adapter on one machine, not Internet reachability.
 
+The lobby exposes all six Classic difficulty profiles. Starting sun is defined by a profile and receives a small per-garden adjustment based on the number of active players; EMPTY slots are excluded. Current profiles control starting economy only. Wave composition and zombie stat scaling are not yet implemented.
+
 On Windows with Node.js on `PATH`, CTest also runs `coop-webrtc-signaling-process`: it starts the local signaling service and completes separate 3- and 4-player lobbies through READY/START, checking active garden counts and the empty slot. The game lobby's Internet mode reads `PVZ_COOP_SIGNALING_URL` (default `ws://127.0.0.1:8765`). Configure optional ICE services on the signaling server with `COOP_STUN_URL`, `COOP_TURN_URL`, `COOP_TURN_SHARED_SECRET`, and `COOP_TURN_CREDENTIAL_LIFETIME_SECONDS`; the server issues short-lived per-player TURN credentials. Use `wss://` for a public endpoint. Never commit the shared secret. Without a reachable TURN relay, restrictive NAT/firewall pairs can fail to connect.
 
 ## Coverage added

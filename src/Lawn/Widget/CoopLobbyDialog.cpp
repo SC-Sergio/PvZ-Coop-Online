@@ -5,6 +5,8 @@
 
 #include "CoopLobbyDialog.h"
 
+#include "../../Coop/CoopDifficulty.h"
+
 #include "../LawnCommon.h"
 #include "../../LawnApp.h"
 #include "../../Lawn/System/PlayerInfo.h"
@@ -371,7 +373,8 @@ void CoopLobbyDialog::ButtonDepress(int id)
 			return;
 		}
 		const int difficulty = static_cast<int>(mSelectedSettings.difficulty);
-		mSelectedSettings.difficulty = static_cast<Coop::CoopDifficulty>(difficulty == 0 ? 1 : difficulty == 1 ? 2 : 0);
+		mSelectedSettings.difficulty = static_cast<Coop::CoopDifficulty>((difficulty + 1)
+			% static_cast<int>(Coop::COOP_DIFFICULTY_PROFILES.size()));
 		ApplySelectedSettings();
 	}
 }
@@ -400,7 +403,7 @@ void CoopLobbyDialog::StartIfReplicated()
 		return;
 	if (!mApp->StartCoopMatch(std::move(mLobby)))
 	{
-		SetStatus("This build currently supports Classic mode at Normal difficulty only.");
+		SetStatus("This build currently supports Cooperative Classic only.");
 		return;
 	}
 	mApp->KillDialog(mId);
@@ -447,7 +450,7 @@ void CoopLobbyDialog::ApplySelectedSettings()
 void CoopLobbyDialog::RefreshSettingLabels()
 {
 	static constexpr const char* mapNames[] = {"Day", "Night", "Pool", "Fog", "Roof"};
-	static constexpr const char* difficultyNames[] = {"Relaxed", "Normal", "Hard"};
+	static constexpr const char* difficultyNames[] = {"Relaxed", "Normal", "Hard", "Nightmare", "Insane", "Custom"};
 	mMapButton->SetLabel(std::string("Map: ") + mapNames[static_cast<int>(mSelectedSettings.map)]);
 	mDifficultyButton->SetLabel(std::string("Difficulty: ") + difficultyNames[static_cast<int>(mSelectedSettings.difficulty)]);
 }

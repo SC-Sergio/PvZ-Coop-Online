@@ -11,9 +11,10 @@ Priorities remain P0 through P6: compiling baseline and safe architecture; 1–4
 | 4 | Local multi-client authority harness | Repeatable host/client simulation | Partial; four-peer FIFO transport and a host-to-guest accepted-command echo are unit tested; no playable local multi-client match or simulation drift recovery yet |
 | 5 | LAN transport | Two then three/four process play | Partial; bounded TCP stream adapter and separate-process 3/4-player localhost lobby smoke tests pass; physical-LAN reachability/security testing remains |
 | 6 | Private lobby and ready flow | Create/join/settings/ready/start/leave evidence | Partial; menu supports TCP LAN and optional WebRTC create/join, displays an invite URL and dynamic slots, and replicates map/difficulty settings. TCP 3/4-player and WebRTC 2-player local signaling lobby tests pass |
-| 7 | Internet backend | Cross-network session without routine port forwarding | Partial; libdatachannel transport, signaling client/server, invite UI, TURN environment configuration, and local end-to-end lobby test implemented. Public WSS/TURN deployment and cross-network NAT traversal remain unverified |
+| 7 | Internet backend | Cross-network session without routine port forwarding | Partial; libdatachannel transport, signaling client/server, invite UI, server-issued temporary TURN credentials, and local end-to-end lobby test implemented. Public WSS/TURN deployment and cross-network NAT traversal remain unverified |
 | 8 | Heartbeat, grace, reconnect, full snapshot | Fault-injected reconnect evidence | Not started |
-| 9–17 | Difficulty, coop support, stats, achievements, modes, modifiers, profiles, resilience, polish | Phase-specific tests and playable evidence | Not started |
+| 9 | Data-driven difficulty | Tests across players, maps, modes and waves | Partial; Classic exposes six profiles and starting sun adjusts for active-player count; map/mode/wave modifiers and enemy stats remain |
+| 10–17 | Coop support, stats, achievements, modes, modifiers, profiles, resilience, polish | Phase-specific tests and playable evidence | Not started |
 
 Do not skip ahead to decorative features while P0–P6 are unstable. Online Playable V1 is complete only when every definition-of-done item in the project request has reproducible evidence, including a full match across different networks.
 

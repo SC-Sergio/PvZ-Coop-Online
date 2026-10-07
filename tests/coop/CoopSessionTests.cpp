@@ -1,4 +1,5 @@
 #include "../../src/Coop/CoopSession.h"
+#include "../../src/Coop/CoopDifficulty.h"
 #include "../../src/Coop/PlayerCommand.h"
 #include "../../src/Coop/CommandSerialization.h"
 #include "../../src/Coop/NetworkTransport.h"
@@ -38,6 +39,21 @@ namespace
 			for (std::size_t i = count; i < Coop::MAX_PLAYERS; ++i)
 				Require(session.GetSlots()[i].state == Coop::PlayerState::EMPTY, "unused lobby slots remain empty");
 		}
+	}
+
+	void TestCoopDifficultyProfiles()
+	{
+		static constexpr int expected[] = {115, 65, 40, 25, 15, 65};
+		for (std::size_t i = 0; i < Coop::COOP_DIFFICULTY_PROFILES.size(); ++i)
+		{
+			const auto difficulty = Coop::COOP_DIFFICULTY_PROFILES[i].difficulty;
+			Require(Coop::GetCoopStartingSun(difficulty, 1) == expected[i], "single-player garden gets defined difficulty starting sun");
+			Require(Coop::GetCoopStartingSun(difficulty, 4) == Coop::COOP_DIFFICULTY_PROFILES[i].startingSun,
+				"four-player starting sun follows the selected difficulty profile");
+		}
+		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 0), "zero-player difficulty configuration is rejected");
+		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 5), "player counts above room capacity are rejected");
+		Require(!Coop::GetCoopStartingSun(static_cast<Coop::CoopDifficulty>(255), 1), "unknown difficulty values are rejected");
 	}
 
 	void TestCapacityIdentityAndLeave()
@@ -891,6 +907,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestCoopDifficultyProfiles();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();
 	TestHostPromotionAndEmptySlotStart();
