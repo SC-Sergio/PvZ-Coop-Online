@@ -228,3 +228,26 @@ test("exposes a no-store health endpoint", async () => {
 	assert.equal(response.headers.get("cache-control"), "no-store");
 	assert.deepEqual(await response.json(), { ok: true });
 });
+
+test("bounds active WebSocket connections and rejects invalid limits", async (t) => {
+  assert.throws(() => createSignalingServer({ maxConnections: 0 }), /between 1 and 16384/);
+  assert.throws(() => createSignalingServer({ maxConnections: 1.5 }), /between 1 and 16384/);
+  const limitedServer = createSignalingServer({ host: "127.0.0.1", port: 0, maxConnections: 1 });
+  const address = await limitedServer.listen();
+  const limitedEndpoint = `ws://127.0.0.1:${address.port}`;
+  const first = await connect(limitedEndpoint);
+  const second = await connect(limitedEndpoint);
+  t.after(async () => {
+    first.terminate();
+    second.terminate();
+    await limitedServer.close();
+  });
+
+  assert.deepEqual(await waitForType(second, "error"), { type: "error", code: "SERVER_BUSY" });
+  const close = await new Promise((resolve) => second.once("close", (code, reason) => resolve({
+    code,
+    reason: reason.toString(),
+  })));
+  assert.equal(close.code, 1013);
+  assert.equal(close.reason, "server busy");
+});

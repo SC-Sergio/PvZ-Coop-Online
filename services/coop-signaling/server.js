@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer } from "ws";
 
 const MAX_PLAYERS = 4;
 const MAX_ROOMS = 10_000;
+const DEFAULT_MAX_CONNECTIONS = 512;
 const MAX_PAYLOAD_BYTES = 32 * 1024;
 const ROOM_CODE_PATTERN = /^[0-9A-F]{16}$/;
 const PLAYER_ID_PATTERN = /^[1-9][0-9]{0,9}$/;
@@ -27,9 +28,12 @@ export function createSignalingServer({
   stunUrl = process.env.COOP_STUN_URL,
   turnUrl = process.env.COOP_TURN_URL,
   turnSharedSecret = process.env.COOP_TURN_SHARED_SECRET,
+  maxConnections = DEFAULT_MAX_CONNECTIONS,
   turnCredentialLifetimeSeconds = process.env.COOP_TURN_CREDENTIAL_LIFETIME_SECONDS === undefined
     ? 1800 : Number(process.env.COOP_TURN_CREDENTIAL_LIFETIME_SECONDS),
 } = {}) {
+  if (!Number.isInteger(maxConnections) || maxConnections < 1 || maxConnections > 16_384)
+    throw new Error("maxConnections must be an integer between 1 and 16384");
   if (stunUrl !== undefined && (!/^stun:[^\s]{1,507}$/.test(stunUrl)))
     throw new Error("COOP_STUN_URL must be a STUN URL no longer than 512 characters");
   if (turnUrl !== undefined && (!/^turns?:[^\s]{1,506}$/.test(turnUrl)))
@@ -120,6 +124,11 @@ export function createSignalingServer({
   }
 
   webSocketServer.on("connection", (socket) => {
+    if (webSocketServer.clients.size > maxConnections) {
+      send(socket, { type: "error", code: "SERVER_BUSY" });
+      socket.close(1013, "server busy");
+      return;
+    }
     socket.isAlive = true;
     socket.on("pong", () => { socket.isAlive = true; });
     let tokens = 360;
