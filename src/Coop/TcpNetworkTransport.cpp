@@ -58,6 +58,7 @@ namespace Coop
 		constexpr std::size_t FRAME_HEADER_SIZE = 4;
 		constexpr std::size_t MAX_TCP_PEERS = MAX_PLAYERS - 1;
 		constexpr std::size_t MAX_TCP_INBOX_BYTES = MAX_TRANSPORT_MESSAGE_BYTES + FRAME_HEADER_SIZE + 8192;
+		constexpr std::uint32_t PEER_HANDSHAKE_TIMEOUT_MS = 1000;
 
 		void InitializeSocketRuntime()
 		{
@@ -566,7 +567,7 @@ namespace Coop
 		if (accepted == INVALID_SOCKET_HANDLE)
 			return std::nullopt;
 		std::array<std::uint8_t, 8> hello{};
-		const bool receivedHello = ReceiveExactBlocking(accepted, hello.data(), hello.size(), timeoutMilliseconds)
+		const bool receivedHello = ReceiveExactBlocking(accepted, hello.data(), hello.size(), PEER_HANDSHAKE_TIMEOUT_MS)
 			&& std::equal(HANDSHAKE_MAGIC.begin(), HANDSHAKE_MAGIC.end(), hello.begin());
 		const TransportPlayerId claimedPlayerId = receivedHello ? ReadU32LE(hello.data() + 4) : 0;
 		bool valid = receivedHello && claimedPlayerId != 0

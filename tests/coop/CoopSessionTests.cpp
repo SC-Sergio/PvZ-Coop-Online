@@ -816,10 +816,22 @@ int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playe
 			return EXIT_FAILURE;
 		std::cout << "host-listening" << std::endl;
 		bool hostReady = false;
+		bool settingsApplied = false;
+		std::size_t lastActiveCount = 0;
 		while (std::chrono::steady_clock::now() < deadline)
 		{
 			host->PumpLobby();
-			if (host->GetSession().GetActivePlayerCount() == playerCount && !hostReady)
+			if (host->GetSession().GetActivePlayerCount() != lastActiveCount)
+			{
+				lastActiveCount = host->GetSession().GetActivePlayerCount();
+				std::cout << "host-player-count=" << lastActiveCount << std::endl;
+			}
+			if (host->GetSession().GetActivePlayerCount() == playerCount && !settingsApplied)
+			{
+				settingsApplied = host->SetLobbySettings({Coop::CoopMapId::POOL,
+					Coop::CoopDifficulty::HARD, Coop::CoopMode::CLASSIC});
+			}
+			if (settingsApplied && !hostReady)
 			{
 				hostReady = host->SetLocalReady(true);
 				std::cout << "host-roster-ready" << std::endl;
@@ -849,7 +861,9 @@ int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playe
 		while (std::chrono::steady_clock::now() < deadline)
 		{
 			guest->PumpLobby();
-			if (guest->GetSession().GetActivePlayerCount() == playerCount && !guestReady)
+			const Coop::CoopLobbySettings& settings = guest->GetSession().GetLobbySettings();
+			if (guest->GetSession().GetActivePlayerCount() == playerCount && !guestReady
+				&& settings.map == Coop::CoopMapId::POOL && settings.difficulty == Coop::CoopDifficulty::HARD)
 			{
 				guestReady = guest->SetLocalReady(true);
 				std::cout << "guest-ready-sent" << std::endl;
@@ -861,6 +875,7 @@ int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playe
 				const bool emptyRemainder = std::all_of(slots.begin() + playerCount, slots.end(),
 					[](const Coop::PlayerSlot& slot) { return slot.state == Coop::PlayerState::EMPTY; });
 				return guest->GetSession().GetGardenCount() == playerCount && emptyRemainder
+					&& settings.map == Coop::CoopMapId::POOL && settings.difficulty == Coop::CoopDifficulty::HARD
 					? EXIT_SUCCESS : EXIT_FAILURE;
 			}
 			if (guest->IsClosed())

@@ -48,7 +48,12 @@ foreach ($guestCount in @(2, 3)) {
 		$hostOut = $hostProcess.StandardOutput.ReadToEnd()
 		$hostErr = $hostProcess.StandardError.ReadToEnd()
 		if ($hostProcess.ExitCode -ne 0 -or -not $hostOut.Contains('host-match-started')) {
-			throw "TCP lobby host failed for $playerCount active players (exit=$($hostProcess.ExitCode)).`n$hostOut$hostErr"
+			$guestDetails = @()
+			foreach ($guestProcess in $guestProcesses) {
+				$guestDetails += $guestProcess.StandardOutput.ReadToEnd()
+				$guestDetails += $guestProcess.StandardError.ReadToEnd()
+			}
+			throw "TCP lobby host failed for $playerCount active players (exit=$($hostProcess.ExitCode)).`n$hostOut$hostErr`n$($guestDetails -join "`n")"
 		}
 		foreach ($guestProcess in $guestProcesses) {
 			$guestOut = $guestProcess.StandardOutput.ReadToEnd()
