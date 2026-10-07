@@ -2906,6 +2906,19 @@ static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
 			[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; }))
 			return false;
 	}
+
+	GridItem* aGridItem = nullptr;
+	while (theBoard->mGridItems.IterateNext(aGridItem))
+	{
+		const bool aRequiresReanimation = aGridItem->mGridItemType == GridItemType::GRIDITEM_STINKY
+			|| aGridItem->mGridItemType == GridItemType::GRIDITEM_PORTAL_CIRCLE
+			|| aGridItem->mGridItemType == GridItemType::GRIDITEM_PORTAL_SQUARE
+			|| aGridItem->mGridItemType == GridItemType::GRIDITEM_RAKE;
+		if (aRequiresReanimation
+			&& !IsValidPortableSaveReference(static_cast<uint32_t>(aGridItem->mGridItemReanimID), false,
+				[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; }))
+			return false;
+	}
 	return true;
 }
 
