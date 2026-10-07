@@ -88,6 +88,9 @@ public:
 	GameMode						mSinglePlayerModeBeforeCoop;
 	bool							mEasyPlantingCheatBeforeCoop;
 	CoopSavedCheatModes			mCheatModesBeforeCoop;
+	bool							mSlowMoBeforeCoop;
+	bool							mFastMoBeforeCoop;
+	int								mSlowMoCounterBeforeCoop;
 	TitleScreen*					mTitleScreen;
 	GameSelector*					mGameSelector;
 	SeedChooserScreen*				mSeedChooserScreen;

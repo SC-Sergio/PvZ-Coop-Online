@@ -26,6 +26,7 @@
 #include "Coop/CoopDifficulty.h"
 #include "Coop/CoopLoadout.h"
 #include "Coop/CoopLobbyController.h"
+#include "Coop/SimulationRate.h"
 #include "Lawn/Board.h"
 #include "Lawn/Plant.h"
 #include "Lawn/Zombie.h"
@@ -120,6 +121,9 @@ LawnApp::LawnApp()
 	mSinglePlayerInfoBeforeCoop = nullptr;
 	mSinglePlayerModeBeforeCoop = GameMode::GAMEMODE_ADVENTURE;
 	mEasyPlantingCheatBeforeCoop = false;
+	mSlowMoBeforeCoop = false;
+	mFastMoBeforeCoop = false;
+	mSlowMoCounterBeforeCoop = 0;
 	mGameSelector = nullptr;
 	mChallengeScreen = nullptr;
 	mSeedChooserScreen = nullptr;
@@ -411,6 +415,12 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
 	mSinglePlayerModeBeforeCoop = mGameMode;
 	mEasyPlantingCheatBeforeCoop = mEasyPlantingCheat;
+	mSlowMoBeforeCoop = gSlowMo;
+	mFastMoBeforeCoop = gFastMo;
+	mSlowMoCounterBeforeCoop = gSlowMoCounter;
+	gSlowMo = false;
+	gFastMo = false;
+	gSlowMoCounter = 0;
 	mCheatModesBeforeCoop = { mMustacheMode, mSuperMowerMode, mFutureMode, mPinataMode,
 		mDanceMode, mDaisyMode, mSukhbirMode };
 	// Every peer must simulate gameplay from the same profile state. Copying the
@@ -497,6 +507,9 @@ void LawnApp::StopCoopMatch()
 		mDanceMode = mCheatModesBeforeCoop.dance;
 		mDaisyMode = mCheatModesBeforeCoop.daisy;
 		mSukhbirMode = mCheatModesBeforeCoop.sukhbir;
+		gSlowMo = mSlowMoBeforeCoop;
+		gFastMo = mFastMoBeforeCoop;
+		gSlowMoCounter = mSlowMoCounterBeforeCoop;
 		mCoopSandboxPlayerInfo.reset();
 		mSinglePlayerInfoBeforeCoop = nullptr;
 	}
@@ -1875,23 +1888,8 @@ void LawnApp::UpdateFrames()
 	UpdatePlayTimeStats();
 #endif
 
-	int aUpdateCount = 1;
-	if (gSlowMo)
-	{
-		++gSlowMoCounter;
-		if (gSlowMoCounter < 4)
-		{
-			aUpdateCount = 0;
-		}
-		else
-		{
-			gSlowMoCounter = 0;
-		}
-	}
-	else if (gFastMo)
-	{
-		aUpdateCount = 20;
-	}
+	const bool coopMatchActive = mCoopGardenManager && mCoopGardenManager->IsActive();
+	const int aUpdateCount = Coop::GetFrameUpdateCount(coopMatchActive, gSlowMo, gFastMo, gSlowMoCounter);
 
 	for (int i = 0; i < aUpdateCount; i++)
 	{

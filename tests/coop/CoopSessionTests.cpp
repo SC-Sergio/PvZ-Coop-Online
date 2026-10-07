@@ -12,6 +12,7 @@
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/Coop/DetachedFuture.h"
+#include "../../src/Coop/SimulationRate.h"
 #include "../../src/Coop/CoopSnapshotProtocol.h"
 #include "../../src/Coop/PendingSunLedger.h"
 #include "../../src/ConstEnums.h"
@@ -114,6 +115,24 @@ namespace
 		while (!workerFinished && std::chrono::steady_clock::now() < finishDeadline)
 			std::this_thread::yield();
 		Require(workerFinished, "discarded result does not cancel or strand its detached worker");
+	}
+
+	void TestCoopSimulationRateIgnoresGlobalTimeCheats()
+	{
+		int slowMotionCounter = 3;
+		Require(Coop::GetFrameUpdateCount(true, false, true, slowMotionCounter) == 1
+			&& slowMotionCounter == 0,
+			"co-op advances once per frame and clears a stale slow-motion counter even when fast mode is set");
+		slowMotionCounter = 2;
+		Require(Coop::GetFrameUpdateCount(true, true, false, slowMotionCounter) == 1
+			&& slowMotionCounter == 0,
+			"co-op ignores a stale slow-motion state");
+		slowMotionCounter = 0;
+		Require(Coop::GetFrameUpdateCount(false, false, true, slowMotionCounter) == 20,
+			"single-player fast-motion update cadence is preserved");
+		Require(Coop::GetFrameUpdateCount(false, true, false, slowMotionCounter) == 0
+			&& slowMotionCounter == 1,
+			"single-player slow-motion update cadence is preserved");
 	}
 
 	void TestClientRecoveryPolicy()
@@ -2310,6 +2329,7 @@ int main(int argc, char** argv)
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
 	TestDetachedFutureDoesNotBlockOnDestruction();
+	TestCoopSimulationRateIgnoresGlobalTimeCheats();
 	TestClientRecoveryPolicy();
 	TestPendingSunLedger();
 	TestGardenLevelStatsRecords();
