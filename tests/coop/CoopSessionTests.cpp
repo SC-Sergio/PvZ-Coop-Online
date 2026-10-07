@@ -837,10 +837,16 @@ namespace
 		Require(session.MarkDisconnected(62), "playing player can transition to disconnected");
 		Require(session.GetGardenCount() == 2 && session.GetSlots()[1].gardenId == guestGarden,
 			"disconnect preserves the player's garden and slot");
+		Require(Coop::RetainsGardenOwnership(session.GetSlots()[1], 62, guestGarden)
+			&& !Coop::RetainsGardenOwnership(session.GetSlots()[1], 62, guestGarden + 1)
+			&& !Coop::RetainsGardenOwnership(Coop::PlayerSlot{}, 62, guestGarden),
+			"a disconnected slot retains only its original player-to-garden binding");
 		Require(!session.MarkDisconnected(62), "duplicate disconnect transition is rejected");
 		Require(session.MarkTemporaryAI(62), "disconnected player can enter temporary AI state");
 		Require(!session.MarkTemporaryAI(62), "temporary AI transition cannot be repeated");
 		Require(session.BeginReconnect(62), "temporary AI can enter reconnecting state");
+		Require(Coop::RetainsGardenOwnership(session.GetSlots()[1], 62, guestGarden),
+			"a reconnecting slot keeps the same garden reserved for accepted transfers");
 		const auto encoded = Coop::SerializeSessionSnapshot(session);
 		Require(encoded.has_value(), "reconnecting session snapshot serializes");
 		Coop::CoopSession restored;

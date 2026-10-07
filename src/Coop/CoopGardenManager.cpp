@@ -850,13 +850,13 @@ namespace Coop
 		case CommandType::SEND_RESOURCE:
 		{
 			const auto targetSlot = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(), [&command](const PlayerSlot& slot)
-				{ return slot.state == PlayerState::PLAYING && slot.playerId == command.targetPlayerId
-					&& slot.gardenId == command.targetGardenId; });
+				{ return RetainsGardenOwnership(slot, command.targetPlayerId, command.targetGardenId); });
 			if (targetSlot == mSession->GetSlots().end())
 				return false;
 			const auto target = std::find_if(mGardens.begin(), mGardens.end(), [&targetSlot](const ManagedGarden& garden)
 				{ return garden.id == *targetSlot->gardenId; });
-			if (target == mGardens.end() || source->board->mSunMoney < static_cast<int>(command.amount)
+			if (target == mGardens.end() || target->owner != command.targetPlayerId
+				|| source->board->mSunMoney < static_cast<int>(command.amount)
 				|| target->board->mSunMoney > 90000 - static_cast<int>(command.amount))
 				return false;
 			if (!source->board->TakeSunMoney(static_cast<int>(command.amount)))

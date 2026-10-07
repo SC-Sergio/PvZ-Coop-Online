@@ -88,6 +88,11 @@ namespace Coop
 		std::optional<GardenId> gardenId;
 	};
 
+	inline bool RetainsGardenOwnership(const PlayerSlot& slot, PlayerId playerId, GardenId gardenId) noexcept
+	{
+		return slot.state != PlayerState::EMPTY && slot.playerId == playerId && slot.gardenId == gardenId;
+	}
+
 	struct CoopSessionSnapshot
 	{
 		bool started = false;
