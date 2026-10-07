@@ -204,3 +204,10 @@
 - **Verification:** Both MSVC Debug application builds succeeded with WebRTC off/on. CTest passed 2/2 and 4/4 respectively; `git diff --check` passed. Source commit `522422e` is pushed to `origin/feature/coop-online`.
 - **Limit:** No initialized Board is available for an interactive speed-control test without user-supplied legal game data. The code path is build-verified only.
 - **Next:** continue auditing gameplay and result mutations reachable before the command layer; then work toward asset-backed 1–4 player runtime validation and public Internet deployment.
+
+### Checkpoint: command and result-path audit
+
+- **Finding:** the active Classic match input path routes seed selection, planting, shovel removal, sun and other coin collection, and Cob Cannon fire through host-validated commands. Challenge end-of-wave result writes execute inside `ScopedGardenSimulationState`, which stores the result back on the source Board before restoring app state. No additional unscoped result mutation was found in this pass.
+- **Documentation:** corrected the protocol's gameplay-intent and executor lists to include non-sun coin collection and Cob Cannon fire.
+- **Limit:** this is a static source audit; command application, victory, and defeat still need initialized-Board runtime evidence with legal assets.
+- **Next:** audit garden-internal automatic reward and resource paths for cross-board effects, then strengthen fault/reconnect handling and pursue Internet service deployment.
