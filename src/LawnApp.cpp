@@ -485,6 +485,9 @@ void LawnApp::StopCoopMatch()
 
 bool LawnApp::CanPauseNow()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		return false;
+
 	if (mBoard == nullptr)  // 不在关卡内
 		return false;
 
@@ -939,6 +942,9 @@ void LawnApp::DoContinueDialog()
 
 void LawnApp::DoPauseDialog()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		return;
+
 	mBoard->Pause(true);
 	//FinishModelessDialogs();
 
@@ -1359,6 +1365,9 @@ bool LawnApp::NeedPauseGame()
 
 void LawnApp::ModalOpen()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		return;
+
 	if (mBoard && NeedPauseGame())
 	{
 		mBoard->Pause(true);
@@ -1367,6 +1376,9 @@ void LawnApp::ModalOpen()
 
 void LawnApp::ModalClose()
 {
+	if (mCoopGardenManager && mCoopGardenManager->IsActive())
+		return;
+
 	if (mBoard && !NeedPauseGame())
 	{
 	mBoard->Pause(false);
