@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { after, before, test } from "node:test";
 import { WebSocket } from "ws";
-import { createSignalingServer } from "./server.js";
+import { createSignalingServer, MAX_SOCKET_BUFFERED_BYTES, sendBounded } from "./server.js";
 
 let server;
 let endpoint;
@@ -70,6 +70,32 @@ function deliverQueuedMessages(socket) {
 function send(socket, message) {
   socket.send(JSON.stringify(message));
 }
+
+test("bounds signaling output buffers and closes slow consumers", () => {
+  const message = { type: "signal", payload: "bounded" };
+  const payloadBytes = Buffer.byteLength(JSON.stringify(message), "utf8");
+  let acceptedPayload;
+  const healthySocket = {
+    readyState: WebSocket.OPEN,
+    bufferedAmount: MAX_SOCKET_BUFFERED_BYTES - payloadBytes,
+    send(payload) { acceptedPayload = payload; },
+    close() { assert.fail("healthy socket must remain open"); },
+  };
+  assert.equal(sendBounded(healthySocket, message), true);
+  assert.equal(acceptedPayload, JSON.stringify(message));
+
+  let attemptedSend = false;
+  let closeCall;
+  const slowSocket = {
+    readyState: WebSocket.OPEN,
+    bufferedAmount: MAX_SOCKET_BUFFERED_BYTES - payloadBytes + 1,
+    send() { attemptedSend = true; },
+    close(code, reason) { closeCall = { code, reason }; },
+  };
+  assert.equal(sendBounded(slowSocket, message), false);
+  assert.equal(attemptedSend, false);
+  assert.deepEqual(closeCall, { code: 1013, reason: "slow consumer" });
+});
 
 async function waitForType(socket, type) {
   for (let i = 0; i < 8; ++i) {

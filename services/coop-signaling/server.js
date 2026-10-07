@@ -7,14 +7,22 @@ const MAX_PLAYERS = 4;
 const MAX_ROOMS = 10_000;
 const DEFAULT_MAX_CONNECTIONS = 512;
 const MAX_PAYLOAD_BYTES = 32 * 1024;
+export const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 const ROOM_CODE_PATTERN = /^[0-9A-F]{16}$/;
 const PLAYER_ID_PATTERN = /^[1-9][0-9]{0,9}$/;
 const RESUME_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const SIGNAL_KINDS = new Set(["offer", "answer", "candidate"]);
 
-function send(socket, message) {
-  if (socket && socket.readyState === WebSocket.OPEN)
-    socket.send(JSON.stringify(message));
+export function sendBounded(socket, message) {
+  if (!socket || socket.readyState !== WebSocket.OPEN)
+    return false;
+  const payload = JSON.stringify(message);
+  if (socket.bufferedAmount + Buffer.byteLength(payload, "utf8") > MAX_SOCKET_BUFFERED_BYTES) {
+    socket.close(1013, "slow consumer");
+    return false;
+  }
+  socket.send(payload);
+  return true;
 }
 
 function validPlayerId(value) {
@@ -94,7 +102,7 @@ export function createSignalingServer({
         if (!peer.socket || peer.socket === socket)
           continue;
         sessions.delete(peer.socket);
-        send(peer.socket, { type: "room-closed" });
+        sendBounded(peer.socket, { type: "room-closed" });
         peer.socket.close(1000, "room closed");
       }
       rooms.delete(session.roomCode);
@@ -110,7 +118,7 @@ export function createSignalingServer({
     }
     const host = room.players.get(room.hostId);
     if (host)
-      send(host.socket, { type: "peer-left", playerId: session.playerId });
+      sendBounded(host.socket, { type: "peer-left", playerId: session.playerId });
   }
 
   function assign(socket, roomCode, playerId, role) {
@@ -130,7 +138,7 @@ export function createSignalingServer({
 
   webSocketServer.on("connection", (socket) => {
     if (webSocketServer.clients.size > maxConnections) {
-      send(socket, { type: "error", code: "SERVER_BUSY" });
+      sendBounded(socket, { type: "error", code: "SERVER_BUSY" });
       socket.close(1013, "server busy");
       return;
     }
@@ -140,14 +148,14 @@ export function createSignalingServer({
     let lastRefill = Date.now();
     socket.on("message", (data, isBinary) => {
       if (isBinary || data.length === 0 || data.length > MAX_PAYLOAD_BYTES) {
-        send(socket, { type: "error", code: "INVALID_FRAME" });
+        sendBounded(socket, { type: "error", code: "INVALID_FRAME" });
         return;
       }
       const now = Date.now();
       tokens = Math.min(360, tokens + (now - lastRefill) * 0.006);
       lastRefill = now;
       if (tokens < 1) {
-        send(socket, { type: "error", code: "RATE_LIMITED" });
+        sendBounded(socket, { type: "error", code: "RATE_LIMITED" });
         return;
       }
       tokens -= 1;
@@ -156,22 +164,22 @@ export function createSignalingServer({
       try {
         message = JSON.parse(data.toString());
       } catch {
-        send(socket, { type: "error", code: "INVALID_JSON" });
+        sendBounded(socket, { type: "error", code: "INVALID_JSON" });
         return;
       }
       if (!message || typeof message !== "object" || Array.isArray(message)
         || typeof message.type !== "string") {
-        send(socket, { type: "error", code: "INVALID_MESSAGE" });
+        sendBounded(socket, { type: "error", code: "INVALID_MESSAGE" });
         return;
       }
 
       if (message.type === "create") {
         if (sessions.has(socket) || !validPlayerId(message.playerId)) {
-          send(socket, { type: "error", code: "INVALID_CREATE" });
+          sendBounded(socket, { type: "error", code: "INVALID_CREATE" });
           return;
         }
         if (rooms.size >= MAX_ROOMS) {
-          send(socket, { type: "error", code: "SERVER_BUSY" });
+          sendBounded(socket, { type: "error", code: "SERVER_BUSY" });
           return;
         }
         let roomCode;
@@ -180,34 +188,34 @@ export function createSignalingServer({
         } while (rooms.has(roomCode));
         rooms.set(roomCode, { hostId: message.playerId, players: new Map() });
         const resumeToken = assign(socket, roomCode, message.playerId, "host");
-        send(socket, { type: "created", roomCode, hostId: message.playerId, resumeToken, iceServers: issueIceServers(message.playerId) });
+        sendBounded(socket, { type: "created", roomCode, hostId: message.playerId, resumeToken, iceServers: issueIceServers(message.playerId) });
         return;
       }
 
       if (message.type === "join") {
         if (sessions.has(socket) || !validPlayerId(message.playerId)
           || typeof message.roomCode !== "string" || !ROOM_CODE_PATTERN.test(message.roomCode)) {
-          send(socket, { type: "error", code: "INVALID_JOIN" });
+          sendBounded(socket, { type: "error", code: "INVALID_JOIN" });
           return;
         }
         const room = rooms.get(message.roomCode);
         if (!room) {
-          send(socket, { type: "error", code: "ROOM_NOT_FOUND" });
+          sendBounded(socket, { type: "error", code: "ROOM_NOT_FOUND" });
           return;
         }
         if (room.players.has(message.playerId)) {
-          send(socket, { type: "error", code: "DUPLICATE_PLAYER" });
+          sendBounded(socket, { type: "error", code: "DUPLICATE_PLAYER" });
           return;
         }
         if (room.players.size >= MAX_PLAYERS) {
-          send(socket, { type: "error", code: "ROOM_FULL" });
+          sendBounded(socket, { type: "error", code: "ROOM_FULL" });
           return;
         }
         const resumeToken = assign(socket, message.roomCode, message.playerId, "guest");
         const host = room.players.get(room.hostId);
-        send(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId], resumeToken, iceServers: issueIceServers(message.playerId) });
+        sendBounded(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId], resumeToken, iceServers: issueIceServers(message.playerId) });
         if (host?.socket)
-          send(host.socket, { type: "peer-joined", playerId: message.playerId });
+          sendBounded(host.socket, { type: "peer-joined", playerId: message.playerId });
         return;
       }
 
@@ -215,24 +223,24 @@ export function createSignalingServer({
         if (sessions.has(socket) || !validPlayerId(message.playerId)
           || typeof message.roomCode !== "string" || !ROOM_CODE_PATTERN.test(message.roomCode)
           || typeof message.resumeToken !== "string" || !RESUME_TOKEN_PATTERN.test(message.resumeToken)) {
-          send(socket, { type: "error", code: "INVALID_REJOIN" });
+          sendBounded(socket, { type: "error", code: "INVALID_REJOIN" });
           return;
         }
         const room = rooms.get(message.roomCode);
         const player = room?.players.get(message.playerId);
         if (!player || player.role !== "guest"
           || !timingSafeEqual(player.resumeTokenHash, createHash("sha256").update(message.resumeToken).digest())) {
-          send(socket, { type: "error", code: "REJOIN_REJECTED" });
+          sendBounded(socket, { type: "error", code: "REJOIN_REJECTED" });
           return;
         }
         const host = room.players.get(room.hostId);
         if (!host?.socket) {
-          send(socket, { type: "error", code: "HOST_UNAVAILABLE" });
+          sendBounded(socket, { type: "error", code: "HOST_UNAVAILABLE" });
           return;
         }
         if (player.socket) {
           sessions.delete(player.socket);
-          send(host.socket, { type: "peer-left", playerId: message.playerId });
+          sendBounded(host.socket, { type: "peer-left", playerId: message.playerId });
           player.socket.close();
         }
         const nextResumeToken = randomBytes(32).toString("base64url");
@@ -240,8 +248,8 @@ export function createSignalingServer({
         player.socket = socket;
         player.disconnectedAt = null;
         sessions.set(socket, { roomCode: message.roomCode, playerId: message.playerId });
-        send(socket, { type: "rejoined", hostId: room.hostId, peers: [room.hostId], resumeToken: nextResumeToken, iceServers: issueIceServers(message.playerId) });
-        send(host.socket, { type: "peer-joined", playerId: message.playerId });
+        sendBounded(socket, { type: "rejoined", hostId: room.hostId, peers: [room.hostId], resumeToken: nextResumeToken, iceServers: issueIceServers(message.playerId) });
+        sendBounded(host.socket, { type: "peer-joined", playerId: message.playerId });
         return;
       }
 
@@ -250,17 +258,17 @@ export function createSignalingServer({
         if (!session || !validPlayerId(message.to) || !SIGNAL_KINDS.has(message.kind)
           || typeof message.payload !== "string" || message.payload.length === 0
           || Buffer.byteLength(message.payload, "utf8") > MAX_PAYLOAD_BYTES - 512) {
-          send(socket, { type: "error", code: "INVALID_SIGNAL" });
+          sendBounded(socket, { type: "error", code: "INVALID_SIGNAL" });
           return;
         }
         const room = rooms.get(session.roomCode);
         const target = room?.players.get(message.to);
         if (!target?.socket || message.to === session.playerId
           || (session.playerId !== room.hostId && message.to !== room.hostId)) {
-          send(socket, { type: "error", code: "INVALID_PEER" });
+          sendBounded(socket, { type: "error", code: "INVALID_PEER" });
           return;
         }
-        send(target.socket, {
+        sendBounded(target.socket, {
           type: "signal",
           from: session.playerId,
           kind: message.kind,
@@ -271,11 +279,11 @@ export function createSignalingServer({
 
       if (message.type === "leave") {
         removeClient(socket, true);
-        send(socket, { type: "left" });
+        sendBounded(socket, { type: "left" });
         return;
       }
 
-      send(socket, { type: "error", code: "UNKNOWN_TYPE" });
+      sendBounded(socket, { type: "error", code: "UNKNOWN_TYPE" });
     });
     socket.on("close", () => removeClient(socket));
     socket.on("error", () => removeClient(socket));

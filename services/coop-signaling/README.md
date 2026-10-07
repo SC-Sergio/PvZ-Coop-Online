@@ -25,7 +25,7 @@ $env:COOP_TURN_CREDENTIAL_LIFETIME_SECONDS = "1800"
 
 The service returns Coturn REST-style, per-player credentials with an expiry to each room member over the signaling connection. The shared secret stays server-side. Omit TURN settings for direct-connect-only development; restrictive NAT/firewall pairs may then fail. Protect the WSS endpoint and secret in deployment, and rotate the shared secret if exposed.
 
-The health endpoint is `http://127.0.0.1:8765/healthz`; WebSocket clients connect to `ws://127.0.0.1:8765`. A public deployment must terminate TLS and expose `wss://` through a reverse proxy, keep the configured global connection cap and per-socket message rate limit enabled, and keep only short-lived room signaling in memory. Never commit the TURN shared secret or other credentials.
+The health endpoint is `http://127.0.0.1:8765/healthz`; WebSocket clients connect to `ws://127.0.0.1:8765`. The service caps each socket's queued outbound data at 256 KiB and closes slow consumers with code 1013 before adding more frames. A public deployment must terminate TLS and expose `wss://` through a reverse proxy, keep the configured global connection cap and per-socket message rate limit enabled, and keep only short-lived room signaling in memory. Never commit the TURN shared secret or other credentials.
 
 ## Linux VPS deployment template
 
