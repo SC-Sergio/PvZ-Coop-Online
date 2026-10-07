@@ -68,3 +68,6 @@ Add focused tests for ready/unready/start rules, ownership, team defeat/victory,
 ## Manual play evidence still required
 
 Verify single-player using legally supplied assets, then host/client complete matches for 2, 3, and 4 players across distinct home networks. Confirm three players display one empty slot and run exactly three gardens; switch views while confirming all gardens keep ticking; exercise global victory/defeat and disconnect/rejoin. No such gameplay evidence exists yet.
+
+
+The signaling service has five Node tests covering private rooms, bounded host-only signaling, authenticated rejoin/token rotation, input validation, per-player TURN credentials and health checks. `docker compose config` and container startup have not been verified on this workstation because Docker is not installed.

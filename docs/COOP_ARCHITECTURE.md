@@ -47,3 +47,6 @@ For Cooperative Classic, only active gardens participate. Any active garden defe
 ## Host migration
 
 The host is authoritative in the initial design. Future migration requires a versioned full snapshot, stable entity IDs, tick/checksum agreement, and transfer of ownership/epoch to a selected peer. No migration is implemented yet.
+
+
+The signaling service includes a Linux VPS deployment template: Caddy terminates HTTPS/WSS, the Node process brokers bounded room signaling, and coturn issues relay service using short-lived credentials derived from a server-only shared secret. The secret and public address are operator-supplied through an ignored `.env`; the repository contains no live endpoint or credentials. The template currently exposes UDP TURN only, so networks blocking UDP need a separately tested TCP/TLS relay path.

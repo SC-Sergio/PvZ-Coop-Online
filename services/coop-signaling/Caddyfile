@@ -1,0 +1,4 @@
+{$COOP_SIGNAL_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy signaling:8765
+}

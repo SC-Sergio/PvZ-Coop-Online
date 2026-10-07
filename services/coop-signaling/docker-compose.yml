@@ -1,0 +1,60 @@
+services:
+  signaling:
+    build: .
+    restart: unless-stopped
+    environment:
+      COOP_SIGNAL_HOST: 0.0.0.0
+      COOP_SIGNAL_PORT: 8765
+      COOP_STUN_URL: ${COOP_STUN_URL:-stun:stun.l.google.com:19302}
+      COOP_TURN_URL: turn:${COOP_SIGNAL_DOMAIN}:3478?transport=udp
+      COOP_TURN_SHARED_SECRET: ${COOP_TURN_SHARED_SECRET:?set a private TURN shared secret in .env}
+      COOP_TURN_CREDENTIAL_LIFETIME_SECONDS: ${COOP_TURN_CREDENTIAL_LIFETIME_SECONDS:-1800}
+    expose:
+      - "8765"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      signaling:
+        condition: service_healthy
+    environment:
+      COOP_SIGNAL_DOMAIN: ${COOP_SIGNAL_DOMAIN:?set a public DNS name in .env}
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  coturn:
+    image: coturn/coturn:4.6.3-alpine
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=${COOP_TURN_SHARED_SECRET:?set a private TURN shared secret in .env}
+      - --realm=${COOP_SIGNAL_DOMAIN:?set a public DNS name in .env}
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --external-ip=${TURN_EXTERNAL_IP:?set the server public IPv4 in .env}
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --stale-nonce
+
+volumes:
+  caddy_data:
+  caddy_config:

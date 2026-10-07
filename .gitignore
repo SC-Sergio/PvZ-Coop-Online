@@ -415,4 +415,5 @@ tools/read-compiled/target
 *.sublime-workspace
 
 build-*/
+services/coop-signaling/.env
 /_*/
