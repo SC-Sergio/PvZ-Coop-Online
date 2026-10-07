@@ -40,8 +40,8 @@
 
 - **Change:** after host validation, network commands enter a bounded queue for a garden tick 25 updates ahead. The host returns a receipt to the origin and sends each other peer a recipient-bound accepted receipt carrying the same tick. Clients validate and queue the intent, then the garden manager executes due commands immediately before that Board's simulation update. Authority receipt serialization is version 2 because accepted command sender and recipient are now distinct for broadcasts.
 - **Verification:** unit tests confirm the future tick is propagated, clients queue without applying immediately, and each transport recipient receives the same command with the original sender and canonical host identity. Both MSVC Debug app configurations build; CTest passes 2/2 without WebRTC and 4/4 with WebRTC. `git diff --check` passed.
-- **Known limit:** the fixed lead is provisional and not latency-adaptive. Commands rejected by local queue limits or arriving after their tick mark that garden recovery FAILED; there is no rollback or general drift-repair protocol, and the manager scheduling path still lacks initialized-Board runtime tests. Failed local transport enqueues are not retried.
-- **Next:** add reliable receipt retry and missed-tick recovery, then continue garden-scoped simulation audit and live-game validation when legal resources are available.
+- **Known limit:** the fixed lead is provisional and not latency-adaptive. Commands rejected by local queue limits or arriving after their tick mark mark that garden recovery FAILED; there is no rollback or general drift-repair protocol, and the manager scheduling path still lacks initialized-Board runtime tests. Local `SendTo` backpressure is retained in a bounded FIFO; accepted commands rely on reliable ordered TCP/WebRTC delivery and have no application-level receipt ACK.
+- **Next:** add missed-tick recovery and general drift detection, then continue the garden-scoped simulation audit and live-game validation when legal resources are available.
 
 ### Checkpoint: SAVE4 entity row indices
 
