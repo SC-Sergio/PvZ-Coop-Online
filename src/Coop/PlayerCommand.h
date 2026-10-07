@@ -18,6 +18,7 @@ namespace Coop
 	constexpr std::uint32_t MAX_RESOURCE_TRANSFER = 2500;
 	constexpr double COMMAND_RATE_LIMIT_PER_SECOND = 20.0;
 	constexpr double COMMAND_RATE_BURST = 32.0;
+	constexpr std::uint64_t COMMAND_EXECUTION_LEAD_TICKS = 25;
 	constexpr std::int16_t BOARD_COLUMNS = 9;
 	constexpr std::int16_t BOARD_ROWS = 6;
 	constexpr std::int16_t MAX_COMMAND_PIXEL_COORDINATE = 2000;

@@ -15,7 +15,7 @@
 
 namespace Coop
 {
-	constexpr std::uint16_t SERIALIZATION_VERSION = 1;
+	constexpr std::uint16_t SERIALIZATION_VERSION = 2;
 	constexpr std::size_t SERIALIZED_COMMAND_SIZE = 53;
 	constexpr std::size_t SERIALIZED_AUTHORITY_RESPONSE_SIZE = 82;
 	using SerializedCommand = std::array<std::uint8_t, SERIALIZED_COMMAND_SIZE>;

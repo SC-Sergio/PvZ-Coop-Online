@@ -40,6 +40,28 @@ namespace Coop
 		return sent;
 	}
 
+	std::size_t BroadcastScheduledCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
+		std::uint64_t executeTick, TransportPlayerId excludedPeerId)
+	{
+		if (IsLocalOnlyCommand(command.type) || command.senderId == 0 || command.sequence == 0 || executeTick == 0)
+			return 0;
+		std::size_t sent = 0;
+		for (TransportPlayerId peerId : transport.GetConnectedPeerIds())
+		{
+			if (peerId == excludedPeerId || peerId == 0)
+				continue;
+			CommandAuthorityResponse response;
+			response.recipientPlayerId = peerId;
+			response.sequence = command.sequence;
+			response.serverTick = executeTick;
+			response.rejection = CommandRejection::NONE;
+			response.acceptedCommand = command;
+			if (const auto bytes = SerializeAuthorityResponse(response); bytes && transport.SendTo(peerId, *bytes))
+				++sent;
+		}
+		return sent;
+	}
+
 	std::size_t BroadcastSessionSnapshot(INetworkTransport& transport, const CoopSession& session)
 	{
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() != *session.GetHostPlayerId())
@@ -106,7 +128,8 @@ namespace Coop
 
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
 		CoopSession& session, AuthoritativeCommandProcessor& processor,
-		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket)
+		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket,
+		const ScheduledCommandCallback& onScheduledCommand)
 	{
 		std::vector<CommandRejection> results;
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() == *session.GetHostPlayerId())
@@ -142,7 +165,20 @@ namespace Coop
 					results.push_back(response->rejection);
 					continue;
 				}
-				results.push_back(processor.Process(session, *response->acceptedCommand, executor));
+				if (onScheduledCommand)
+				{
+					class AcceptedIntent final : public IPlayerCommandExecutor
+					{
+					public:
+						bool Execute(const PlayerCommand&) override { return true; }
+					} acceptedIntent;
+					const CommandRejection result = processor.Process(session, *response->acceptedCommand, acceptedIntent);
+					results.push_back(result);
+					if (result == CommandRejection::NONE)
+						onScheduledCommand(*response->acceptedCommand, response->serverTick);
+				}
+				else
+					results.push_back(processor.Process(session, *response->acceptedCommand, executor));
 				continue;
 			}
 			const std::optional<PlayerCommand> command = DeserializeCommand(packet->bytes);

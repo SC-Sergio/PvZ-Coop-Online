@@ -15,6 +15,7 @@
 namespace Coop
 {
 	using AcceptedCommandCallback = std::function<void(const PlayerCommand&)>;
+	using ScheduledCommandCallback = std::function<void(const PlayerCommand&, std::uint64_t)>;
 	using AuthorityResponseCallback = std::function<void(TransportPlayerId, const CommandAuthorityResponse&)>;
 	using ControlPacketCallback = std::function<bool(const TransportPacket&)>;
 	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command);
@@ -27,7 +28,10 @@ namespace Coop
 		const AuthorityResponseCallback& onResponse = {}, const ControlPacketCallback& onControlPacket = {});
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
 		CoopSession& session, AuthoritativeCommandProcessor& processor,
-		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket = {});
+		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket = {},
+		const ScheduledCommandCallback& onScheduledCommand = {});
+	std::size_t BroadcastScheduledCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
+		std::uint64_t executeTick, TransportPlayerId excludedPeerId = 0);
 }
 
 #endif

@@ -86,10 +86,18 @@ namespace Coop
 			std::shared_ptr<Sexy::MTRand> randomGenerator;
 			std::shared_ptr<PlayerInfo> playerInfo;
 		};
+		struct ScheduledCommand
+		{
+			PlayerCommand command;
+			std::uint64_t executeTick;
+		};
+		std::optional<std::uint64_t> GetCommandExecutionTick(GardenId gardenId) const noexcept;
+		bool QueueAcceptedCommand(const PlayerCommand& command, std::uint64_t executeTick);
 
 		LawnApp* mApp;
 		CoopSession* mSession = nullptr;
 		std::vector<ManagedGarden> mGardens;
+		std::vector<ScheduledCommand> mScheduledCommands;
 		std::optional<GardenId> mViewedGarden;
 		AuthoritativeCommandProcessor mCommandProcessor;
 		std::optional<PlayerId> mLocalPlayerId;
@@ -105,6 +113,8 @@ namespace Coop
 		std::chrono::steady_clock::time_point mLastRestoreConfirmationSend{};
 		std::uint64_t mNextSnapshotTransferId = 1;
 		std::uint64_t mNextLocalCommandSequence = 1;
+		bool mQueueCommandExecution = false;
+		bool mExecutingScheduledCommand = false;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
 		bool mPreviousSawYeti = false;

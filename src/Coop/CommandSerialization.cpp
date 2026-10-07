@@ -100,7 +100,7 @@ namespace Coop
 			|| static_cast<std::uint8_t>(response.rejection) > static_cast<std::uint8_t>(CommandRejection::NOT_AUTHORITY)
 			|| (response.rejection == CommandRejection::NONE) != response.acceptedCommand.has_value())
 			return std::nullopt;
-		if (response.acceptedCommand && (response.acceptedCommand->senderId != response.recipientPlayerId
+		if (response.acceptedCommand && (response.acceptedCommand->senderId == 0
 			|| response.acceptedCommand->sequence != response.sequence))
 			return std::nullopt;
 
@@ -149,7 +149,7 @@ namespace Coop
 		if (response.rejection == CommandRejection::NONE)
 		{
 			response.acceptedCommand = DeserializeCommand(commandBytes);
-			if (!response.acceptedCommand || response.acceptedCommand->senderId != response.recipientPlayerId
+			if (!response.acceptedCommand || response.acceptedCommand->senderId == 0
 				|| response.acceptedCommand->sequence != response.sequence)
 				return std::nullopt;
 		}

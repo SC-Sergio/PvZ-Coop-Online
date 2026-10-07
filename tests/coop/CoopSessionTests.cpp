@@ -1296,6 +1296,14 @@ namespace
 		Require(responseRoundTrip && responseRoundTrip->serverTick == 400 && responseRoundTrip->acceptedCommand
 			&& responseRoundTrip->acceptedCommand->sequence == 19,
 			"authority response carries canonical tick and accepted intent");
+		response.recipientPlayerId = 83;
+		const auto peerReplicationBytes = Coop::SerializeAuthorityResponse(response);
+		const auto peerReplication = peerReplicationBytes
+			? Coop::DeserializeAuthorityResponse(*peerReplicationBytes) : std::nullopt;
+		Require(peerReplication && peerReplication->recipientPlayerId == 83 && peerReplication->acceptedCommand
+			&& peerReplication->acceptedCommand->senderId == 82,
+			"accepted command receipt can target a peer other than the original command sender");
+		response.recipientPlayerId = 82;
 		response.rejection = Coop::CommandRejection::INVALID_COORDINATES;
 		response.acceptedCommand.reset();
 		const auto rejectedResponse = Coop::SerializeAuthorityResponse(response);
@@ -1338,21 +1346,35 @@ namespace
 		RecordingExecutor hostExecutor;
 		std::uint64_t observedServerTick = 0;
 		const auto accepted = Coop::DrainAuthoritativeCommands(*host, session, hostProcessor, hostExecutor,
-			[&host](const Coop::PlayerCommand& acceptedCommand)
-			{ Coop::BroadcastCommandToPeers(*host, acceptedCommand, acceptedCommand.senderId); },
+			[&host, &session](const Coop::PlayerCommand& acceptedCommand)
+			{
+				const auto& gardens = session.GetGardens();
+				const auto garden = std::find_if(gardens.begin(), gardens.end(), [&acceptedCommand](const Coop::GardenInstance& item)
+					{ return item.id == acceptedCommand.gardenId; });
+				Require(garden != gardens.end() && Coop::BroadcastScheduledCommandToPeers(*host, acceptedCommand,
+					garden->simulationTicks + Coop::COMMAND_EXECUTION_LEAD_TICKS, acceptedCommand.senderId) == 0,
+					"host schedules accepted commands for each non-origin peer");
+			},
 			[&host, &observedServerTick](Coop::TransportPlayerId peer, const Coop::CommandAuthorityResponse& response)
 			{
-				observedServerTick = response.serverTick;
-				if (const auto bytes = Coop::SerializeAuthorityResponse(response))
+				Coop::CommandAuthorityResponse scheduled = response;
+				if (scheduled.rejection == Coop::CommandRejection::NONE)
+					scheduled.serverTick += Coop::COMMAND_EXECUTION_LEAD_TICKS;
+				observedServerTick = scheduled.serverTick;
+				if (const auto bytes = Coop::SerializeAuthorityResponse(scheduled))
 					Require(host->SendTo(peer, *bytes), "host returns authorization response to client");
 			});
-		Require(accepted.size() == 1 && accepted[0] == Coop::CommandRejection::NONE && observedServerTick == 3,
-			"host accepts and timestamps the command at its authoritative garden tick");
+		Require(accepted.size() == 1 && accepted[0] == Coop::CommandRejection::NONE
+			&& observedServerTick == 3 + Coop::COMMAND_EXECUTION_LEAD_TICKS,
+			"host accepts and schedules the command at a future authoritative garden tick");
 		Coop::AuthoritativeCommandProcessor guestProcessor;
 		RecordingExecutor guestExecutor;
-		const auto applied = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
-		Require(applied.size() == 1 && applied[0] == Coop::CommandRejection::NONE && guestExecutor.executions == 1,
-			"client applies the accepted command carried by the host receipt");
+		std::uint64_t scheduledServerTick = 0;
+		const auto scheduled = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor, {},
+			[&scheduledServerTick](const Coop::PlayerCommand&, std::uint64_t serverTick) { scheduledServerTick = serverTick; });
+		Require(scheduled.size() == 1 && scheduled[0] == Coop::CommandRejection::NONE
+			&& guestExecutor.executions == 0 && scheduledServerTick == observedServerTick,
+			"client validates the host receipt and queues its intent for the canonical tick");
 
 		command.sequence = 2;
 		command.x = Coop::BOARD_COLUMNS;
@@ -1367,7 +1389,7 @@ namespace
 			"host rejects malformed gameplay coordinates");
 		const auto rejectedOnClient = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
 		Require(rejectedOnClient.size() == 1 && rejectedOnClient[0] == Coop::CommandRejection::INVALID_COORDINATES
-			&& guestExecutor.executions == 1, "client receives rejection without applying the invalid action");
+			&& guestExecutor.executions == 0, "client receives rejection without applying the invalid action");
 	}
 
 	void TestLocalTransportHarness()
@@ -1413,6 +1435,19 @@ namespace
 		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
 			Require(host->Receive().has_value(), "host drains every queued packet");
 		Require(!host->Receive(), "drained inbox is empty");
+		command.sequence = 2;
+		const auto scheduledCommand = Coop::SerializeCommand(command);
+		Require(scheduledCommand && Coop::BroadcastScheduledCommandToPeers(*host, command, 42, 72) == 2,
+			"host broadcasts an accepted command with its scheduled execution tick to every non-origin peer");
+		for (auto* peer : {player3.get(), player4.get()})
+		{
+			const auto packet = peer->Receive();
+			const auto response = packet ? Coop::DeserializeAuthorityResponse(packet->bytes) : std::nullopt;
+			Require(packet && packet->senderId == 71 && response
+				&& response->recipientPlayerId == peer->GetLocalPlayerId() && response->serverTick == 42
+				&& response->acceptedCommand && response->acceptedCommand->senderId == 72,
+				"scheduled replication binds host, recipient, original sender, command, and authoritative tick");
+		}
 		Require(player4->SendTo(71, *bytes), "peer has an unprocessed packet before disconnection");
 		Require(host->DisconnectPeer(74), "host can disconnect a specific local peer");
 		const auto player4Peers = player4->GetConnectedPeerIds();

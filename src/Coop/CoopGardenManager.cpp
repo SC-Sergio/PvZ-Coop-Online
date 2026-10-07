@@ -28,6 +28,12 @@
 
 namespace Coop
 {
+	namespace
+	{
+		constexpr std::size_t MAX_SCHEDULED_COMMANDS = 256;
+		constexpr std::uint64_t MAX_COMMAND_SCHEDULE_AHEAD_TICKS = 250;
+	}
+
 	CoopGardenManager::CoopGardenManager(LawnApp* app) : mApp(app)
 	{
 	}
@@ -56,6 +62,9 @@ namespace Coop
 		mHeartbeatMonitor.Reset();
 		mLastConnectedPeerIds.clear();
 		mCommandProcessor.Reset();
+		mScheduledCommands.clear();
+		mQueueCommandExecution = false;
+		mExecutingScheduledCommand = false;
 		mLocalPlayerId = session.GetHostPlayerId();
 		mNextLocalCommandSequence = 1;
 		for (const GardenInstance& garden : session.GetGardens())
@@ -145,6 +154,9 @@ namespace Coop
 		mSnapshotSenders.clear();
 		mRecoveryStatuses.clear();
 		mRecoveryTransferIds.clear();
+		mScheduledCommands.clear();
+		mQueueCommandExecution = false;
+		mExecutingScheduledCommand = false;
 		mPendingRestoreConfirmation.reset();
 		if (mHasAppStateSnapshot)
 		{
@@ -250,24 +262,73 @@ namespace Coop
 	{
 		if (!mSession)
 			return CommandRejection::PLAYER_NOT_PLAYING;
+		const bool wasQueueing = mQueueCommandExecution;
+		mQueueCommandExecution = !IsLocalOnlyCommand(command.type);
 		const CommandRejection result = mCommandProcessor.Process(*mSession, command, *this);
+		mQueueCommandExecution = wasQueueing;
 		if (result == CommandRejection::NONE && mTransport && mLocalPlayerId && mSession->GetHostPlayerId()
 			&& *mLocalPlayerId == *mSession->GetHostPlayerId())
-			BroadcastCommandToPeers(*mTransport, command);
+		{
+			const auto executeTick = GetCommandExecutionTick(command.gardenId);
+			if (executeTick)
+				BroadcastScheduledCommandToPeers(*mTransport, command, *executeTick);
+		}
 		return result;
+	}
+
+	std::optional<std::uint64_t> CoopGardenManager::GetCommandExecutionTick(GardenId gardenId) const noexcept
+	{
+		if (!mSession)
+			return std::nullopt;
+		const auto garden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+			[gardenId](const GardenInstance& candidate) { return candidate.id == gardenId; });
+		if (garden == mSession->GetGardens().end()
+			|| garden->simulationTicks > std::numeric_limits<std::uint64_t>::max() - COMMAND_EXECUTION_LEAD_TICKS)
+			return std::nullopt;
+		return garden->simulationTicks + COMMAND_EXECUTION_LEAD_TICKS;
+	}
+
+	bool CoopGardenManager::QueueAcceptedCommand(const PlayerCommand& command, std::uint64_t executeTick)
+	{
+		if (!mSession || executeTick == 0 || mScheduledCommands.size() >= MAX_SCHEDULED_COMMANDS)
+			return false;
+		const auto garden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+			[&command](const GardenInstance& candidate) { return candidate.id == command.gardenId; });
+		if (garden == mSession->GetGardens().end()
+			|| executeTick < garden->simulationTicks
+			|| executeTick - garden->simulationTicks > MAX_COMMAND_SCHEDULE_AHEAD_TICKS)
+			return false;
+		mScheduledCommands.push_back({command, executeTick});
+		return true;
 	}
 
 	std::vector<CommandRejection> CoopGardenManager::DrainIncomingCommands(INetworkTransport& transport)
 	{
 		if (!mSession)
 			return {CommandRejection::NOT_AUTHORITY};
-		return DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this,
-			[&transport](const PlayerCommand& command) { BroadcastCommandToPeers(transport, command, command.senderId); },
-			[&transport](TransportPlayerId peerId, const CommandAuthorityResponse& response)
+		const bool wasQueueing = mQueueCommandExecution;
+		mQueueCommandExecution = true;
+		std::vector<CommandRejection> results = DrainAuthoritativeCommands(transport, *mSession, mCommandProcessor, *this,
+			[this, &transport](const PlayerCommand& command)
 			{
-				if (const auto bytes = SerializeAuthorityResponse(response))
+				if (const auto executeTick = GetCommandExecutionTick(command.gardenId))
+					BroadcastScheduledCommandToPeers(transport, command, *executeTick, command.senderId);
+			},
+			[this, &transport](TransportPlayerId peerId, const CommandAuthorityResponse& response)
+			{
+				CommandAuthorityResponse scheduled = response;
+				if (scheduled.acceptedCommand)
+				{
+					const auto executeTick = GetCommandExecutionTick(scheduled.acceptedCommand->gardenId);
+					if (!executeTick)
+						return;
+					scheduled.serverTick = *executeTick;
+				}
+				if (const auto bytes = SerializeAuthorityResponse(scheduled))
 					transport.SendTo(peerId, *bytes);
 			}, [this](const TransportPacket& packet) { return HandleControlPacket(packet); });
+		mQueueCommandExecution = wasQueueing;
+		return results;
 	}
 
 	void CoopGardenManager::PumpNetwork()
@@ -329,7 +390,12 @@ namespace Coop
 		else
 		{
 			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this,
-				[this](const TransportPacket& packet) { return HandleControlPacket(packet); });
+				[this](const TransportPacket& packet) { return HandleControlPacket(packet); },
+				[this](const PlayerCommand& command, std::uint64_t executeTick)
+				{
+					if (!QueueAcceptedCommand(command, executeTick))
+						SetGardenRecoveryStatus(command.senderId, GardenRecoveryStatus::FAILED);
+				});
 			ApplyCompletedSnapshotRecovery();
 			if (mPendingRestoreConfirmation
 				&& std::chrono::steady_clock::now() - mLastRestoreConfirmationSend >= COOP_SNAPSHOT_RETRY_INTERVAL)
@@ -565,14 +631,36 @@ namespace Coop
 
 	bool CoopGardenManager::AdvanceSimulationTick()
 	{
-		return mSession && mSession->AdvanceSimulationTick();
+		if (!mSession || !mSession->AdvanceSimulationTick())
+			return false;
+		// Execute accepted intents immediately before the Board update for their canonical tick.
+		for (auto iterator = mScheduledCommands.begin(); iterator != mScheduledCommands.end();)
+		{
+			const auto garden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+				[iterator](const GardenInstance& candidate) { return candidate.id == iterator->command.gardenId; });
+			if (garden == mSession->GetGardens().end() || iterator->executeTick > garden->simulationTicks)
+			{
+				++iterator;
+				continue;
+			}
+			const PlayerId owner = iterator->command.senderId;
+			const PlayerCommand command = iterator->command;
+			iterator = mScheduledCommands.erase(iterator);
+			const bool wasExecutingScheduled = mExecutingScheduledCommand;
+			mExecutingScheduledCommand = true;
+			const bool executed = Execute(command);
+			mExecutingScheduledCommand = wasExecutingScheduled;
+			if (!executed)
+				SetGardenRecoveryStatus(owner, GardenRecoveryStatus::FAILED);
+		}
+		return true;
 	}
 
 	bool CoopGardenManager::Execute(const PlayerCommand& command)
 	{
 		if (!mSession)
 			return false;
-		if (GetGardenRecoveryStatus(command.senderId) != GardenRecoveryStatus::NONE
+		if (!mExecutingScheduledCommand && GetGardenRecoveryStatus(command.senderId) != GardenRecoveryStatus::NONE
 			&& !IsLocalOnlyCommand(command.type))
 			return false;
 
@@ -580,6 +668,11 @@ namespace Coop
 			{ return garden.id == command.gardenId; });
 		if (source == mGardens.end() || source->owner != command.senderId)
 			return false;
+		if (mQueueCommandExecution && !IsLocalOnlyCommand(command.type))
+		{
+			const auto executeTick = GetCommandExecutionTick(command.gardenId);
+			return executeTick && QueueAcceptedCommand(command, *executeTick);
+		}
 
 		switch (command.type)
 		{
