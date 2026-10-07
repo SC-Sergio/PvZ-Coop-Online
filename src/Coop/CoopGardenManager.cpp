@@ -112,6 +112,10 @@ namespace Coop
 		mLastConnectedPeerIds.clear();
 		mCommandProcessor.Reset();
 		mScheduledCommands.clear();
+		mRecoveryBatches.clear();
+		mRecoveryTransferIds.clear();
+		mRecoveryStatuses.clear();
+		mRestoredGardenIds.clear();
 		mAuthoritativeSimulationClock.Reset();
 		mSimulationTickGranted = false;
 		mQueueCommandExecution = false;
@@ -208,6 +212,8 @@ namespace Coop
 		mSnapshotSenders.clear();
 		mRecoveryStatuses.clear();
 		mRecoveryTransferIds.clear();
+		mRecoveryBatches.clear();
+		mRestoredGardenIds.clear();
 		mScheduledCommands.clear();
 		mQueueCommandExecution = false;
 		mExecutingScheduledCommand = false;
@@ -273,14 +279,17 @@ namespace Coop
 		mSnapshotReceiver.Reset();
 		mSnapshotSenders.clear();
 		mPendingRestoreConfirmation.reset();
+		mRestoredGardenIds.clear();
 		if (mSession->GetHostPlayerId() && *mSession->GetHostPlayerId() != *mLocalPlayerId)
 		{
 			const auto localSlot = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(),
 				[this](const PlayerSlot& slot) { return slot.playerId == *mLocalPlayerId; });
-			const auto ownedGarden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
-				[this](const GardenInstance& garden) { return garden.owner == *mLocalPlayerId; });
-			if (localSlot == mSession->GetSlots().end() || ownedGarden == mSession->GetGardens().end()
-				|| !mSnapshotReceiver.Configure(*mSession->GetHostPlayerId(), *mLocalPlayerId, ownedGarden->id))
+			std::vector<GardenId> expectedGardenIds;
+			expectedGardenIds.reserve(mSession->GetGardens().size());
+			for (const GardenInstance& garden : mSession->GetGardens())
+				expectedGardenIds.push_back(garden.id);
+			if (localSlot == mSession->GetSlots().end() || expectedGardenIds.empty()
+				|| !mSnapshotReceiver.Configure(*mSession->GetHostPlayerId(), *mLocalPlayerId, expectedGardenIds))
 			{
 				mTransport = nullptr;
 				return false;
@@ -458,14 +467,22 @@ namespace Coop
 				if ((slot.state == PlayerState::PLAYING || slot.state == PlayerState::RECONNECTING) && !connected)
 				{
 					disconnected = mSession->MarkDisconnected(slot.playerId) || disconnected;
-					SetGardenRecoveryStatus(slot.playerId, GardenRecoveryStatus::FAILED);
+					if (mRecoveryBatches.contains(slot.playerId))
+						AbortGardenSnapshotRecovery(slot.playerId);
+					else
+						SetGardenRecoveryStatus(slot.playerId, GardenRecoveryStatus::FAILED);
 				}
 				else if ((slot.state == PlayerState::DISCONNECTED || slot.state == PlayerState::AI_TEMPORARY) && connected)
 				{
 					if (mSession->BeginReconnect(slot.playerId))
 					{
 						disconnected = true;
-						BeginSnapshotRecovery(slot.playerId, slot.playerId);
+						if (!BeginSnapshotRecovery(slot.playerId, slot.playerId))
+						{
+							mSession->MarkDisconnected(slot.playerId);
+							SetGardenRecoveryStatus(slot.playerId, GardenRecoveryStatus::FAILED);
+							mTransport->DisconnectPeer(slot.playerId);
+						}
 					}
 				}
 				else if (slot.state == PlayerState::PLAYING && connected
@@ -556,24 +573,54 @@ namespace Coop
 				&& packet.senderId != *mLocalPlayerId)
 			{
 				const auto expected = mRecoveryTransferIds.find(packet.senderId);
-				const auto ownedGarden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
-					[&packet](const GardenInstance& garden) { return garden.owner == packet.senderId; });
-				if (expected != mRecoveryTransferIds.end() && ownedGarden != mSession->GetGardens().end()
-					&& std::any_of(mSession->GetSlots().begin(), mSession->GetSlots().end(),
-						[&packet](const PlayerSlot& slot)
-							{ return slot.playerId == packet.senderId && slot.state == PlayerState::RECONNECTING; })
+				const auto batch = mRecoveryBatches.find(packet.senderId);
+				const auto slot = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(),
+					[&packet](const PlayerSlot& candidate)
+						{ return candidate.playerId == packet.senderId && candidate.state == PlayerState::RECONNECTING; });
+				const auto currentGardenId = batch == mRecoveryBatches.end()
+					? std::nullopt : batch->second.CurrentGarden();
+				const auto expectedGarden = !currentGardenId
+					? mSession->GetGardens().end()
+					: std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+						[&currentGardenId](const GardenInstance& garden) { return garden.id == *currentGardenId; });
+				if (expected != mRecoveryTransferIds.end() && batch != mRecoveryBatches.end()
+					&& slot != mSession->GetSlots().end() && expectedGarden != mSession->GetGardens().end()
 					&& expected->second.transferId == confirmation->transferId
 					&& expected->second.gardenId == confirmation->gardenId
 					&& expected->second.serverTick == confirmation->serverTick
-					&& ownedGarden->id == confirmation->gardenId)
+					&& expectedGarden->id == confirmation->gardenId)
 				{
-					const auto response = SerializeGardenSnapshotRestoreMessage(*confirmation, true);
-					if (mTransport->SendTo(packet.senderId, response)
-						&& mSession->CompleteReconnect(packet.senderId))
+					auto activeSender = mSnapshotSenders.find(packet.senderId);
+					if (activeSender != mSnapshotSenders.end())
 					{
+						if (activeSender->second.Pump(*mTransport) != SnapshotSendStatus::COMPLETE)
+							return true;
+						mSnapshotSenders.erase(activeSender);
+					}
+					const auto response = SerializeGardenSnapshotRestoreMessage(*confirmation, true);
+					if (!mTransport->SendTo(packet.senderId, response))
+					{
+						AbortGardenSnapshotRecovery(packet.senderId);
+						return true;
+					}
+					if (batch->second.Advance())
+					{
+						mRecoveryTransferIds.erase(packet.senderId);
+						if (!StartNextGardenSnapshot(packet.senderId, packet.senderId))
+						{
+							AbortGardenSnapshotRecovery(packet.senderId);
+							return true;
+						}
+					}
+					else if (mSession->CompleteReconnect(packet.senderId))
+					{
+						mRecoveryBatches.erase(batch);
+						mRecoveryTransferIds.erase(packet.senderId);
 						SetGardenRecoveryStatus(packet.senderId, GardenRecoveryStatus::NONE);
 						BroadcastSessionSnapshot(*mTransport, *mSession);
 					}
+					else
+						AbortGardenSnapshotRecovery(packet.senderId);
 				}
 				return true;
 			}
@@ -584,7 +631,10 @@ namespace Coop
 				&& mPendingRestoreIdentity.serverTick == confirmation->serverTick)
 			{
 				mPendingRestoreConfirmation.reset();
-				SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::NONE);
+				if (mRestoredGardenIds.size() >= mSession->GetGardenCount())
+					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::NONE);
+				else
+					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::TRANSFERRING);
 			}
 			return true;
 		}
@@ -596,11 +646,32 @@ namespace Coop
 		if (!mTransport || !mSession || !mSession->GetHostPlayerId()
 			|| *mSession->GetHostPlayerId() != mTransport->GetLocalPlayerId()
 			|| peerId != playerId || mNextSnapshotTransferId == 0
-			|| mNextSnapshotTransferId == std::numeric_limits<std::uint64_t>::max())
+			|| mNextSnapshotTransferId > std::numeric_limits<std::uint64_t>::max() - mSession->GetGardenCount()
+			|| mRecoveryBatches.contains(playerId))
 			return false;
 		SetGardenRecoveryStatus(playerId, GardenRecoveryStatus::TRANSFERRING);
+		std::vector<GardenId> gardenIds;
+		gardenIds.reserve(mSession->GetGardenCount());
+		for (const GardenInstance& garden : mSession->GetGardens())
+			gardenIds.push_back(garden.id);
+		GardenSnapshotBatch batch;
+		if (!batch.Begin(gardenIds))
+			return false;
+		return mRecoveryBatches.emplace(playerId, std::move(batch)).second;
+	}
+
+	bool CoopGardenManager::StartNextGardenSnapshot(TransportPlayerId peerId, PlayerId playerId)
+	{
+		if (!mTransport || !mSession || peerId != playerId
+			|| mNextSnapshotTransferId == 0
+			|| mNextSnapshotTransferId == std::numeric_limits<std::uint64_t>::max())
+			return false;
+		const auto batch = mRecoveryBatches.find(playerId);
+		if (batch == mRecoveryBatches.end() || !batch->second.CurrentGarden())
+			return false;
+		const GardenId gardenId = *batch->second.CurrentGarden();
 		const auto gardenState = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
-			[playerId](const GardenInstance& garden) { return garden.owner == playerId; });
+			[gardenId](const GardenInstance& garden) { return garden.id == gardenId; });
 		const auto managedGarden = gardenState == mSession->GetGardens().end() ? mGardens.end()
 			: std::find_if(mGardens.begin(), mGardens.end(), [&gardenState](const ManagedGarden& garden)
 				{ return garden.id == gardenState->id; });
@@ -624,9 +695,22 @@ namespace Coop
 			mRecoveryTransferIds[playerId] = {mNextSnapshotTransferId, gardenState->id, gardenState->simulationTicks};
 			++mNextSnapshotTransferId;
 		}
-		else
-			SetGardenRecoveryStatus(playerId, GardenRecoveryStatus::FAILED);
+		SetGardenRecoveryStatus(playerId, GardenRecoveryStatus::TRANSFERRING);
 		return started;
+	}
+
+	void CoopGardenManager::AbortGardenSnapshotRecovery(PlayerId playerId)
+	{
+		SetGardenRecoveryStatus(playerId, GardenRecoveryStatus::FAILED);
+		mRecoveryBatches.erase(playerId);
+		mRecoveryTransferIds.erase(playerId);
+		if (const auto sender = mSnapshotSenders.find(playerId); sender != mSnapshotSenders.end())
+		{
+			sender->second.Reset();
+			mSnapshotSenders.erase(sender);
+		}
+		if (mTransport)
+			mTransport->DisconnectPeer(playerId);
 	}
 
 	void CoopGardenManager::PumpSnapshotSends()
@@ -644,7 +728,12 @@ namespace Coop
 			else if (status == SnapshotSendStatus::PEER_DISCONNECTED
 				|| status == SnapshotSendStatus::TRANSPORT_CHANGED || status == SnapshotSendStatus::RETRY_EXHAUSTED)
 			{
-				SetGardenRecoveryStatus(iterator->first, GardenRecoveryStatus::FAILED);
+				const PlayerId playerId = iterator->first;
+				SetGardenRecoveryStatus(playerId, GardenRecoveryStatus::FAILED);
+				mRecoveryBatches.erase(playerId);
+				mRecoveryTransferIds.erase(playerId);
+				if (status != SnapshotSendStatus::PEER_DISCONNECTED)
+					mTransport->DisconnectPeer(playerId);
 				iterator = mSnapshotSenders.erase(iterator);
 			}
 			else
@@ -659,6 +748,8 @@ namespace Coop
 		{
 			if (mLocalPlayerId)
 				SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+			if (mTransport && mSession && mSession->GetHostPlayerId())
+				mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
 			return std::nullopt;
 		}
 		if (mLocalPlayerId)
@@ -675,26 +766,28 @@ namespace Coop
 		if (!snapshot)
 			return false;
 		const auto gardenState = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
-			[this, &snapshot](const GardenInstance& garden)
-				{ return garden.owner == *mLocalPlayerId && garden.id == snapshot->gardenId; });
+			[&snapshot](const GardenInstance& garden) { return garden.id == snapshot->gardenId; });
 		const auto managedGarden = std::find_if(mGardens.begin(), mGardens.end(),
 			[&snapshot](const ManagedGarden& garden) { return garden.id == snapshot->gardenId; });
 		if (gardenState == mSession->GetGardens().end() || managedGarden == mGardens.end()
-			|| managedGarden->owner != *mLocalPlayerId || !managedGarden->board->RestoreCooperativeSnapshot(
+			|| managedGarden->owner != gardenState->owner || !managedGarden->board->RestoreCooperativeSnapshot(
 				std::span<const unsigned char>(reinterpret_cast<const unsigned char*>(snapshot->bytes.data()), snapshot->bytes.size())))
 		{
 			SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+			mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
 			return false;
 		}
 		if (!mSession->SynchronizeGardenTick(snapshot->gardenId, snapshot->serverTick))
 		{
 			SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+			mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
 			return false;
 		}
+		mRestoredGardenIds.insert(snapshot->gardenId);
 		mPendingRestoreIdentity = {snapshot->transferId, snapshot->gardenId, snapshot->serverTick};
 		mPendingRestoreConfirmation = SerializeGardenSnapshotRestoreMessage(mPendingRestoreIdentity, false);
 		mLastRestoreConfirmationSend = std::chrono::steady_clock::time_point{};
-		SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::STRUCTURALLY_VALIDATED);
+		SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::TRANSFERRING);
 		return true;
 	}
 
@@ -715,8 +808,8 @@ namespace Coop
 		const char* message = nullptr;
 		switch (status)
 		{
-		case GardenRecoveryStatus::TRANSFERRING: message = "RECONNECTING: RECEIVING GARDEN"; break;
-		case GardenRecoveryStatus::STRUCTURALLY_VALIDATED: message = "GARDEN DATA VERIFIED; RESTORE PENDING"; break;
+		case GardenRecoveryStatus::TRANSFERRING: message = "RECONNECTING: SYNCING TEAM STATE"; break;
+		case GardenRecoveryStatus::STRUCTURALLY_VALIDATED: message = "TEAM STATE VERIFIED; RESTORE PENDING"; break;
 		case GardenRecoveryStatus::FAILED: message = "GARDEN SYNC FAILED"; break;
 		case GardenRecoveryStatus::NONE: return;
 		}
@@ -738,6 +831,19 @@ namespace Coop
 		if (!mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
 			return false;
 		const bool isHost = *mLocalPlayerId == *mSession->GetHostPlayerId();
+		if (isHost && !mRecoveryBatches.empty() && mScheduledCommands.empty())
+		{
+			mSimulationTickGranted = false;
+			const auto batch = std::find_if(mRecoveryBatches.begin(), mRecoveryBatches.end(), [this](const auto& entry)
+				{ return !mRecoveryTransferIds.contains(entry.first); });
+			if (batch != mRecoveryBatches.end())
+			{
+				const PlayerId playerId = batch->first;
+				if (!StartNextGardenSnapshot(playerId, playerId))
+					AbortGardenSnapshotRecovery(playerId);
+			}
+			return false;
+		}
 		if (!isHost)
 		{
 			if (mSession->GetGardens().empty()
@@ -795,6 +901,9 @@ namespace Coop
 		const auto source = std::find_if(mGardens.begin(), mGardens.end(), [&command](const ManagedGarden& garden)
 			{ return garden.id == command.gardenId; });
 		if (source == mGardens.end() || source->owner != command.senderId)
+			return false;
+		if (mQueueCommandExecution && !mExecutingScheduledCommand && !mRecoveryBatches.empty()
+			&& !IsLocalOnlyCommand(command.type))
 			return false;
 		if (mQueueCommandExecution && !IsLocalOnlyCommand(command.type))
 		{

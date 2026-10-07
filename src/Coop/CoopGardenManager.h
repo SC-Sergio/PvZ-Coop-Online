@@ -97,6 +97,8 @@ namespace Coop
 		};
 		std::optional<std::uint64_t> GetCommandExecutionTick(GardenId gardenId) const noexcept;
 		bool QueueAcceptedCommand(const PlayerCommand& command, std::uint64_t executeTick);
+		bool StartNextGardenSnapshot(TransportPlayerId peerId, PlayerId playerId);
+		void AbortGardenSnapshotRecovery(PlayerId playerId);
 		void QueueScheduledCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
 			std::uint64_t executeTick, TransportPlayerId excludedPeerId = 0);
 		bool QueueAuthorityResponse(INetworkTransport& transport, TransportPlayerId peerId,
@@ -117,6 +119,8 @@ namespace Coop
 		std::unordered_map<TransportPlayerId, GardenSnapshotSender> mSnapshotSenders;
 		std::unordered_map<PlayerId, GardenRecoveryStatus> mRecoveryStatuses;
 		std::unordered_map<PlayerId, GardenSnapshotRestoreConfirmation> mRecoveryTransferIds;
+		std::unordered_map<PlayerId, GardenSnapshotBatch> mRecoveryBatches;
+		std::unordered_set<GardenId> mRestoredGardenIds;
 		std::optional<std::vector<std::uint8_t>> mPendingRestoreConfirmation;
 		GardenSnapshotRestoreConfirmation mPendingRestoreIdentity;
 		std::chrono::steady_clock::time_point mLastRestoreConfirmationSend{};

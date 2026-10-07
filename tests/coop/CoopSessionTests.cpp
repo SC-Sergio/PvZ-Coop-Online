@@ -395,6 +395,24 @@ namespace
 
 	void TestGardenSnapshotProtocol()
 	{
+		Coop::GardenSnapshotBatch recoveryBatch;
+		const std::array<Coop::GardenId, 4> recoveryGardens{101, 102, 103, 104};
+		const std::array<Coop::GardenId, 2> duplicateRecoveryGardens{101, 101};
+		Require(recoveryBatch.Begin(recoveryGardens) && recoveryBatch.GetCount() == 4
+			&& recoveryBatch.CurrentGarden() == 101,
+			"snapshot recovery batch starts at the first garden and includes all four active gardens");
+		Require(!recoveryBatch.Begin(duplicateRecoveryGardens), "snapshot recovery batches reject duplicate garden IDs");
+		for (std::size_t index = 0; index < recoveryGardens.size(); ++index)
+		{
+			Require(recoveryBatch.CurrentGarden() == recoveryGardens[index],
+				"snapshot recovery batch confirms gardens in stable session order");
+			const bool hasNext = recoveryBatch.Advance();
+			Require(hasNext == (index + 1 < recoveryGardens.size()),
+				"snapshot recovery batch stays active until every garden has been confirmed");
+		}
+		Require(recoveryBatch.IsComplete() && !recoveryBatch.CurrentGarden(),
+			"snapshot recovery batch completes only after the final garden");
+
 		const Coop::GardenSnapshotRestoreConfirmation restoreIdentity{11, 77, 1234};
 		const auto restoreRequest = Coop::SerializeGardenSnapshotRestoreMessage(restoreIdentity, false);
 		const auto restoreAck = Coop::SerializeGardenSnapshotRestoreMessage(restoreIdentity, true);
@@ -562,7 +580,25 @@ namespace
 		std::vector<std::uint8_t> wrongGardenFrame = (*frames)[0];
 		wrongGardenFrame[16] = 78;
 		Require(receiver.HandlePacket(*receiverClient, {81, wrongGardenFrame}) == Coop::SnapshotReceiveResult::REJECTED,
-			"snapshot receiver rejects a garden not owned by the local player");
+			"single-garden snapshot receiver rejects a garden outside its configured scope");
+		const std::array<Coop::GardenId, 2> expectedGardens{77, 78};
+		Coop::GardenSnapshotReceiver sessionReceiver;
+		Require(sessionReceiver.Configure(81, 82, expectedGardens),
+			"snapshot receiver can bind all gardens in the active session");
+		const std::array<Coop::GardenId, 2> duplicateGardens{77, 77};
+		const std::array<Coop::GardenId, 5> oversizedGardenList{77, 78, 79, 80, 81};
+		Require(!sessionReceiver.Configure(81, 82, duplicateGardens)
+			&& !sessionReceiver.Configure(81, 82, oversizedGardenList),
+			"snapshot receiver rejects duplicate gardens and lists above the four-player session cap");
+		Require(sessionReceiver.Configure(81, 82, expectedGardens),
+			"valid session garden binding can be restored after rejected configurations");
+		Require(sessionReceiver.HandlePacket(*receiverClient, {81, wrongGardenFrame}) == Coop::SnapshotReceiveResult::INCOMPLETE,
+			"reconnect receiver accepts a teammate garden included in the host session batch");
+		std::vector<std::uint8_t> unknownGardenFrame = (*frames)[0];
+		unknownGardenFrame[16] = 79;
+		Require(sessionReceiver.HandlePacket(*receiverClient, {81, unknownGardenFrame}) == Coop::SnapshotReceiveResult::REJECTED,
+			"session receiver still rejects gardens outside the replicated roster");
+		Require(receiverHost->Receive().has_value(), "session receiver acknowledges the authorized teammate snapshot frame");
 		for (std::size_t index = 0; index + 1 < frames->size(); ++index)
 		{
 			Require(receiverHost->SendTo(82, (*frames)[index]), "test delivers each non-final snapshot frame");

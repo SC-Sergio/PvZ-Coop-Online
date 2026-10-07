@@ -35,6 +35,45 @@ namespace Coop
 		std::vector<std::uint8_t> bytes;
 	};
 
+	class GardenSnapshotBatch
+	{
+	public:
+		bool Begin(std::span<const GardenId> gardenIds)
+		{
+			if (gardenIds.empty() || gardenIds.size() > MAX_PLAYERS)
+				return false;
+			for (std::size_t index = 0; index < gardenIds.size(); ++index)
+				if (gardenIds[index] == 0
+					|| std::find(gardenIds.begin(), gardenIds.begin() + index, gardenIds[index])
+						!= gardenIds.begin() + index)
+					return false;
+			mGardenIds.assign(gardenIds.begin(), gardenIds.end());
+			mNextGardenIndex = 0;
+			return true;
+		}
+
+		std::optional<GardenId> CurrentGarden() const noexcept
+		{
+			return mNextGardenIndex < mGardenIds.size()
+				? std::optional<GardenId>(mGardenIds[mNextGardenIndex]) : std::nullopt;
+		}
+
+		bool Advance() noexcept
+		{
+			if (mNextGardenIndex >= mGardenIds.size())
+				return false;
+			++mNextGardenIndex;
+			return mNextGardenIndex < mGardenIds.size();
+		}
+
+		bool IsComplete() const noexcept { return !CurrentGarden().has_value(); }
+		std::size_t GetCount() const noexcept { return mGardenIds.size(); }
+
+	private:
+		std::vector<GardenId> mGardenIds;
+		std::size_t mNextGardenIndex = 0;
+	};
+
 	enum class SnapshotReceiveResult
 	{
 		REJECTED,
@@ -465,12 +504,24 @@ namespace Coop
 	public:
 		bool Configure(TransportPlayerId expectedHostId, TransportPlayerId localPlayerId, GardenId ownedGardenId)
 		{
-			if (expectedHostId == 0 || localPlayerId == 0 || expectedHostId == localPlayerId || ownedGardenId == 0)
+			return Configure(expectedHostId, localPlayerId, std::span<const GardenId>(&ownedGardenId, 1));
+		}
+
+		bool Configure(TransportPlayerId expectedHostId, TransportPlayerId localPlayerId,
+			std::span<const GardenId> expectedGardenIds)
+		{
+			if (expectedHostId == 0 || localPlayerId == 0 || expectedHostId == localPlayerId
+				|| expectedGardenIds.empty() || expectedGardenIds.size() > MAX_PLAYERS)
+				return false;
+		for (std::size_t index = 0; index < expectedGardenIds.size(); ++index)
+			if (expectedGardenIds[index] == 0
+				|| std::find(expectedGardenIds.begin(), expectedGardenIds.begin() + index, expectedGardenIds[index])
+					!= expectedGardenIds.begin() + index)
 				return false;
 			Reset();
 			mExpectedHostId = expectedHostId;
 			mLocalPlayerId = localPlayerId;
-			mOwnedGardenId = ownedGardenId;
+			mExpectedGardenIds.assign(expectedGardenIds.begin(), expectedGardenIds.end());
 			return true;
 		}
 
@@ -480,7 +531,8 @@ namespace Coop
 			if (mExpectedHostId == 0 || transport.GetLocalPlayerId() != mLocalPlayerId
 				|| packet.senderId != mExpectedHostId || packet.bytes.size() < COOP_SNAPSHOT_HEADER_BYTES
 				|| std::memcmp(packet.bytes.data(), "PVZS", 4) != 0
-				|| ReadSnapshotU32(packet.bytes, 16) != mOwnedGardenId)
+				|| std::find(mExpectedGardenIds.begin(), mExpectedGardenIds.end(),
+					ReadSnapshotU32(packet.bytes, 16)) == mExpectedGardenIds.end())
 				return SnapshotReceiveResult::REJECTED;
 
 			const std::uint64_t transferId = ReadSnapshotU64(packet.bytes, 8);
@@ -530,7 +582,7 @@ namespace Coop
 		{
 			mExpectedHostId = 0;
 			mLocalPlayerId = 0;
-			mOwnedGardenId = 0;
+			mExpectedGardenIds.clear();
 			mCompletedTransferId = 0;
 			mCompletedGardenId = 0;
 			mCompletedChunkCount = 0;
@@ -543,7 +595,7 @@ namespace Coop
 	private:
 		TransportPlayerId mExpectedHostId = 0;
 		TransportPlayerId mLocalPlayerId = 0;
-		GardenId mOwnedGardenId = 0;
+		std::vector<GardenId> mExpectedGardenIds;
 		std::uint64_t mCompletedTransferId = 0;
 		GardenId mCompletedGardenId = 0;
 		std::uint16_t mCompletedChunkCount = 0;
