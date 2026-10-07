@@ -214,7 +214,20 @@ namespace Coop
 		if (!mTransport || !mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
 			return;
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
+		{
 			DrainIncomingCommands(*mTransport);
+			const auto connectedPeers = mTransport->GetConnectedPeerIds();
+			bool disconnected = false;
+			for (const PlayerSlot& slot : mSession->GetSlots())
+			{
+				if (slot.state != PlayerState::PLAYING || slot.playerId == *mLocalPlayerId)
+					continue;
+				if (std::find(connectedPeers.begin(), connectedPeers.end(), slot.playerId) == connectedPeers.end())
+					disconnected = mSession->MarkDisconnected(slot.playerId) || disconnected;
+			}
+			if (disconnected)
+				BroadcastSessionSnapshot(*mTransport, *mSession);
+		}
 		else
 			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this);
 	}

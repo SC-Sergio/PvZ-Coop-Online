@@ -19,12 +19,13 @@ namespace Coop
 	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command);
 	std::size_t BroadcastCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
 		TransportPlayerId excludedPeerId = 0);
+	std::size_t BroadcastSessionSnapshot(INetworkTransport& transport, const CoopSession& session);
 	std::vector<CommandRejection> DrainAuthoritativeCommands(INetworkTransport& transport,
 		const CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor, const AcceptedCommandCallback& onAccepted = {},
 		const AuthorityResponseCallback& onResponse = {});
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
-		const CoopSession& session, AuthoritativeCommandProcessor& processor,
+		CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor);
 }
 

@@ -480,6 +480,19 @@ namespace
 		auto nonAuthority = Coop::DrainAuthoritativeCommands(*guest, session, processor, executor);
 		Require(nonAuthority.size() == 1 && nonAuthority[0] == Coop::CommandRejection::NOT_AUTHORITY,
 			"guest endpoint cannot act as the authoritative command receiver");
+		const auto initialSnapshot = Coop::SerializeSessionSnapshot(session);
+		Coop::CoopSession mirror;
+		const auto initialDecoded = initialSnapshot ? Coop::DeserializeSessionSnapshot(*initialSnapshot) : std::nullopt;
+		Require(initialDecoded && mirror.ApplySnapshot(*initialDecoded), "client mirror starts from the host session snapshot");
+		Require(session.MarkDisconnected(82), "host marks a lost connected peer as disconnected");
+		Require(Coop::BroadcastSessionSnapshot(*host, session) == 2, "host broadcasts disconnect state to remaining transports");
+		Coop::AuthoritativeCommandProcessor mirrorProcessor;
+		RecordingExecutor mirrorExecutor;
+		auto snapshotApplied = Coop::DrainReplicatedCommands(*guest, mirror, mirrorProcessor, mirrorExecutor);
+		Require(snapshotApplied.size() == 1 && snapshotApplied[0] == Coop::CommandRejection::NONE
+			&& mirror.GetSlots()[1].state == Coop::PlayerState::DISCONNECTED
+			&& mirror.GetSlots()[1].gardenId == session.GetSlots()[1].gardenId,
+			"client applies authoritative disconnect snapshot without deleting the garden");
 	}
 
 	void TestAuthoritativeCommandProcessor()

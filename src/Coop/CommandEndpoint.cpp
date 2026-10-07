@@ -4,6 +4,7 @@
  */
 
 #include "CommandEndpoint.h"
+#include "SessionSnapshotSerialization.h"
 
 #include <algorithm>
 
@@ -33,6 +34,22 @@ namespace Coop
 		{
 			if (peerId == excludedPeerId)
 				continue;
+			if (transport.SendTo(peerId, *bytes))
+				++sent;
+		}
+		return sent;
+	}
+
+	std::size_t BroadcastSessionSnapshot(INetworkTransport& transport, const CoopSession& session)
+	{
+		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() != *session.GetHostPlayerId())
+			return 0;
+		const auto bytes = SerializeSessionSnapshot(session);
+		if (!bytes)
+			return 0;
+		std::size_t sent = 0;
+		for (TransportPlayerId peerId : transport.GetConnectedPeerIds())
+		{
 			if (transport.SendTo(peerId, *bytes))
 				++sent;
 		}
@@ -86,7 +103,7 @@ namespace Coop
 	}
 
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
-		const CoopSession& session, AuthoritativeCommandProcessor& processor,
+		CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor)
 	{
 		std::vector<CommandRejection> results;
@@ -101,6 +118,12 @@ namespace Coop
 			if (packet->senderId != *session.GetHostPlayerId())
 			{
 				results.push_back(CommandRejection::SENDER_MISMATCH);
+				continue;
+			}
+			if (const auto snapshot = DeserializeSessionSnapshot(packet->bytes))
+			{
+				results.push_back(session.ApplySnapshot(*snapshot)
+					? CommandRejection::NONE : CommandRejection::INVALID_COMMAND);
 				continue;
 			}
 			if (const std::optional<CommandAuthorityResponse> response = DeserializeAuthorityResponse(packet->bytes))
