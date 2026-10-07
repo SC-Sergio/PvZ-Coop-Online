@@ -103,6 +103,21 @@ inline bool IsValidPortableSaveAnimationState(std::int32_t ticksPerFrame,
 	return animationCounter < ticksPerFrame * frameCount;
 }
 
+inline bool IsValidPortableSaveFrameRange(std::int32_t frameStart,
+	std::int32_t frameCount, std::uint32_t availableFrames) noexcept
+{
+	return frameStart >= 0 && frameCount >= 0
+		&& static_cast<std::uint32_t>(frameStart) <= availableFrames
+		&& static_cast<std::uint32_t>(frameCount) <= availableFrames - static_cast<std::uint32_t>(frameStart);
+}
+
+inline bool IsValidPortableSaveFrameBase(std::int32_t frameBase,
+	std::uint32_t availableFrames) noexcept
+{
+	return frameBase == -1 || frameBase == -2
+		|| (frameBase >= 0 && static_cast<std::uint32_t>(frameBase) < availableFrames);
+}
+
 inline bool IsValidPortableSaveGridLook(std::int32_t look) noexcept
 {
 	return look >= 0 && look < 20;

@@ -267,6 +267,17 @@ namespace
 			&& !IsValidPortableSaveAnimationState(12, 5, 60, 0, false)
 			&& !IsValidPortableSaveAnimationState(12, 5, 0, 5, false),
 			"portable save animation state rejects zero divisors, unsafe counters, and invalid frame indexes");
+		Require(IsValidPortableSaveFrameRange(0, 0, 0)
+			&& IsValidPortableSaveFrameRange(2, 3, 5)
+			&& !IsValidPortableSaveFrameRange(-1, 1, 5)
+			&& !IsValidPortableSaveFrameRange(5, 1, 5)
+			&& !IsValidPortableSaveFrameRange(4, 2, 5)
+			&& IsValidPortableSaveFrameBase(-1, 0)
+			&& IsValidPortableSaveFrameBase(-2, 0)
+			&& IsValidPortableSaveFrameBase(4, 5)
+			&& !IsValidPortableSaveFrameBase(-3, 5)
+			&& !IsValidPortableSaveFrameBase(5, 5),
+			"portable reanimation frame ranges and base poses stay inside loaded definition transforms");
 		Require(IsValidPortableSaveGridLook(0) && IsValidPortableSaveGridLook(19)
 			&& !IsValidPortableSaveGridLook(-1) && !IsValidPortableSaveGridLook(20)
 			&& IsValidPortableSaveRow(0, 6) && IsValidPortableSaveRow(5, 6)

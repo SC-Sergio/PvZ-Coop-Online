@@ -1522,6 +1522,29 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 	theContext.SyncBool(theReanimation->mEnableExtraOverlayDraw);
 	theContext.SyncFloat(theReanimation->mLastFrameTime);
 	theContext.SyncEnum(theReanimation->mFilterEffect);
+	if (theContext.mReading)
+	{
+		const std::int32_t availableFrames = aDef && aDef->mTracks.count > 0 && aDef->mTracks.tracks
+			? aDef->mTracks.tracks[0].mTransforms.count : 0;
+		if (theContext.mFailed || availableFrames < 0
+			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mReanimationType),
+				REANIM_NONE, NUM_REANIMS)
+			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mLoopType),
+				REANIM_LOOP, REANIM_PLAY_ONCE_FULL_LAST_FRAME_AND_HOLD + 1)
+			|| !IsValidPortableSaveEnumValue(static_cast<std::int32_t>(theReanimation->mFilterEffect),
+				FILTER_EFFECT_NONE, NUM_FILTER_EFFECTS)
+			|| !std::isfinite(theReanimation->mAnimTime) || theReanimation->mAnimTime < 0.0f
+			|| theReanimation->mAnimTime > 1.0f
+			|| !std::isfinite(theReanimation->mAnimRate) || std::abs(theReanimation->mAnimRate) > 1000.0f
+			|| !std::isfinite(theReanimation->mLastFrameTime) || theReanimation->mLastFrameTime < -1.0f
+			|| theReanimation->mLastFrameTime > 1.0f
+			|| theReanimation->mLoopCount < 0
+			|| !IsValidPortableSaveFrameRange(theReanimation->mFrameStart,
+				theReanimation->mFrameCount, static_cast<std::uint32_t>(availableFrames))
+			|| !IsValidPortableSaveFrameBase(theReanimation->mFrameBasePose,
+				static_cast<std::uint32_t>(availableFrames)))
+			theContext.mFailed = true;
+	}
 
 	if (aDef && aDef->mTracks.count != 0)
 	{
