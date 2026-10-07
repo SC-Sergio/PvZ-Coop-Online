@@ -49,6 +49,7 @@ using namespace Sexy;
 #define PROGRESS_METER_COUNTER 150
 
 class LawnApp;
+class PlayerInfo;
 class CursorObject;
 class CursorPreview;
 class GameButton;
@@ -169,6 +170,7 @@ public:
 	GameScenes						mGardenGameScene;
 	BoardResult						mGardenBoardResult;
 	bool							mGardenSawYeti;
+	PlayerInfo*						mGardenPlayerInfo;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;

@@ -85,10 +85,13 @@ namespace
 			mPreviousGlobalEffectSystem = gEffectSystem;
 			mPreviousPoolEffect = mApp->mPoolEffect;
 			mPreviousSawYeti = mApp->mSawYeti;
+			mPreviousPlayerInfo = mApp->mPlayerInfo;
 			mApp->mBoard = board;
 			mApp->mGameScene = board->mGardenGameScene;
 			mApp->mBoardResult = board->mGardenBoardResult;
 			mApp->mSawYeti = board->mGardenSawYeti;
+			if (board->mGardenPlayerInfo)
+				mApp->mPlayerInfo = board->mGardenPlayerInfo;
 			if (gardenEffectSystem)
 			{
 				mApp->mEffectSystem = gardenEffectSystem;
@@ -109,6 +112,7 @@ namespace
 			mApp->mGameScene = mPreviousScene;
 			mApp->mBoardResult = mPreviousResult;
 			mApp->mSawYeti = mPreviousSawYeti;
+			mApp->mPlayerInfo = mPreviousPlayerInfo;
 			mApp->mEffectSystem = mPreviousEffectSystem;
 			gEffectSystem = mPreviousGlobalEffectSystem;
 			mApp->mPoolEffect = mPreviousPoolEffect;
@@ -121,6 +125,7 @@ namespace
 		GameScenes mPreviousScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
 		bool mPreviousSawYeti = false;
+		PlayerInfo* mPreviousPlayerInfo = nullptr;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 		PoolEffect* mPreviousPoolEffect = nullptr;
@@ -156,6 +161,7 @@ Board::Board(LawnApp* theApp)
 	mGardenGameScene = mApp->mGameScene;
 	mGardenBoardResult = mApp->mBoardResult;
 	mGardenSawYeti = mApp->mSawYeti;
+	mGardenPlayerInfo = nullptr;
 	mGardenStateIsolated = false;
 	mApplyingCooperativeCommand = false;
 	mGardenEffectSystem = nullptr;

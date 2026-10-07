@@ -74,7 +74,6 @@
 #include "Lawn/SeedPacket.h"
 
 #include <array>
-#include <random>
 
 bool gIsPartnerBuild = false; // GOTY @Patoke: 0x729659
 bool gSlowMo = false;
@@ -409,11 +408,10 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
 	mSinglePlayerModeBeforeCoop = mGameMode;
 	mCoopSandboxPlayerInfo = std::make_unique<PlayerInfo>(*mPlayerInfo);
-	std::random_device random;
-	do
-	{
-		mCoopSandboxPlayerInfo->mId = static_cast<std::uint32_t>(random()) | 0x80000000U;
-	} while (mCoopSandboxPlayerInfo->mId == mSinglePlayerInfoBeforeCoop->mId);
+	const std::uint32_t sessionProfileId = 0x80000000U
+		| ((lobby->GetSession().GetRandomSeed() ^ 0x6d2b79f5U) & 0x7fffffffU);
+	mCoopSandboxPlayerInfo->mId = sessionProfileId == mSinglePlayerInfoBeforeCoop->mId
+		? (0x80000000U | ((sessionProfileId + 1U) & 0x7fffffffU)) : sessionProfileId;
 	mCoopSandboxPlayerInfo->mName = mPlayerInfo->mName + " (Co-op)";
 	mCoopSandboxPlayerInfo->mLevel = coopLevel;
 	mCoopSandboxPlayerInfo->mFinishedAdventure = 1;

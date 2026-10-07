@@ -47,6 +47,7 @@ namespace Coop
 		mPreviousGameScene = mApp->mGameScene;
 		mPreviousBoardResult = mApp->mBoardResult;
 		mPreviousSawYeti = mApp->mSawYeti;
+		mPreviousPlayerInfo = mApp->mPlayerInfo;
 		mPreviousEffectSystem = mApp->mEffectSystem;
 		mPreviousGlobalEffectSystem = gEffectSystem;
 		mHasAppStateSnapshot = true;
@@ -64,6 +65,7 @@ namespace Coop
 			std::unique_ptr<Sexy::MTRand> randomGenerator = std::make_unique<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
 			std::unique_ptr<PoolEffect> poolEffect = std::make_unique<PoolEffect>();
 			poolEffect->PoolEffectInitialize();
+			std::unique_ptr<PlayerInfo> playerInfo = std::make_unique<PlayerInfo>(*mApp->mPlayerInfo);
 			std::unique_ptr<EffectSystem> effectSystem = std::make_unique<EffectSystem>();
 			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
 			gEffectSystem = nullptr;
@@ -71,8 +73,10 @@ namespace Coop
 			gEffectSystem = previousGlobalEffectSystem;
 
 			EffectSystem* previousAppEffectSystem = mApp->mEffectSystem;
+			PlayerInfo* previousPlayerInfo = mApp->mPlayerInfo;
 			previousGlobalEffectSystem = gEffectSystem;
 			mApp->mEffectSystem = effectSystem.get();
+			mApp->mPlayerInfo = playerInfo.get();
 			gEffectSystem = effectSystem.get();
 			Board* board = nullptr;
 			{
@@ -80,17 +84,20 @@ namespace Coop
 				board = new Board(mApp);
 			}
 			mApp->mEffectSystem = previousAppEffectSystem;
+			mApp->mPlayerInfo = previousPlayerInfo;
 			gEffectSystem = previousGlobalEffectSystem;
 			board->mGardenEffectSystem = effectSystem.get();
 			board->mGardenPoolEffect = poolEffect.get();
 			board->mGardenRandomGenerator = randomGenerator.get();
+			board->mGardenPlayerInfo = playerInfo.get();
 			board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
 			board->EnableGardenStateIsolation(true);
 			board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
 			board->mVisible = false;
 			mApp->mWidgetManager->AddWidget(board);
 			mApp->mWidgetManager->BringToBack(board);
-			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(poolEffect), std::move(randomGenerator)});
+			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(poolEffect),
+				std::move(randomGenerator), std::move(playerInfo)});
 
 			if (!mViewedGarden)
 				mViewedGarden = garden.id;
@@ -124,6 +131,7 @@ namespace Coop
 		mGardens.clear();
 		mApp->mEffectSystem = mPreviousEffectSystem;
 		gEffectSystem = mPreviousGlobalEffectSystem;
+		mApp->mPlayerInfo = mPreviousPlayerInfo;
 		mViewedGarden.reset();
 		mSession = nullptr;
 		mLocalPlayerId.reset();
@@ -158,6 +166,7 @@ namespace Coop
 		mApp->mGameScene = selected->board->GetGardenGameScene();
 		mApp->mBoardResult = selected->board->GetGardenBoardResult();
 		mApp->mSawYeti = selected->board->mGardenSawYeti;
+		mApp->mPlayerInfo = selected->playerInfo.get();
 		mViewedGarden = gardenId;
 		mApp->mWidgetManager->SetFocus(selected->board);
 		return true;

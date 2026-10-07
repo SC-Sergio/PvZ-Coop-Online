@@ -25,6 +25,7 @@ class Board;
 class EffectSystem;
 class LawnApp;
 class PoolEffect;
+class PlayerInfo;
 namespace Sexy { class MTRand; }
 
 namespace Coop
@@ -83,6 +84,7 @@ namespace Coop
 			std::unique_ptr<EffectSystem> effectSystem;
 			std::unique_ptr<PoolEffect> poolEffect;
 			std::unique_ptr<Sexy::MTRand> randomGenerator;
+			std::unique_ptr<PlayerInfo> playerInfo;
 		};
 
 		LawnApp* mApp;
@@ -106,6 +108,7 @@ namespace Coop
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
 		bool mPreviousSawYeti = false;
+		PlayerInfo* mPreviousPlayerInfo = nullptr;
 		bool mHasAppStateSnapshot = false;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
