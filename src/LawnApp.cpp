@@ -119,6 +119,7 @@ LawnApp::LawnApp()
 	mCoopGardenManager = new Coop::CoopGardenManager(this);
 	mSinglePlayerInfoBeforeCoop = nullptr;
 	mSinglePlayerModeBeforeCoop = GameMode::GAMEMODE_ADVENTURE;
+	mEasyPlantingCheatBeforeCoop = false;
 	mGameSelector = nullptr;
 	mChallengeScreen = nullptr;
 	mSeedChooserScreen = nullptr;
@@ -409,6 +410,7 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 
 	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
 	mSinglePlayerModeBeforeCoop = mGameMode;
+	mEasyPlantingCheatBeforeCoop = mEasyPlantingCheat;
 	// Every peer must simulate gameplay from the same profile state. Copying the
 	// local save here lets purchases and Zen Garden inventory change loot and
 	// board setup, which makes deterministic garden streams diverge across peers.
@@ -422,12 +424,18 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mCoopSandboxPlayerInfo->mFinishedAdventure = 1;
 	mPlayerInfo = mCoopSandboxPlayerInfo.get();
 	mGameMode = GameMode::GAMEMODE_ADVENTURE;
+	// Easy planting changes cost checks and deductions outside the command
+	// authority path. Keep every peer on the same rules for the whole match.
+	mEasyPlantingCheat = false;
 	mBoardResult = BoardResult::BOARDRESULT_NONE;
 	mCoopLobbyController = std::move(lobby);
 
 	const std::optional<Coop::ClassicSeedLoadout> deck = Coop::GetCoopClassicLoadout(settings.map);
 	if (!deck)
+	{
+		StopCoopMatch();
 		return false;
+	}
 
 	const bool gardensStarted = mCoopGardenManager->Start(mCoopLobbyController->GetSession(),
 		[deck, startingSun, zombiePointScale](Board& board, const Coop::GardenInstance&)
@@ -469,6 +477,7 @@ void LawnApp::StopCoopMatch()
 	{
 		mPlayerInfo = mSinglePlayerInfoBeforeCoop;
 		mGameMode = mSinglePlayerModeBeforeCoop;
+		mEasyPlantingCheat = mEasyPlantingCheatBeforeCoop;
 		mCoopSandboxPlayerInfo.reset();
 		mSinglePlayerInfoBeforeCoop = nullptr;
 	}

@@ -75,6 +75,7 @@ public:
 	std::unique_ptr<PlayerInfo> mCoopSandboxPlayerInfo;
 	PlayerInfo*						mSinglePlayerInfoBeforeCoop;
 	GameMode						mSinglePlayerModeBeforeCoop;
+	bool							mEasyPlantingCheatBeforeCoop;
 	TitleScreen*					mTitleScreen;
 	GameSelector*					mGameSelector;
 	SeedChooserScreen*				mSeedChooserScreen;
