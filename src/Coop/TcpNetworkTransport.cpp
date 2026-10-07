@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <iterator>
@@ -223,6 +224,16 @@ namespace Coop
 			std::deque<TransportPacket> ready;
 			std::deque<PendingWrite> output;
 		};
+		struct PendingHandshake
+		{
+			SocketHandle socket = INVALID_SOCKET_HANDLE;
+			std::array<std::uint8_t, 8> hello{};
+			std::size_t helloBytes = 0;
+			std::array<std::uint8_t, 5> reply{};
+			std::size_t replyBytes = 0;
+			TransportPlayerId playerId = 0;
+			std::chrono::steady_clock::time_point deadline;
+		};
 
 		mutable std::mutex mutex;
 		TransportPlayerId localPlayerId = 0;
@@ -230,6 +241,7 @@ namespace Coop
 		std::uint16_t boundPort = 0;
 		bool closed = false;
 		std::vector<Peer> peers;
+		std::vector<PendingHandshake> pendingHandshakes;
 	};
 
 	namespace
@@ -515,6 +527,9 @@ namespace Coop
 		for (State::Peer& peer : mState->peers)
 			ClosePeer(peer);
 		mState->peers.clear();
+		for (State::PendingHandshake& pending : mState->pendingHandshakes)
+			CloseSocket(pending.socket);
+		mState->pendingHandshakes.clear();
 	}
 
 	std::uint16_t TcpNetworkTransport::GetBoundPort() const noexcept
@@ -529,7 +544,144 @@ namespace Coop
 
 	std::optional<TransportPlayerId> TcpNetworkTransport::AcceptNextPeer(std::uint32_t timeoutMilliseconds)
 	{
+		if (timeoutMilliseconds == 0)
+			return AcceptNextPeerNonBlocking();
 		return AcceptPeerInternal(std::nullopt, timeoutMilliseconds);
+	}
+
+	std::optional<TransportPlayerId> TcpNetworkTransport::AcceptNextPeerNonBlocking()
+	{
+		if (!mState)
+			return std::nullopt;
+		std::lock_guard<std::mutex> lock(mState->mutex);
+		if (mState->closed || mState->listenSocket == INVALID_SOCKET_HANDLE)
+			return std::nullopt;
+
+		const auto now = std::chrono::steady_clock::now();
+		for (auto pending = mState->pendingHandshakes.begin(); pending != mState->pendingHandshakes.end();)
+		{
+			auto closePending = [&pending]()
+			{
+				CloseSocket(pending->socket);
+				pending->socket = INVALID_SOCKET_HANDLE;
+				pending++;
+			};
+			if (now >= pending->deadline)
+			{
+				closePending();
+				continue;
+			}
+
+			if (pending->helloBytes < pending->hello.size())
+			{
+#if defined(_WIN32)
+				const int received = recv(pending->socket, reinterpret_cast<char*>(pending->hello.data() + pending->helloBytes),
+					static_cast<int>(pending->hello.size() - pending->helloBytes), 0);
+#else
+				const ssize_t received = recv(pending->socket, pending->hello.data() + pending->helloBytes,
+					pending->hello.size() - pending->helloBytes, 0);
+#endif
+				if (received < 0)
+				{
+					if (WouldBlock(LastSocketError()))
+					{
+						++pending;
+						continue;
+					}
+					closePending();
+					continue;
+				}
+				if (received == 0)
+				{
+					closePending();
+					continue;
+				}
+				pending->helloBytes += static_cast<std::size_t>(received);
+				if (pending->helloBytes < pending->hello.size())
+				{
+					++pending;
+					continue;
+				}
+
+				const TransportPlayerId claimedPlayerId = ReadU32LE(pending->hello.data() + HANDSHAKE_MAGIC.size());
+				const bool duplicatePendingId = std::any_of(mState->pendingHandshakes.begin(), mState->pendingHandshakes.end(),
+					[&pending, claimedPlayerId](const State::PendingHandshake& candidate)
+					{ return &candidate != &*pending && candidate.playerId == claimedPlayerId && claimedPlayerId != 0; });
+				const bool valid = std::equal(HANDSHAKE_MAGIC.begin(), HANDSHAKE_MAGIC.end(), pending->hello.begin())
+					&& claimedPlayerId != 0 && claimedPlayerId != mState->localPlayerId
+					&& mState->peers.size() < MAX_TCP_PEERS
+					&& std::none_of(mState->peers.begin(), mState->peers.end(), [claimedPlayerId](const State::Peer& peer)
+						{ return peer.id == claimedPlayerId; })
+					&& !duplicatePendingId;
+				if (!valid)
+				{
+					closePending();
+					continue;
+				}
+				pending->playerId = claimedPlayerId;
+				std::copy(HANDSHAKE_REPLY_MAGIC.begin(), HANDSHAKE_REPLY_MAGIC.end(), pending->reply.begin());
+				pending->reply[4] = 1;
+			}
+
+#if defined(_WIN32)
+			const int sent = send(pending->socket, reinterpret_cast<const char*>(pending->reply.data() + pending->replyBytes),
+				static_cast<int>(pending->reply.size() - pending->replyBytes), SEND_FLAGS);
+#else
+			const ssize_t sent = send(pending->socket, pending->reply.data() + pending->replyBytes,
+				pending->reply.size() - pending->replyBytes, SEND_FLAGS);
+#endif
+			if (sent < 0)
+			{
+				if (WouldBlock(LastSocketError()))
+				{
+					++pending;
+					continue;
+				}
+				closePending();
+				continue;
+			}
+			if (sent == 0)
+			{
+				++pending;
+				continue;
+			}
+			pending->replyBytes += static_cast<std::size_t>(sent);
+			if (pending->replyBytes < pending->reply.size())
+			{
+				++pending;
+				continue;
+			}
+
+			const TransportPlayerId acceptedId = pending->playerId;
+			State::Peer peer;
+			peer.id = acceptedId;
+			peer.socket = pending->socket;
+			pending->socket = INVALID_SOCKET_HANDLE;
+			pending = mState->pendingHandshakes.erase(pending);
+			mState->peers.push_back(std::move(peer));
+			return acceptedId;
+		}
+
+		if (mState->peers.size() + mState->pendingHandshakes.size() >= MAX_TCP_PEERS)
+			return std::nullopt;
+		sockaddr_storage remote{};
+#if defined(_WIN32)
+		int remoteSize = sizeof(remote);
+#else
+		socklen_t remoteSize = sizeof(remote);
+#endif
+		const SocketHandle accepted = accept(mState->listenSocket, reinterpret_cast<sockaddr*>(&remote), &remoteSize);
+		if (accepted == INVALID_SOCKET_HANDLE || !SetNonBlocking(accepted))
+		{
+			if (accepted != INVALID_SOCKET_HANDLE)
+				CloseSocket(accepted);
+			return std::nullopt;
+		}
+		State::PendingHandshake pending;
+		pending.socket = accepted;
+		pending.deadline = now + std::chrono::milliseconds(PEER_HANDSHAKE_TIMEOUT_MS);
+		mState->pendingHandshakes.push_back(std::move(pending));
+		return std::nullopt;
 	}
 
 	std::optional<TransportPlayerId> TcpNetworkTransport::AcceptPeerInternal(

@@ -173,6 +173,7 @@ namespace Coop
 		explicit TcpNetworkTransport(std::unique_ptr<State> state);
 		std::optional<TransportPlayerId> AcceptPeerInternal(std::optional<TransportPlayerId> expectedPlayerId,
 			std::uint32_t timeoutMilliseconds);
+		std::optional<TransportPlayerId> AcceptNextPeerNonBlocking();
 		std::unique_ptr<State> mState;
 	};
 }

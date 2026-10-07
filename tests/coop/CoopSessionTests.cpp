@@ -27,6 +27,11 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 namespace
 {
 	void Require(bool condition, const char* message)
@@ -1800,6 +1805,49 @@ namespace
 		host->Close();
 	}
 
+#if defined(_WIN32)
+	void TestTcpPartialHandshakeDoesNotBlockLobbyPoll()
+	{
+		auto host = Coop::TcpNetworkTransport::Listen(711, 0);
+		Require(host && host->GetBoundPort() != 0, "partial-handshake host binds an ephemeral port");
+		const SOCKET socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		Require(socket != INVALID_SOCKET, "partial-handshake client socket is created");
+		sockaddr_in address{};
+		address.sin_family = AF_INET;
+		address.sin_port = htons(host->GetBoundPort());
+		address.sin_addr.s_addr = inet_addr("127.0.0.1");
+		Require(address.sin_addr.s_addr != INADDR_NONE
+			&& connect(socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
+			"partial-handshake client connects to the lobby listener");
+		const std::array<std::uint8_t, 2> partialHello{'P', 'V'};
+		Require(send(socket, reinterpret_cast<const char*>(partialHello.data()),
+			static_cast<int>(partialHello.size()), 0) == static_cast<int>(partialHello.size()),
+			"partial-handshake client sends only the beginning of its hello");
+
+		const auto started = std::chrono::steady_clock::now();
+		Require(!host->AcceptNextPeer(0), "incomplete handshake is not admitted");
+		const auto elapsed = std::chrono::steady_clock::now() - started;
+		Require(elapsed < std::chrono::milliseconds(250),
+			"zero-wait lobby polling does not block on a partial TCP handshake");
+
+		const std::array<std::uint8_t, 6> remainingHello{ 'Z', 'H', 0xC8, 0x02, 0x00, 0x00 };
+		Require(send(socket, reinterpret_cast<const char*>(remainingHello.data()),
+			static_cast<int>(remainingHello.size()), 0) == static_cast<int>(remainingHello.size()),
+			"partial-handshake client completes its hello and player ID");
+		std::optional<Coop::TransportPlayerId> accepted;
+		for (int attempt = 0; attempt < 1000 && !accepted; ++attempt)
+		{
+			accepted = host->AcceptNextPeer(0);
+			if (!accepted)
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		Require(accepted == 712 && host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
+			"lobby admits the peer after its fragmented identity handshake completes");
+		closesocket(socket);
+		host->Close();
+	}
+#endif
+
 	void TestSessionSnapshotSerialization()
 	{
 		for (std::size_t count = 1; count <= Coop::MAX_PLAYERS; ++count)
@@ -1989,6 +2037,9 @@ int main(int argc, char** argv)
 	TestAuthorityResponseRoundTrip();
 	TestLocalTransportHarness();
 	TestTcpTransportLoopback();
+#if defined(_WIN32)
+	TestTcpPartialHandshakeDoesNotBlockLobbyPoll();
+#endif
 	TestSessionSnapshotSerialization();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
