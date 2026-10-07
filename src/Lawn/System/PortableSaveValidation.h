@@ -14,6 +14,12 @@
 
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_ARRAY_CAPACITY = 65536;
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_BLOB_BYTES = 16 * 1024 * 1024;
+inline constexpr std::uint32_t MAX_PORTABLE_SAVE_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
+inline bool IsValidPortableSavePayloadSize(std::size_t payloadSize) noexcept
+{
+	return payloadSize <= MAX_PORTABLE_SAVE_PAYLOAD_BYTES;
+}
 
 inline bool IsValidPortableSaveArrayHeader(std::uint32_t freeListHead,
 	std::uint32_t maxUsedCount, std::uint32_t size, std::uint32_t nextKey,

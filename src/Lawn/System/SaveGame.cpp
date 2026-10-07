@@ -2595,6 +2595,10 @@ static bool WriteChunkV4(std::vector<unsigned char>& thePayload, uint32_t theChu
 	std::vector<unsigned char> aChunk;
 	aChunk.resize(aChunkWriter.GetDataLen());
 	memcpy(aChunk.data(), aChunkWriter.GetDataPtr(), aChunkWriter.GetDataLen());
+	if (aChunk.size() > MAX_PORTABLE_SAVE_PAYLOAD_BYTES
+		|| thePayload.size() > MAX_PORTABLE_SAVE_PAYLOAD_BYTES - aChunk.size()
+		|| MAX_PORTABLE_SAVE_PAYLOAD_BYTES - thePayload.size() - aChunk.size() < 8U)
+		return false;
 	AppendChunk(thePayload, theChunkType, aChunk);
 	return true;
 }
@@ -2812,6 +2816,7 @@ static bool LawnLoadGameV4FromBytes(Board* theBoard,
 	std::span<const unsigned char> theBytes, bool theRequireExactSize)
 {
 	if (theBytes.size() < sizeof(SaveFileHeaderV4)
+		|| theBytes.size() - sizeof(SaveFileHeaderV4) > MAX_PORTABLE_SAVE_PAYLOAD_BYTES
 		|| theBytes.size() - sizeof(SaveFileHeaderV4) > std::numeric_limits<uint32_t>::max())
 		return false;
 
@@ -2825,7 +2830,8 @@ static bool LawnLoadGameV4FromBytes(Board* theBoard,
 	if (aHeader.mVersion != SAVE_FILE_V4_VERSION)
 		return false;
 	const size_t aAvailablePayloadSize = theBytes.size() - sizeof(SaveFileHeaderV4);
-	if (aHeader.mPayloadSize > aAvailablePayloadSize
+	if (!IsValidPortableSavePayloadSize(aHeader.mPayloadSize)
+		|| aHeader.mPayloadSize > aAvailablePayloadSize
 		|| (theRequireExactSize && aHeader.mPayloadSize != aAvailablePayloadSize))
 		return false;
 

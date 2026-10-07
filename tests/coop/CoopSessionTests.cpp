@@ -65,6 +65,10 @@ namespace
 			&& !IsValidPortableSaveEnumValue(-1, 0, 4)
 			&& !IsValidPortableSaveEnumValue(4, 0, 4),
 			"portable save enum values stay within their declared range");
+		Require(IsValidPortableSavePayloadSize(0)
+			&& IsValidPortableSavePayloadSize(MAX_PORTABLE_SAVE_PAYLOAD_BYTES)
+			&& !IsValidPortableSavePayloadSize(static_cast<std::size_t>(MAX_PORTABLE_SAVE_PAYLOAD_BYTES) + 1),
+			"portable save payloads have a strict global size limit");
 		Require(IsValidPortableSaveResourceId(0, 10, 10)
 			&& IsValidPortableSaveResourceId(9, 10, 10)
 			&& IsValidPortableSaveResourceId(10, 10, 10)
