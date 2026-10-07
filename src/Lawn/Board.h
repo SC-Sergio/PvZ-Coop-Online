@@ -23,6 +23,7 @@
 #define __BOARD_H__
 
 #include <cstdint>
+#include <span>
 
 #include "../ConstEnums.h"
 #include "../Sexy.TodLib/DataArray.h"
@@ -321,6 +322,7 @@ public:
 	void							SetGardenGameScene(GameScenes scene) noexcept;
 	BoardResult						GetGardenBoardResult() const noexcept;
 	void							SetGardenBoardResult(BoardResult result) noexcept;
+	bool							RestoreCooperativeSnapshot(std::span<const unsigned char> bytes);
 	Plant*							AddPlant(int theGridX, int theGridY, SeedType theSeedType, SeedType theImitaterType = SeedType::SEED_NONE);
 	Projectile*						AddProjectile(int theX, int theY, int theRenderOrder, int theRow, ProjectileType theProjectileType);
 	Coin*							AddCoin(int theX, int theY, CoinType theCoinType, CoinMotion theCoinMotion);

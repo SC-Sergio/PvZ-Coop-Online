@@ -14,6 +14,7 @@
 #include "../ConstEnums.h"
 
 #include <functional>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <unordered_set>
@@ -60,6 +61,7 @@ namespace Coop
 	void PumpHeartbeat();
 		std::optional<GardenSnapshot> TakeCompletedSnapshotRecovery();
 		GardenRecoveryStatus GetGardenRecoveryStatus(PlayerId playerId) const noexcept;
+		bool ApplyCompletedSnapshotRecovery();
 		bool AdvanceSimulationTick();
 		bool Execute(const PlayerCommand& command) override;
 		bool BeginSnapshotRecovery(TransportPlayerId peerId, PlayerId playerId);
@@ -95,6 +97,10 @@ namespace Coop
 		GardenSnapshotReceiver mSnapshotReceiver;
 		std::unordered_map<TransportPlayerId, GardenSnapshotSender> mSnapshotSenders;
 		std::unordered_map<PlayerId, GardenRecoveryStatus> mRecoveryStatuses;
+		std::unordered_map<PlayerId, GardenSnapshotRestoreConfirmation> mRecoveryTransferIds;
+		std::optional<std::vector<std::uint8_t>> mPendingRestoreConfirmation;
+		GardenSnapshotRestoreConfirmation mPendingRestoreIdentity;
+		std::chrono::steady_clock::time_point mLastRestoreConfirmationSend{};
 		std::uint64_t mNextSnapshotTransferId = 1;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;

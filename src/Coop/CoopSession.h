@@ -117,6 +117,7 @@ namespace Coop
 		bool MarkGardenDefeated(PlayerId ownerId);
 		bool MarkGardenCompleted(PlayerId ownerId);
 		bool AdvanceSimulationTick();
+		bool SynchronizeGardenTick(GardenId gardenId, std::uint64_t simulationTicks) noexcept;
 
 		const std::array<PlayerSlot, MAX_PLAYERS>& GetSlots() const noexcept { return mSlots; }
 		const std::vector<GardenInstance>& GetGardens() const noexcept { return mGardens; }

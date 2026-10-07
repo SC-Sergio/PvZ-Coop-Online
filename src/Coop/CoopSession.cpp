@@ -216,6 +216,18 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopSession::SynchronizeGardenTick(GardenId gardenId, std::uint64_t simulationTicks) noexcept
+	{
+		if (!mStarted || gardenId == 0)
+			return false;
+		const auto garden = std::find_if(mGardens.begin(), mGardens.end(), [gardenId](const GardenInstance& candidate)
+			{ return candidate.id == gardenId; });
+		if (garden == mGardens.end())
+			return false;
+		garden->simulationTicks = simulationTicks;
+		return true;
+	}
+
 	TeamResult CoopSession::GetTeamResult() const noexcept
 	{
 		if (!mStarted || mGardens.empty())

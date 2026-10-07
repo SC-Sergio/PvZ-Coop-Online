@@ -367,6 +367,14 @@ void Board::SetGardenBoardResult(BoardResult result) noexcept
 		mApp->mBoardResult = result;
 }
 
+bool Board::RestoreCooperativeSnapshot(std::span<const unsigned char> bytes)
+{
+	if (!mGardenStateIsolated || bytes.empty())
+		return false;
+	ScopedGardenSimulationState gardenState(this);
+	return LawnLoadGameV4FromMemory(this, bytes);
+}
+
 Board::~Board()
 {
 	ScopedGardenSimulationState aGardenState(this);

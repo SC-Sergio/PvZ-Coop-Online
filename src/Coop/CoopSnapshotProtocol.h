@@ -274,6 +274,47 @@ namespace Coop
 		return ack;
 	}
 
+	constexpr std::size_t COOP_SNAPSHOT_RESTORE_BYTES = 30;
+	struct GardenSnapshotRestoreConfirmation
+	{
+		std::uint64_t transferId = 0;
+		GardenId gardenId = 0;
+		std::uint64_t serverTick = 0;
+		friend bool operator==(const GardenSnapshotRestoreConfirmation&, const GardenSnapshotRestoreConfirmation&) = default;
+	};
+
+	inline std::vector<std::uint8_t> SerializeGardenSnapshotRestoreMessage(
+		const GardenSnapshotRestoreConfirmation& confirmation, bool acknowledgement)
+	{
+		if (confirmation.transferId == 0 || confirmation.gardenId == 0)
+			return {};
+		std::vector<std::uint8_t> bytes;
+		bytes.reserve(COOP_SNAPSHOT_RESTORE_BYTES);
+		const char* magic = acknowledgement ? "PVZK" : "PVZR";
+		bytes.insert(bytes.end(), magic, magic + 4);
+		WriteSnapshotU16(bytes, COOP_SNAPSHOT_PROTOCOL_VERSION);
+		WriteSnapshotU16(bytes, static_cast<std::uint16_t>(COOP_SNAPSHOT_RESTORE_BYTES));
+		WriteSnapshotU64(bytes, confirmation.transferId);
+		WriteSnapshotU32(bytes, confirmation.gardenId);
+		WriteSnapshotU64(bytes, confirmation.serverTick);
+		WriteSnapshotU16(bytes, 0);
+		return bytes;
+	}
+
+	inline std::optional<GardenSnapshotRestoreConfirmation> DeserializeGardenSnapshotRestoreMessage(
+		std::span<const std::uint8_t> bytes, bool acknowledgement)
+	{
+		const char* magic = acknowledgement ? "PVZK" : "PVZR";
+		if (bytes.size() != COOP_SNAPSHOT_RESTORE_BYTES || std::memcmp(bytes.data(), magic, 4) != 0
+			|| ReadSnapshotU16(bytes, 4) != COOP_SNAPSHOT_PROTOCOL_VERSION
+			|| ReadSnapshotU16(bytes, 6) != COOP_SNAPSHOT_RESTORE_BYTES || ReadSnapshotU16(bytes, 28) != 0)
+			return std::nullopt;
+		GardenSnapshotRestoreConfirmation confirmation{ReadSnapshotU64(bytes, 8), ReadSnapshotU32(bytes, 16),
+			ReadSnapshotU64(bytes, 20)};
+		return confirmation.transferId != 0 && confirmation.gardenId != 0
+			? std::optional<GardenSnapshotRestoreConfirmation>(confirmation) : std::nullopt;
+	}
+
 	enum class SnapshotSendStatus
 	{
 		IDLE,

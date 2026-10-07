@@ -309,6 +309,18 @@ namespace
 
 	void TestGardenSnapshotProtocol()
 	{
+		const Coop::GardenSnapshotRestoreConfirmation restoreIdentity{11, 77, 1234};
+		const auto restoreRequest = Coop::SerializeGardenSnapshotRestoreMessage(restoreIdentity, false);
+		const auto restoreAck = Coop::SerializeGardenSnapshotRestoreMessage(restoreIdentity, true);
+		Require(Coop::DeserializeGardenSnapshotRestoreMessage(restoreRequest, false) == restoreIdentity
+			&& Coop::DeserializeGardenSnapshotRestoreMessage(restoreAck, true) == restoreIdentity,
+			"restore completion messages bind transfer, garden, and authoritative tick");
+		auto malformedRestoreAck = restoreAck;
+		malformedRestoreAck.back() = 1;
+		Require(!Coop::DeserializeGardenSnapshotRestoreMessage(malformedRestoreAck, true)
+			&& !Coop::DeserializeGardenSnapshotRestoreMessage(restoreAck, false),
+			"restore completion rejects reserved-byte corruption and wrong message family");
+
 		std::vector<std::uint8_t> source(200000);
 		for (std::size_t i = 0; i < source.size(); ++i)
 			source[i] = static_cast<std::uint8_t>((i * 37) & 0xFF);
@@ -701,6 +713,12 @@ namespace
 			"one authoritative tick advances every active garden");
 		Require(session.AdvanceSimulationTick() && session.GetGardens()[0].simulationTicks == 2
 			&& session.GetGardens()[1].simulationTicks == 2, "tick update advances every garden together");
+		Require(session.SynchronizeGardenTick(session.GetGardens()[1].id, 900)
+			&& session.GetGardens()[1].simulationTicks == 900
+			&& session.GetGardens()[0].simulationTicks == 2,
+			"reconnect snapshot synchronizes only the owner's authoritative garden tick");
+		Require(!session.SynchronizeGardenTick(0, 1000) && !session.SynchronizeGardenTick(999, 1000),
+			"garden tick synchronization rejects invalid or unknown garden IDs");
 	}
 
 	void TestDisconnectAndReconnectStateTransitions()
