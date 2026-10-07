@@ -91,7 +91,7 @@ The engine build now includes `CoopGardenManager`, wired to `LawnApp` lifecycle/
 
 Add focused tests for ready/unready/start rules, ownership, team defeat/victory, commands and resource validation, serialization bounds and protocol version, deterministic difficulty, transport duplicates/order, disconnect/reconnect, and 2–4 process sessions. Use controllable latency/loss/reordering only after a real transport exists. Keep each test claim tied to commands and outcomes recorded in `COOP_PROGRESS.md`.
 
-The WebRTC signaling process integration also closes the host room after a guest rejoin in 2-, 3-, and 4-player sessions. It pumps each guest controller until `room-closed` or a terminal `ROOM_NOT_FOUND`/`REJOIN_REJECTED` result is surfaced, proving the controller stops retrying after an explicit end to the session. Repeat with `ctest --test-dir out/webrtc-build -R coop-webrtc-signaling-process --repeat until-fail:5 --output-on-failure -C Debug`; this is a same-machine signaling test, not a public Internet or Board-backed match test.
+The WebRTC signaling process integration also closes the host room after a guest rejoin in 2-, 3-, and 4-player sessions. It submits a well-formed but invalid resume token and requires the typed `REJOIN_REJECTED` result, then pumps each guest controller until `room-closed` is surfaced. This covers terminal failure classification and verifies the controller stops retrying after the host ends a session. Repeat with `ctest --test-dir out/webrtc-build -R coop-webrtc-signaling-process --repeat until-fail:5 --output-on-failure -C Debug`; this is a same-machine signaling test, not a public Internet or Board-backed match test.
 
 ## Manual play evidence still required
 

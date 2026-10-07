@@ -18,7 +18,7 @@ The garden manager routes command frames and receipts through a per-peer FIFO se
 
 The next envelope revision must add a message type, session epoch, and bounded payload length so command, lobby, snapshot, and heartbeat messages can share the transport. It must retain a separate schema version and explicit byte order. Reject unknown required versions/types, lengths above the configured maximum, invalid enum values, and trailing/short payloads.
 
-When the signaling service reports `room-closed`, the guest marks the room terminal, surfaces a host-closed message, and does not attempt another resume. `ROOM_NOT_FOUND` and `REJOIN_REJECTED` also stop retries because the server has stated that the prior session cannot be resumed. Transient host unavailability remains retryable. A terminal room state cannot advertise resume capability.
+When the signaling service reports `room-closed`, the guest marks the room terminal, surfaces a host-closed message, and does not attempt another resume. Rejoin setup returns a typed failure code: `ROOM_NOT_FOUND` and `REJOIN_REJECTED` stop retries because the prior session cannot be resumed; `HOST_UNAVAILABLE` and other transient failures remain retryable. A terminal room state cannot advertise resume capability. Human-readable error messages are not used to classify failure policy.
 
 ## Prepared garden snapshot fragments
 
