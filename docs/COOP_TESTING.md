@@ -24,7 +24,7 @@ Set `-DBUILD_COOP_TESTS=OFF` only when producing an application-only build. A he
 
 ## Optional Internet transport and signaling service
 
-CI validates the Compose template with `docker compose config --quiet` and non-secret placeholder values for the domain, public address, and TURN secret. This checks Compose parsing and required-variable interpolation; it does not start containers or prove relay connectivity. Run the same command from `services/coop-signaling` on a machine with Docker Compose installed. Never use or commit production credentials for this check.
+CI validates the Compose template with `docker compose config --quiet` and non-secret placeholder values for the domain, public address, and TURN secret. This checks Compose parsing and required-variable interpolation; it does not start containers or prove relay connectivity. Locally this passed with the official Docker Compose v5.6.0 Windows binary after checking its SHA-256 against GitHub release metadata. Run the same command from `services/coop-signaling` on a machine with Docker Compose installed. Never use or commit production credentials for this check. The GitHub Actions API currently exposes no registered workflow for this repository, so remote execution of the new CI job is still unverified.
 
 The WebRTC adapter is optional so ordinary and non-desktop builds do not acquire WebRTC dependencies. With vcpkg manifest mode, enable both the CMake option and manifest feature:
 
