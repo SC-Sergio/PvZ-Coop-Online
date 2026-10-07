@@ -206,7 +206,7 @@ export function createSignalingServer({
         }
         const room = rooms.get(message.roomCode);
         const player = room?.players.get(message.playerId);
-        if (!player || player.role !== "guest" || player.socket
+        if (!player || player.role !== "guest"
           || !timingSafeEqual(player.resumeTokenHash, createHash("sha256").update(message.resumeToken).digest())) {
           send(socket, { type: "error", code: "REJOIN_REJECTED" });
           return;
@@ -216,10 +216,17 @@ export function createSignalingServer({
           send(socket, { type: "error", code: "HOST_UNAVAILABLE" });
           return;
         }
+        if (player.socket) {
+          sessions.delete(player.socket);
+          send(host.socket, { type: "peer-left", playerId: message.playerId });
+          player.socket.close();
+        }
+        const nextResumeToken = randomBytes(32).toString("base64url");
+        player.resumeTokenHash = createHash("sha256").update(nextResumeToken).digest();
         player.socket = socket;
         player.disconnectedAt = null;
         sessions.set(socket, { roomCode: message.roomCode, playerId: message.playerId });
-        send(socket, { type: "rejoined", hostId: room.hostId, peers: [room.hostId], iceServers: issueIceServers(message.playerId) });
+        send(socket, { type: "rejoined", hostId: room.hostId, peers: [room.hostId], resumeToken: nextResumeToken, iceServers: issueIceServers(message.playerId) });
         send(host.socket, { type: "peer-joined", playerId: message.playerId });
         return;
       }

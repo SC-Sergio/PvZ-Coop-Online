@@ -159,6 +159,8 @@ test("reserves a disconnected player slot and permits only token-authenticated r
   const resumed = await waitForType(rejoinedSocket, "rejoined");
   assert.equal(resumed.hostId, "301");
   assert.deepEqual(resumed.peers, ["301"]);
+  assert.match(resumed.resumeToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(resumed.resumeToken, joined.resumeToken);
   assert.deepEqual(await waitForType(host, "peer-joined"), { type: "peer-joined", playerId: "302" });
 
   send(attacker, { type: "rejoin", playerId: "302", roomCode: created.roomCode, resumeToken: joined.resumeToken });

@@ -24,9 +24,15 @@ namespace Coop
 		static std::unique_ptr<WebRtcSignalingTransport> CreateHost(
 			TransportPlayerId localPlayerId, const std::string& signalingUrl,
 			const rtc::Configuration& iceConfiguration, std::string& roomCode,
-			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(10));
+			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(10),
+			std::string* resumeToken = nullptr);
 		static std::unique_ptr<WebRtcSignalingTransport> JoinRoom(
 			TransportPlayerId localPlayerId, const std::string& roomCode,
+			const std::string& signalingUrl, const rtc::Configuration& iceConfiguration,
+			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(30),
+			std::string* resumeToken = nullptr);
+		static std::unique_ptr<WebRtcSignalingTransport> RejoinRoom(
+			TransportPlayerId localPlayerId, const std::string& roomCode, const std::string& resumeToken,
 			const std::string& signalingUrl, const rtc::Configuration& iceConfiguration,
 			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(30));
 		~WebRtcSignalingTransport() override;
@@ -41,6 +47,8 @@ namespace Coop
 		void Close() noexcept override;
 
 		std::string GetRoomCode() const;
+	std::string GetResumeToken() const;
+	std::string GetSignalingUrl() const;
 		bool IsHost() const noexcept;
 		TransportPlayerId GetHostPlayerId() const noexcept;
 

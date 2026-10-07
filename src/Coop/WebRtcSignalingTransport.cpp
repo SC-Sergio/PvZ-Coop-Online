@@ -12,6 +12,7 @@
 #include <rtc/websocket.hpp>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <condition_variable>
 #include <mutex>
@@ -37,6 +38,8 @@ namespace Coop
 		bool joined = false;
 		rtc::Configuration iceConfiguration;
 		std::string roomCode;
+		std::string resumeToken;
+		std::string signalingUrl;
 		std::string error;
 		std::shared_ptr<rtc::WebSocket> socket;
 		std::unordered_map<TransportPlayerId, std::shared_ptr<rtc::PeerConnection>> peers;
@@ -60,6 +63,22 @@ namespace Coop
 				return false;
 			playerId = parsed;
 			return true;
+		}
+
+		bool IsValidResumeToken(const std::string& token)
+		{
+			return token.size() == 43 && std::all_of(token.begin(), token.end(), [](unsigned char character)
+				{ return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z')
+					|| (character >= '0' && character <= '9') || character == '_' || character == '-'; });
+		}
+
+		bool ParseResumeToken(const Json& message, std::string& token)
+		{
+			const auto resumeToken = message.find("resumeToken");
+			if (resumeToken == message.end() || !resumeToken->is_string())
+				return false;
+			token = resumeToken->get<std::string>();
+			return IsValidResumeToken(token);
 		}
 
 		void SetError(const std::shared_ptr<WebRtcSignalingTransport::State>& state, std::string error)
@@ -132,6 +151,7 @@ namespace Coop
 
 		void AddPeer(const std::shared_ptr<WebRtcSignalingTransport::State>& state,
 			TransportPlayerId peerId, bool createOffer);
+		void RemovePeer(const std::shared_ptr<WebRtcSignalingTransport::State>& state, TransportPlayerId peerId);
 
 		void OnSignal(const std::shared_ptr<WebRtcSignalingTransport::State>& state,
 			TransportPlayerId peerId, const std::string& kind, const std::string& payload)
@@ -186,21 +206,25 @@ namespace Coop
 			if (type == "created" && state->isHost)
 			{
 				const auto code = message.find("roomCode");
-				if (code == message.end() || !code->is_string())
+				std::string resumeToken;
+				if (code == message.end() || !code->is_string() || !ParseResumeToken(message, resumeToken))
 					return SetError(state, "Signaling service returned an invalid room code.");
 				if (!ApplyIceServers(state, message))
 					return SetError(state, "Signaling service returned invalid ICE server configuration.");
 				{
 					std::lock_guard lock(state->mutex);
 					state->roomCode = code->get<std::string>();
+					state->resumeToken = std::move(resumeToken);
 				}
 				state->changed.notify_all();
 				return;
 			}
-			if (type == "joined" && !state->isHost)
+			if ((type == "joined" || type == "rejoined") && !state->isHost)
 			{
 				TransportPlayerId hostId = 0;
-				if (!message.contains("hostId") || !ParsePlayerId(message["hostId"], hostId))
+				std::string resumeToken;
+				if (!message.contains("hostId") || !ParsePlayerId(message["hostId"], hostId)
+					|| !ParseResumeToken(message, resumeToken))
 					return SetError(state, "Signaling service returned an invalid host identity.");
 				if (!ApplyIceServers(state, message))
 					return SetError(state, "Signaling service returned invalid ICE server configuration.");
@@ -208,6 +232,7 @@ namespace Coop
 					std::lock_guard lock(state->mutex);
 					state->joined = true;
 					state->hostPlayerId = hostId;
+					state->resumeToken = std::move(resumeToken);
 				}
 				state->changed.notify_all();
 				return;
@@ -238,7 +263,7 @@ namespace Coop
 				}
 				TransportPlayerId peerId = 0;
 				if (message.contains("playerId") && ParsePlayerId(message["playerId"], peerId))
-					state->packets.DisconnectPeer(peerId);
+					RemovePeer(state, peerId);
 				return;
 			}
 			if (type == "error")
@@ -266,7 +291,8 @@ namespace Coop
 					return;
 			}
 			const std::weak_ptr<WebRtcSignalingTransport::State> weakState = state;
-			peer->onStateChange([weakState, peerId](rtc::PeerConnection::State peerState)
+			const std::weak_ptr<rtc::PeerConnection> weakPeer = peer;
+			peer->onStateChange([weakState, weakPeer, peerId](rtc::PeerConnection::State peerState)
 			{
 				if (peerState != rtc::PeerConnection::State::Failed
 					&& peerState != rtc::PeerConnection::State::Disconnected
@@ -274,11 +300,19 @@ namespace Coop
 					return;
 				if (auto locked = weakState.lock())
 				{
+					const auto inactivePeer = weakPeer.lock();
+					bool removed = false;
 					{
 						std::lock_guard lock(locked->mutex);
-						locked->peers.erase(peerId);
+						const auto found = locked->peers.find(peerId);
+						if (inactivePeer && found != locked->peers.end() && found->second == inactivePeer)
+						{
+							locked->peers.erase(found);
+							removed = true;
+						}
 					}
-					locked->packets.DisconnectPeer(peerId);
+					if (removed)
+						locked->packets.DisconnectPeer(peerId);
 					locked->changed.notify_all();
 				}
 			});
@@ -315,12 +349,31 @@ namespace Coop
 			}
 		}
 
+		void RemovePeer(const std::shared_ptr<WebRtcSignalingTransport::State>& state, TransportPlayerId peerId)
+		{
+			std::shared_ptr<rtc::PeerConnection> peer;
+			{
+				std::lock_guard lock(state->mutex);
+				const auto found = state->peers.find(peerId);
+				if (found != state->peers.end())
+				{
+					peer = std::move(found->second);
+					state->peers.erase(found);
+				}
+			}
+			state->packets.DisconnectPeer(peerId);
+			if (peer)
+				peer->close();
+			state->changed.notify_all();
+		}
+
 		std::shared_ptr<WebRtcSignalingTransport::State> BeginConnection(
 			TransportPlayerId localPlayerId, bool host, const std::string& url,
 			const rtc::Configuration& iceConfiguration, std::chrono::milliseconds timeout,
 			std::string* error)
 		{
 			auto state = std::make_shared<WebRtcSignalingTransport::State>(localPlayerId, host, iceConfiguration);
+			state->signalingUrl = url;
 			state->socket = std::make_shared<rtc::WebSocket>();
 			const std::weak_ptr<WebRtcSignalingTransport::State> weakState = state;
 			state->socket->onOpen([weakState]()
@@ -392,7 +445,7 @@ namespace Coop
 	std::unique_ptr<WebRtcSignalingTransport> WebRtcSignalingTransport::CreateHost(
 		TransportPlayerId localPlayerId, const std::string& signalingUrl,
 		const rtc::Configuration& iceConfiguration, std::string& roomCode,
-		std::string* error, std::chrono::milliseconds timeout)
+		std::string* error, std::chrono::milliseconds timeout, std::string* resumeToken)
 	{
 		if (localPlayerId == 0 || signalingUrl.empty() || timeout <= std::chrono::milliseconds::zero())
 		{
@@ -415,13 +468,16 @@ namespace Coop
 			return {};
 		}
 		roomCode = state->roomCode;
+		if (resumeToken)
+			*resumeToken = state->resumeToken;
 		lock.unlock();
 		return std::unique_ptr<WebRtcSignalingTransport>(new WebRtcSignalingTransport(std::move(state)));
 	}
 
 	std::unique_ptr<WebRtcSignalingTransport> WebRtcSignalingTransport::JoinRoom(
 		TransportPlayerId localPlayerId, const std::string& roomCode, const std::string& signalingUrl,
-		const rtc::Configuration& iceConfiguration, std::string* error, std::chrono::milliseconds timeout)
+		const rtc::Configuration& iceConfiguration, std::string* error, std::chrono::milliseconds timeout,
+		std::string* resumeToken)
 	{
 		if (localPlayerId == 0 || roomCode.size() != 16 || signalingUrl.empty() || timeout <= std::chrono::milliseconds::zero())
 		{
@@ -438,6 +494,7 @@ namespace Coop
 		if (!SendJson(state, Json{{"type", "join"}, {"playerId", std::to_string(localPlayerId)}, {"roomCode", roomCode}}))
 		{
 			if (error) *error = "Could not request the private room from the signaling service.";
+			state->socket->close();
 			return {};
 		}
 		std::unique_lock lock(state->mutex);
@@ -445,6 +502,56 @@ namespace Coop
 		if (!state->changed.wait_until(lock, deadline, [&state] { return state->joined || !state->error.empty(); }) || !state->joined)
 		{
 			if (error) *error = state->error.empty() ? "Timed out joining the signaling room." : state->error;
+			lock.unlock();
+			state->socket->close();
+			return {};
+		}
+		while (!state->closed && state->error.empty() && state->packets.GetConnectedPeerIds().empty()
+			&& std::chrono::steady_clock::now() < deadline)
+			state->changed.wait_until(lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(50)));
+		if (state->packets.GetConnectedPeerIds().empty())
+		{
+			if (error) *error = state->error.empty() ? "Timed out negotiating the host data channel." : state->error;
+			lock.unlock();
+			state->socket->close();
+			return {};
+		}
+		if (resumeToken)
+			*resumeToken = state->resumeToken;
+		lock.unlock();
+		return std::unique_ptr<WebRtcSignalingTransport>(new WebRtcSignalingTransport(std::move(state)));
+	}
+
+	std::unique_ptr<WebRtcSignalingTransport> WebRtcSignalingTransport::RejoinRoom(
+		TransportPlayerId localPlayerId, const std::string& roomCode, const std::string& resumeToken,
+		const std::string& signalingUrl, const rtc::Configuration& iceConfiguration,
+		std::string* error, std::chrono::milliseconds timeout)
+	{
+		if (localPlayerId == 0 || roomCode.size() != 16 || !IsValidResumeToken(resumeToken)
+			|| signalingUrl.empty() || timeout <= std::chrono::milliseconds::zero())
+		{
+			if (error) *error = "Invalid guest rejoin signaling parameters.";
+			return {};
+		}
+		auto state = BeginConnection(localPlayerId, false, signalingUrl, iceConfiguration, timeout, error);
+		if (!state)
+			return {};
+		{
+			std::lock_guard lock(state->mutex);
+			state->roomCode = roomCode;
+		}
+		if (!SendJson(state, Json{{"type", "rejoin"}, {"playerId", std::to_string(localPlayerId)},
+			{"roomCode", roomCode}, {"resumeToken", resumeToken}}))
+		{
+			if (error) *error = "Could not request the reserved room slot from the signaling service.";
+			state->socket->close();
+			return {};
+		}
+		std::unique_lock lock(state->mutex);
+		const auto deadline = std::chrono::steady_clock::now() + timeout;
+		if (!state->changed.wait_until(lock, deadline, [&state] { return state->joined || !state->error.empty(); }) || !state->joined)
+		{
+			if (error) *error = state->error.empty() ? "Timed out rejoining the signaling room." : state->error;
 			lock.unlock();
 			state->socket->close();
 			return {};
@@ -474,6 +581,8 @@ namespace Coop
 	std::optional<TransportPacket> WebRtcSignalingTransport::Receive() { return mState->packets.Receive(); }
 	bool WebRtcSignalingTransport::DisconnectPeer(TransportPlayerId peerId) noexcept { return mState->packets.DisconnectPeer(peerId); }
 	std::string WebRtcSignalingTransport::GetRoomCode() const { std::lock_guard lock(mState->mutex); return mState->roomCode; }
+	std::string WebRtcSignalingTransport::GetResumeToken() const { std::lock_guard lock(mState->mutex); return mState->resumeToken; }
+	std::string WebRtcSignalingTransport::GetSignalingUrl() const { std::lock_guard lock(mState->mutex); return mState->signalingUrl; }
 	bool WebRtcSignalingTransport::IsHost() const noexcept { return mState->isHost; }
 	TransportPlayerId WebRtcSignalingTransport::GetHostPlayerId() const noexcept { std::lock_guard lock(mState->mutex); return mState->hostPlayerId; }
 

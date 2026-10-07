@@ -130,13 +130,18 @@ namespace
 			if (!host)
 				throw std::runtime_error("could not create the host lobby controller");
 			std::vector<std::unique_ptr<Coop::CoopLobbyController>> guests;
+			std::vector<std::string> resumeTokens;
 			for (std::size_t guestIndex = 1; guestIndex < playerCount; ++guestIndex)
 			{
 				const Coop::PlayerId guestId = hostId + static_cast<Coop::PlayerId>(guestIndex);
+				std::string resumeToken;
 				auto transport = Coop::WebRtcSignalingTransport::JoinRoom(guestId, roomCode, signalingUrl,
-					configuration, &error, 20s);
+					configuration, &error, 20s, &resumeToken);
 				if (!transport)
 					throw std::runtime_error("guest room join failed: " + error);
+				if (resumeToken.empty() || resumeToken != transport->GetResumeToken())
+					throw std::runtime_error("guest did not receive its resume token");
+				resumeTokens.push_back(std::move(resumeToken));
 				if (transport->GetHostPlayerId() != hostId || transport->GetRoomCode() != roomCode)
 					throw std::runtime_error("guest did not bind the room host identity/code");
 				auto guest = Coop::CoopLobbyController::Join(std::move(transport), hostId, "Guest");
@@ -201,6 +206,39 @@ namespace
 			if (std::any_of(guests.begin(), guests.end(), [playerCount](const auto& guest)
 				{ return !guest->GetSession().HasStarted() || guest->GetSession().GetGardenCount() != playerCount; }))
 				throw std::runtime_error("WebRTC lobby did not replicate the started garden session");
+
+			const std::size_t returningIndex = guests.size() - 1;
+			const Coop::PlayerId returningPlayerId = hostId + static_cast<Coop::PlayerId>(returningIndex + 1);
+			auto* oldGuestTransport = dynamic_cast<Coop::WebRtcSignalingTransport*>(guests[returningIndex]->GetTransport());
+			if (!oldGuestTransport)
+				throw std::runtime_error("guest signaling transport was lost before reconnect test");
+			oldGuestTransport->Close();
+			const auto disconnectedDeadline = std::chrono::steady_clock::now() + 5s;
+			auto hostHasReturningPeer = [&]()
+			{
+				const auto peerIds = host->GetTransport()->GetConnectedPeerIds();
+				return std::find(peerIds.begin(), peerIds.end(), returningPlayerId) != peerIds.end();
+			};
+			while (std::chrono::steady_clock::now() < disconnectedDeadline
+				&& hostHasReturningPeer())
+				std::this_thread::sleep_for(10ms);
+			auto returnedTransport = Coop::WebRtcSignalingTransport::RejoinRoom(returningPlayerId, roomCode,
+				resumeTokens[returningIndex], signalingUrl, configuration, &error, 20s);
+			if (!returnedTransport || returnedTransport->GetResumeToken() == resumeTokens[returningIndex])
+				throw std::runtime_error("guest could not reclaim its slot with a rotated resume token: " + error);
+			const std::vector<std::uint8_t> reconnectProbe{0x52, 0x45, 0x4A, 0x01};
+			if (!returnedTransport->SendTo(hostId, reconnectProbe))
+				throw std::runtime_error("rejoined guest could not send through the new DataChannel");
+			std::optional<Coop::TransportPacket> reconnectPacket;
+			const auto reconnectDeadline = std::chrono::steady_clock::now() + 5s;
+			while (std::chrono::steady_clock::now() < reconnectDeadline && !reconnectPacket)
+			{
+				reconnectPacket = host->GetTransport()->Receive();
+				std::this_thread::sleep_for(1ms);
+			}
+			if (!reconnectPacket || reconnectPacket->senderId != returningPlayerId || reconnectPacket->bytes != reconnectProbe)
+				throw std::runtime_error("rejoined peer did not deliver its packet over the replacement DataChannel");
+			returnedTransport->Close();
 		}
 		std::cout << "Three/four-player signaling, lobby ready/start, and WebRTC transport tests passed\n";
 		return 0;
