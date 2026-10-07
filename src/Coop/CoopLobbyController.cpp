@@ -13,6 +13,7 @@
 #endif
 
 #include <algorithm>
+#include <thread>
 #include <vector>
 
 namespace Coop
@@ -215,19 +216,43 @@ namespace Coop
 		const std::string resumeToken = mResumeToken;
 		const std::string signalingUrl = mSignalingUrl;
 		mConnectionError = "Reconnecting to the host...";
-		mReconnectFuture = std::async(std::launch::async,
-			[localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
+		auto resultPromise = std::make_shared<std::promise<ReconnectResult>>();
+		mReconnectFuture = resultPromise->get_future();
+		auto reconnectTask = [resultPromise, localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
 			{
 				ReconnectResult result;
-				WebRtcRejoinError failure = WebRtcRejoinError::OTHER;
-				rtc::Configuration configuration;
-				auto transport = WebRtcSignalingTransport::RejoinRoom(localPlayerId, roomCode, resumeToken,
-					signalingUrl, configuration, &result.error, std::chrono::seconds(10), &failure);
-				result.transport = std::move(transport);
-				result.terminalFailure = failure == WebRtcRejoinError::ROOM_NOT_FOUND
-					|| failure == WebRtcRejoinError::REJOIN_REJECTED;
-				return result;
-			});
+				try
+				{
+					WebRtcRejoinError failure = WebRtcRejoinError::OTHER;
+					rtc::Configuration configuration;
+					result.transport = WebRtcSignalingTransport::RejoinRoom(localPlayerId, roomCode, resumeToken,
+						signalingUrl, configuration, &result.error, std::chrono::seconds(10), &failure);
+					result.terminalFailure = failure == WebRtcRejoinError::ROOM_NOT_FOUND
+						|| failure == WebRtcRejoinError::REJOIN_REJECTED;
+				}
+				catch (const std::exception& exception)
+				{
+					result.error = std::string("Rejoin failed: ") + exception.what();
+				}
+				catch (...)
+				{
+					result.error = "Rejoin failed with an unknown error.";
+				}
+				resultPromise->set_value(std::move(result));
+			};
+		std::thread reconnectWorker;
+		try
+		{
+			reconnectWorker = std::thread(std::move(reconnectTask));
+		}
+		catch (const std::exception& exception)
+		{
+			ReconnectResult result;
+			result.error = std::string("Could not start the reconnect worker: ") + exception.what();
+			resultPromise->set_value(std::move(result));
+		}
+		if (reconnectWorker.joinable())
+			reconnectWorker.detach();
 #endif
 	}
 
