@@ -149,6 +149,7 @@ inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t
 	std::array<bool, MAX_TRACKED_CHUNKS + 1> seenChunks{};
 	std::size_t position = 0;
 	bool requiredChunkSeen = false;
+	std::uint32_t previousKnownChunk = 0;
 	while (position < payloadSize)
 	{
 		if (payloadSize - position < 8)
@@ -164,9 +165,10 @@ inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t
 			return false;
 		if (chunkType > highestKnownChunk)
 			continue;
-		if (seenChunks[chunkType] || chunkSize < 4
+		if (chunkType < previousKnownChunk || seenChunks[chunkType] || chunkSize < 4
 			|| readU32(chunk) != expectedChunkVersion)
 			return false;
+		previousKnownChunk = chunkType;
 		seenChunks[chunkType] = true;
 
 		std::size_t fieldPosition = 4;

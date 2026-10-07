@@ -169,6 +169,10 @@ namespace
 		validPayload.insert(validPayload.end(), plants.begin(), plants.end());
 		Require(ValidatePortableSavePayload(validPayload.data(), validPayload.size(), 21, 1, 1),
 			"a fully framed SAVE4 payload with its required base chunk is accepted");
+		std::vector<std::uint8_t> outOfOrderPayload = plants;
+		outOfOrderPayload.insert(outOfOrderPayload.end(), base.begin(), base.end());
+		Require(!ValidatePortableSavePayload(outOfOrderPayload.data(), outOfOrderPayload.size(), 21, 1, 1),
+			"known SAVE4 chunks must remain in canonical order for cross-chunk references");
 		std::vector<std::uint8_t> futurePayload = makeChunk(22, 99, {});
 		futurePayload.insert(futurePayload.end(), base.begin(), base.end());
 		Require(ValidatePortableSavePayload(futurePayload.data(), futurePayload.size(), 21, 1, 1),
