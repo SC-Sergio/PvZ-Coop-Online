@@ -14,3 +14,10 @@
 - **Errors/known issues:** CMake/Ninja are not on `PATH`; use Visual Studio's bundled CMake and MSVC generator in this environment. A stale Ninja build directory lacks `build.ninja`; use the configured VS build directories. No legal `main.pak` or `properties/` was found, so playable engine behavior cannot be evaluated here. Main repository had no prior project test suite. SAVE4 outer and nested framing plus allocation lengths are bounded, but comprehensive field-reference validation and rollback behavior remain unverified in-engine.
 - **Hard blockers:** none confirmed. Legal game data is needed for in-game validation but not for source implementation. Do not invent or commit future Internet-provider credentials.
 - **Next concrete action:** continue auditing SAVE4 direct-index and cross-reference fields with malformed-frame tests; current checks cover board ice/fwoosh references, potted-plant indexes, zombie attachment links, row/column fields, board advice/result enums, and draw-indexed fog grid values. Then strengthen command/snapshot drift recovery and return to public Internet deployment once infrastructure access can be provisioned.
+
+### Checkpoint: SAVE4 entity row indices
+
+- **Change:** zombie and projectile portable readers now reject inherited `GameObject::mRow` values outside `[0, MAX_GRID_SIZE_Y)`. Those rows are used to index board arrays during simulation. A helper boundary assertion covers -1, 0, 5, and 6 for a six-row board.
+- **Verification:** MSVC 19.44 Debug app builds succeeded in `out/build-vs-vcpkg` and `out/webrtc-build`; CTest passed 2/2 and 4/4 respectively. `git diff --check` passed.
+- **Known limit:** reader validation compiles and helper bounds are tested, but no initialized-Board SAVE4 load can run without user-supplied legal assets.
+- **Next:** continue the hostile snapshot entity-field audit and test remaining bounded index/coordinate fields.

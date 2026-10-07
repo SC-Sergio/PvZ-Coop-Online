@@ -61,6 +61,11 @@ inline bool IsValidPortableSaveGridPosition(std::int32_t x, std::int32_t y,
 		&& y >= 0 && static_cast<std::uint32_t>(y) < height;
 }
 
+inline bool IsValidPortableSaveRow(std::int32_t row, std::uint32_t rowCount) noexcept
+{
+	return row >= 0 && static_cast<std::uint32_t>(row) < rowCount;
+}
+
 inline bool IsValidPortableSaveGridLook(std::int32_t look) noexcept
 {
 	return look >= 0 && look < 20;

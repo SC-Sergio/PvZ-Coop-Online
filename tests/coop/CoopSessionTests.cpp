@@ -123,6 +123,8 @@ namespace
 			"portable save grid coordinates stay inside fixed board dimensions");
 		Require(IsValidPortableSaveGridLook(0) && IsValidPortableSaveGridLook(19)
 			&& !IsValidPortableSaveGridLook(-1) && !IsValidPortableSaveGridLook(20)
+			&& IsValidPortableSaveRow(0, 6) && IsValidPortableSaveRow(5, 6)
+			&& !IsValidPortableSaveRow(-1, 6) && !IsValidPortableSaveRow(6, 6)
 			&& IsValidPortableSaveGridOffset(-5) && IsValidPortableSaveGridOffset(4)
 			&& !IsValidPortableSaveGridOffset(-6) && !IsValidPortableSaveGridOffset(5)
 			&& IsValidPortableSaveFogOpacity(0) && IsValidPortableSaveFogOpacity(255)

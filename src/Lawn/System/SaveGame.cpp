@@ -1037,7 +1037,8 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mHelmType),
 			HELMTYPE_NONE, HELMTYPE_GIGA_FOOTBALL + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mShieldType),
-			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)))
+			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)
+		|| !IsValidPortableSaveRow(theZombie.mRow, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }
 
@@ -1165,7 +1166,8 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 			MOTION_STRAIGHT, MOTION_HOMING + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mProjectileType),
 			PROJECTILE_PEA, NUM_PROJECTILES)
-		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)))
+		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)
+		|| !IsValidPortableSaveRow(theProjectile.mRow, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }
 
