@@ -4,6 +4,7 @@
  */
 
 #include "CoopGardenManager.h"
+#include "CoopRecoveryPolicy.h"
 #include "CommandEndpoint.h"
 #include "CommandSerialization.h"
 #include "CoopLobbyController.h"
@@ -506,8 +507,19 @@ namespace Coop
 					if (mLocalPlayerId
 						&& GetGardenRecoveryStatus(*mLocalPlayerId) != GardenRecoveryStatus::NONE)
 						return;
-					if (!QueueAcceptedCommand(command, executeTick))
-						SetGardenRecoveryStatus(command.senderId, GardenRecoveryStatus::FAILED);
+					const bool scheduled = QueueAcceptedCommand(command, executeTick);
+					const std::optional<PlayerId> recoveryPlayer = mLocalPlayerId && mSession->GetHostPlayerId()
+						? GetClientRecoveryPlayerForScheduleResult(*mLocalPlayerId, *mSession->GetHostPlayerId(), scheduled)
+						: std::nullopt;
+					if (recoveryPlayer)
+					{
+						// A late or unqueueable receipt makes this client's simulation non-canonical,
+						// regardless of which player authored the command. Force reconnect so the
+						// host can restore every garden from one frozen authoritative tick.
+						SetGardenRecoveryStatus(*recoveryPlayer, GardenRecoveryStatus::FAILED);
+						if (mTransport && mSession && mSession->GetHostPlayerId())
+							mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
+					}
 				});
 			ApplyCompletedSnapshotRecovery();
 			if (mPendingRestoreConfirmation

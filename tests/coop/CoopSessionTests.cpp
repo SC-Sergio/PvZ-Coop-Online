@@ -1,4 +1,5 @@
 #include "../../src/Coop/CoopSession.h"
+#include "../../src/Coop/CoopRecoveryPolicy.h"
 #include "../../src/Coop/CoopDifficulty.h"
 #include "../../src/Coop/SimulationTickProtocol.h"
 #include "../../src/Coop/CoopLoadout.h"
@@ -69,6 +70,18 @@ namespace
 			&& Coop::GetNextViewedGardenId(gardens, 44) == 11
 			&& Coop::GetNextViewedGardenId(gardens, 99) == 11,
 			"multi-garden view cycling advances, wraps, and recovers an unknown selection");
+	}
+
+	void TestClientRecoveryPolicy()
+	{
+		const auto recovery = Coop::GetClientRecoveryPlayerForScheduleResult(702, 701, false);
+		Require(recovery == 702, "an unqueueable accepted receipt resynchronizes the local client");
+		Require(!Coop::GetClientRecoveryPlayerForScheduleResult(702, 701, true),
+			"a successfully scheduled receipt does not request resynchronization");
+		Require(!Coop::GetClientRecoveryPlayerForScheduleResult(701, 701, false),
+			"the authoritative host does not use the client recovery path");
+		Require(!Coop::GetClientRecoveryPlayerForScheduleResult(0, 701, false),
+			"an unbound transport identity cannot request client resynchronization");
 	}
 
 	void TestPendingSunLedger()
@@ -2074,6 +2087,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestClientRecoveryPolicy();
 	TestPendingSunLedger();
 	TestGardenLevelStatsRecords();
 	TestPortableSaveBounds();
