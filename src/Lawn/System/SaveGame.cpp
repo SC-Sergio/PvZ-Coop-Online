@@ -21,6 +21,7 @@
 
 #include "Music.h"
 #include "SaveGame.h"
+#include "PlayerInfo.h"
 #include "../Board.h"
 #include "../Challenge.h"
 #include "../SeedPacket.h"
@@ -3028,6 +3029,7 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mBlinkReanimID), true, aValidReanimation)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mLightReanimID), true, aValidReanimation)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mSleepingReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveOptionalIndex(aPlant->mPottedPlantIndex, MAX_POTTED_PLANTS)
 			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mTargetZombieID), true, aValidZombie))
 			return false;
 		for (ZombieID aRelatedID : aPlant->mRelatedZombieID)
