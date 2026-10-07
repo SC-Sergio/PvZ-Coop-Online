@@ -253,7 +253,7 @@
 
 ### Checkpoint: nonblocking lobby join
 
-- **Change:** TCP and WebRTC Join operations now run in a background connection task. The UI adopts a completed controller/status through a mutex-protected shared result; the task captures no dialog or widget references. Leave and dialog destruction discard the result safely, and duplicate join/create/transport changes are blocked while a join is pending.
+- **Change:** TCP and WebRTC Join operations now run in a background connection task. The UI adopts a completed controller/status through a mutex-protected shared result; a local shared reference keeps that result and its mutex alive until the UI lock is released. The task captures no dialog or widget references. Leave and dialog destruction discard the result safely, and duplicate join/create/transport changes are blocked while a join is pending.
 - **Verification:** both MSVC Debug application builds succeeded (standard and WebRTC). CTest passed 2/2 and 4/4 respectively; `git diff --check` passed.
-- **Limit:** build and existing process-level network evidence only; no interactive dialog run, leave-during-negotiation check, initialized Board, or cross-network connection has been verified.
+- **Limit:** build and existing process-level network evidence only; no interactive dialog run, leave-during-negotiation check, initialized Board, or cross-network connection has been verified. A discarded connection attempt runs until the transport's own deadline (30 seconds for the current WebRTC join API); cancellation is not wired into the transport.
 - **Next:** continue checking lobby lifecycle and transport failure handling, then keep advancing toward asset-backed 1–4 player matches and a deployed cross-network service.

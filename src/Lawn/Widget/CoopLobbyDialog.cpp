@@ -218,16 +218,17 @@ void CoopLobbyDialog::Update()
 	LawnDialog::Update();
 	if (mPendingJoin)
 	{
+		const std::shared_ptr<PendingJoin> pendingJoin = mPendingJoin;
 		std::unique_ptr<Coop::CoopLobbyController> joinedLobby;
 		std::string joinedRoomCode;
 		std::string joinStatus;
 		{
-			std::lock_guard<std::mutex> lock(mPendingJoin->mutex);
-			if (mPendingJoin->completed)
+			std::lock_guard<std::mutex> lock(pendingJoin->mutex);
+			if (pendingJoin->completed)
 			{
-				joinedLobby = std::move(mPendingJoin->lobby);
-				joinedRoomCode = std::move(mPendingJoin->roomCode);
-				joinStatus = std::move(mPendingJoin->status);
+				joinedLobby = std::move(pendingJoin->lobby);
+				joinedRoomCode = std::move(pendingJoin->roomCode);
+				joinStatus = std::move(pendingJoin->status);
 				mPendingJoin.reset();
 			}
 		}
