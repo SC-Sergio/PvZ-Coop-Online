@@ -95,6 +95,8 @@ The WebRTC signaling process integration also closes the host room after a guest
 
 `TestDetachedFutureDoesNotBlockOnDestruction` blocks the worker on an atomic gate, drops its pending future, and checks destruction takes under 250 ms; a watchdog releases the worker after 300 ms so a regression cannot hang the test. It then checks the worker finishes after release. The helper is the same `LaunchDetachedFuture` used by the active-match reconnect path. `coop-session-tests` passed ten consecutive repetitions in both Debug configurations, and the full CTest suites passed 2/2 without WebRTC and 4/4 with WebRTC. This proves the shared future mechanism, but does not measure a blocked WebRTC socket or actual controller destruction during rejoin.
 
+`TestCoopSimulationRateIgnoresGlobalTimeCheats` confirms the co-op frame policy returns exactly one update and clears its slow-motion counter for stale slow/fast flags, while single-player fast motion still returns 20 updates and slow motion retains its four-frame cadence. Both MSVC Debug app variants rebuilt; full CTest passed 4/4 with WebRTC and 2/2 without it. App lifecycle restoration is compile-verified but has no live UI/runtime test without legal game assets.
+
 ## Manual play evidence still required
 
 Verify single-player using legally supplied assets, then host/client complete matches for 2, 3, and 4 players across distinct home networks. Confirm three players display one empty slot and run exactly three gardens; switch views while confirming all gardens keep ticking; exercise global victory/defeat and disconnect/rejoin. No such gameplay evidence exists yet.
