@@ -48,6 +48,13 @@ namespace
 
 	void TestPortableSaveBounds()
 	{
+		Require(IsCanonicalPortableSaveBool(0) && IsCanonicalPortableSaveBool(1)
+			&& !IsCanonicalPortableSaveBool(2) && !IsCanonicalPortableSaveBool(255),
+			"portable save booleans accept only canonical false or true bytes");
+		Require(IsValidPortableSaveFloat(0.0f) && IsValidPortableSaveFloat(-1.25f)
+			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::infinity())
+			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::quiet_NaN()),
+			"portable save floats reject infinities and NaNs");
 		Require(IsValidPortableSaveArrayHeader(0, 0, 0, 1001, 128, 128),
 			"an empty preallocated save array header is accepted");
 		Require(IsValidPortableSaveArrayHeader(20, 20, 8, 42, 128, 128),

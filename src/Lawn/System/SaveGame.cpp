@@ -294,6 +294,11 @@ public:
 			try
 			{
 				theValue = mReader->ReadFloat();
+				if (!IsValidPortableSaveFloat(theValue))
+				{
+					mFailed = true;
+					theValue = 0.0f;
+				}
 			}
 			catch (DataReaderException&)
 			{

@@ -20,6 +20,7 @@
  */
 
 #include "DataSync.h"
+#include "PortableSaveValidation.h"
 #include "fcaseopen/fcaseopen.h"
 
 using Sexy::FromLE16;
@@ -145,9 +146,12 @@ uint8_t DataReader::ReadUInt8()
 
 bool DataReader::ReadBool()
 {
-	bool aBool;
-	ReadBytes(&aBool, sizeof(aBool));
-	return aBool;
+	static_assert(sizeof(bool) == sizeof(uint8_t));
+	uint8_t aValue = 0;
+	ReadBytes(&aValue, sizeof(aValue));
+	if (!IsCanonicalPortableSaveBool(aValue))
+		throw DataReaderException();
+	return aValue != 0;
 }
 
 float DataReader::ReadFloat()

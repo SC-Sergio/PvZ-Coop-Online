@@ -7,6 +7,7 @@
 #define PVZ_PORTABLE_SAVE_VALIDATION_H
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstddef>
 #include <vector>
@@ -30,6 +31,16 @@ inline bool IsValidPortableSaveBlobSize(std::uint32_t blobSize,
 	std::uint32_t remainingBytes) noexcept
 {
 	return blobSize <= MAX_PORTABLE_SAVE_BLOB_BYTES && blobSize <= remainingBytes;
+}
+
+inline bool IsCanonicalPortableSaveBool(std::uint8_t value) noexcept
+{
+	return value <= 1;
+}
+
+inline bool IsValidPortableSaveFloat(float value) noexcept
+{
+	return std::isfinite(value);
 }
 
 template <typename GetEntryId>

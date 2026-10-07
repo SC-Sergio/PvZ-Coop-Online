@@ -71,3 +71,6 @@ Verify single-player using legally supplied assets, then host/client complete ma
 
 
 The signaling service has five Node tests covering private rooms, bounded host-only signaling, authenticated rejoin/token rotation, input validation, per-player TURN credentials and health checks. `docker compose config` and container startup have not been verified on this workstation because Docker is not installed.
+
+
+Portable SAVE4 scalar helper tests accept canonical false/true and finite floats while rejecting other boolean bytes, NaN, and infinities. Both root and WebRTC Debug application builds compile these checks into the save reader; a real Board save/load round-trip remains unverified.
