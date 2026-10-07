@@ -64,8 +64,10 @@ namespace Coop
 		const auto validTargetPlayer = [&session, &command]()
 		{
 			return command.targetPlayerId != 0 && command.targetPlayerId != command.senderId
+				&& command.targetGardenId != 0
 				&& std::any_of(session.GetSlots().begin(), session.GetSlots().end(), [&command](const PlayerSlot& candidate)
-					{ return candidate.state == PlayerState::PLAYING && candidate.playerId == command.targetPlayerId; });
+					{ return candidate.state == PlayerState::PLAYING && candidate.playerId == command.targetPlayerId
+						&& candidate.gardenId == command.targetGardenId; });
 		};
 
 		switch (command.type)

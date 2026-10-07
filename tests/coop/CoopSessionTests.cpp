@@ -1054,6 +1054,11 @@ namespace
 		command.gardenId = firstGarden;
 		command.type = Coop::CommandType::SEND_RESOURCE;
 		command.targetPlayerId = 52;
+		command.targetGardenId = firstGarden;
+		command.amount = 100;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_TARGET,
+			"resource transfer rejects a garden ID that belongs to another player");
+		command.targetGardenId = secondGarden;
 		command.amount = Coop::MAX_RESOURCE_TRANSFER + 1;
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_VALUE, "resource transfer limit is enforced");
 		command.amount = 100;
