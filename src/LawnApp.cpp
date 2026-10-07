@@ -411,6 +411,8 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
 	mSinglePlayerModeBeforeCoop = mGameMode;
 	mEasyPlantingCheatBeforeCoop = mEasyPlantingCheat;
+	mCheatModesBeforeCoop = { mMustacheMode, mSuperMowerMode, mFutureMode, mPinataMode,
+		mDanceMode, mDaisyMode, mSukhbirMode };
 	// Every peer must simulate gameplay from the same profile state. Copying the
 	// local save here lets purchases and Zen Garden inventory change loot and
 	// board setup, which makes deterministic garden streams diverge across peers.
@@ -427,6 +429,16 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	// Easy planting changes cost checks and deductions outside the command
 	// authority path. Keep every peer on the same rules for the whole match.
 	mEasyPlantingCheat = false;
+	// Board copies these per-profile cheat modes into every garden at creation.
+	// Some (for example Daisy and Super Mower) alter simulation and must agree
+	// across peers, while the UI debug toggles are local profile state.
+	mMustacheMode = false;
+	mSuperMowerMode = false;
+	mFutureMode = false;
+	mPinataMode = false;
+	mDanceMode = false;
+	mDaisyMode = false;
+	mSukhbirMode = false;
 	mBoardResult = BoardResult::BOARDRESULT_NONE;
 	mCoopLobbyController = std::move(lobby);
 
@@ -478,6 +490,13 @@ void LawnApp::StopCoopMatch()
 		mPlayerInfo = mSinglePlayerInfoBeforeCoop;
 		mGameMode = mSinglePlayerModeBeforeCoop;
 		mEasyPlantingCheat = mEasyPlantingCheatBeforeCoop;
+		mMustacheMode = mCheatModesBeforeCoop.mustache;
+		mSuperMowerMode = mCheatModesBeforeCoop.superMower;
+		mFutureMode = mCheatModesBeforeCoop.future;
+		mPinataMode = mCheatModesBeforeCoop.pinata;
+		mDanceMode = mCheatModesBeforeCoop.dance;
+		mDaisyMode = mCheatModesBeforeCoop.daisy;
+		mSukhbirMode = mCheatModesBeforeCoop.sukhbir;
 		mCoopSandboxPlayerInfo.reset();
 		mSinglePlayerInfoBeforeCoop = nullptr;
 	}

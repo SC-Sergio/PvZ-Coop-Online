@@ -69,6 +69,17 @@ typedef std::list<Image*> ImageList;
 class LawnApp : public SexyApp
 {
 public:
+	struct CoopSavedCheatModes
+	{
+		bool mustache = false;
+		bool superMower = false;
+		bool future = false;
+		bool pinata = false;
+		bool dance = false;
+		bool daisy = false;
+		bool sukhbir = false;
+	};
+
 	Board*							mBoard;
 	Coop::CoopGardenManager*		mCoopGardenManager;
 	std::unique_ptr<Coop::CoopLobbyController> mCoopLobbyController;
@@ -76,6 +87,7 @@ public:
 	PlayerInfo*						mSinglePlayerInfoBeforeCoop;
 	GameMode						mSinglePlayerModeBeforeCoop;
 	bool							mEasyPlantingCheatBeforeCoop;
+	CoopSavedCheatModes			mCheatModesBeforeCoop;
 	TitleScreen*					mTitleScreen;
 	GameSelector*					mGameSelector;
 	SeedChooserScreen*				mSeedChooserScreen;
