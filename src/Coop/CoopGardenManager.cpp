@@ -909,7 +909,34 @@ namespace Coop
 			const bool executed = Execute(command);
 			mExecutingScheduledCommand = wasExecutingScheduled;
 			if (!executed)
-				SetGardenRecoveryStatus(owner, GardenRecoveryStatus::FAILED);
+			{
+				if (!mLocalPlayerId || !mSession->GetHostPlayerId() || !mTransport)
+				{
+					if (mLocalPlayerId)
+						SetGardenRecoveryStatus(owner, GardenRecoveryStatus::FAILED);
+					continue;
+				}
+				const PlayerId localPlayerId = *mLocalPlayerId;
+				const PlayerId hostPlayerId = *mSession->GetHostPlayerId();
+				const auto connectedPeers = mTransport->GetConnectedPeerIds();
+				const auto recoveryPeers = GetExecutionFailureRecoveryPeers(
+					localPlayerId, hostPlayerId, connectedPeers);
+				if (localPlayerId == hostPlayerId)
+				{
+					for (PlayerId peerId : recoveryPeers)
+					{
+						mSession->MarkDisconnected(peerId);
+						SetGardenRecoveryStatus(peerId, GardenRecoveryStatus::FAILED);
+						mTransport->DisconnectPeer(peerId);
+					}
+				}
+				else
+				{
+					SetGardenRecoveryStatus(localPlayerId, GardenRecoveryStatus::FAILED);
+					for (PlayerId peerId : recoveryPeers)
+						mTransport->DisconnectPeer(peerId);
+				}
+			}
 		}
 		return true;
 	}

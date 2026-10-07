@@ -82,6 +82,17 @@ namespace
 			"the authoritative host does not use the client recovery path");
 		Require(!Coop::GetClientRecoveryPlayerForScheduleResult(0, 701, false),
 			"an unbound transport identity cannot request client resynchronization");
+		const std::vector<Coop::PlayerId> connectedPeers{702, 703, 703, 0};
+		Require(Coop::GetExecutionFailureRecoveryPeers(701, 701, connectedPeers)
+			== std::vector<Coop::PlayerId>{702, 703},
+			"host execution failure reconnects each unique connected guest");
+		const std::vector<Coop::PlayerId> guestConnectedPeers{701};
+		Require(Coop::GetExecutionFailureRecoveryPeers(702, 701, guestConnectedPeers)
+			== std::vector<Coop::PlayerId>{701},
+			"guest execution failure reconnects only to its connected host");
+		Require(Coop::GetExecutionFailureRecoveryPeers(703, 701, {}).empty()
+			&& Coop::GetExecutionFailureRecoveryPeers(0, 701, connectedPeers).empty(),
+			"unconnected host and invalid identities do not request recovery links");
 	}
 
 	void TestPendingSunLedger()

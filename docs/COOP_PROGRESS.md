@@ -278,3 +278,10 @@
 - **Verification:** both MSVC Debug app/test configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. A new protocol test covers an accepted action arriving while the local roster marks its author disconnected.
 - **Limit:** the recovery callback and Board restoration still lack initialized-Board runtime evidence; arbitrary live state drift is not detected by this check.
 - **Next:** continue auditing canonical command receipt and garden recovery paths, then pursue legal-asset gameplay and cross-network service validation.
+
+### Checkpoint: recover when accepted command application fails
+
+- **Finding and change:** a command could pass receipt validation but fail when applied at its canonical tick. Guests now close the host link and enter same-ID snapshot recovery; when host application fails, the host marks every connected guest disconnected and closes those links so all guests rejoin from the authoritative snapshot batch. Recovery peer selection rejects invalid identities, avoids duplicate host-side peer IDs, and is unit-tested.
+- **Verification:** both MSVC Debug application/test configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC.
+- **Limit:** this does not roll back a partially applied failure and is not end-to-end tested with initialized Boards or injected manager execution failure. Arbitrary state drift remains undetected.
+- **Next:** keep closing synchronization failure paths, then validate snapshot recovery against initialized Boards when legal user-provided game data is available.
