@@ -74,3 +74,6 @@ The signaling service has five Node tests covering private rooms, bounded host-o
 
 
 Portable SAVE4 scalar helper tests accept canonical false/true and finite floats while rejecting other boolean bytes, NaN, and infinities. Both root and WebRTC Debug application builds compile these checks into the save reader; a real Board save/load round-trip remains unverified.
+
+
+The session test target links `DataSync.cpp` and its case-insensitive file-open helper. It reuses one `DataReader` across canonical false/true and invalid boolean buffers to check both strict decoding and cursor reset.

@@ -54,3 +54,5 @@ The signaling service includes a Linux VPS deployment template: Caddy terminates
 The signaling WebSocket server now rejects sockets above a per-instance limit of 512 connections (configurable through `createSignalingServer` for deployments/tests), in addition to its per-socket message rate limit and 32 KiB frame cap. Rejected sockets receive `SERVER_BUSY` and close with retryable code 1013.
 
 SAVE4 reading rejects noncanonical boolean bytes (only 0 and 1) and non-finite floating-point values before treating the field as valid. This catches malformed scalar encodings; it does not yet validate all enum ranges, coordinate/range invariants, cross-entity references, or provide transactional Board application. The memory loader remains unsafe for untrusted network data.
+
+`DataReader::OpenMemory` resets the in-memory cursor on every buffer assignment. The standalone cooperative test target links the small `DataSync.cpp` reader surface so malformed boolean bytes are exercised through the actual decoder; noncanonical 0/1 encodings are rejected before writing into a C++ `bool` object.

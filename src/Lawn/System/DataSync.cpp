@@ -78,6 +78,7 @@ void DataReader::OpenMemory(const void* theData, uint32_t theDataLen, bool takeO
 
 	mData = (char*)theData;
 	mDataLen = theDataLen;
+	mDataPos = 0;
 	mOwnData = takeOwnership;
 }
 

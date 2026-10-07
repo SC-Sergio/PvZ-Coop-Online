@@ -10,12 +10,14 @@
 #include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/Coop/CoopSnapshotProtocol.h"
 #include "../../src/ConstEnums.h"
+#include "../../src/Lawn/System/DataSync.h"
 #include "../../src/Lawn/System/PortableSaveValidation.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <thread>
 #include <utility>
@@ -55,6 +57,25 @@ namespace
 			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::infinity())
 			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::quiet_NaN()),
 			"portable save floats reject infinities and NaNs");
+		const std::uint8_t falseByte = 0;
+		const std::uint8_t trueByte = 1;
+		const std::uint8_t invalidBoolByte = 2;
+		DataReader boolReader;
+		boolReader.OpenMemory(&falseByte, sizeof(falseByte), false);
+		Require(!boolReader.ReadBool(), "DataReader decodes canonical false byte");
+		boolReader.OpenMemory(&trueByte, sizeof(trueByte), false);
+		Require(boolReader.ReadBool(), "DataReader decodes canonical true byte");
+		boolReader.OpenMemory(&invalidBoolByte, sizeof(invalidBoolByte), false);
+		bool invalidBoolRejected = false;
+		try
+		{
+			(void)boolReader.ReadBool();
+		}
+		catch (const DataReaderException&)
+		{
+			invalidBoolRejected = true;
+		}
+		Require(invalidBoolRejected, "DataReader rejects noncanonical boolean encodings before creating bool values");
 		Require(IsValidPortableSaveArrayHeader(0, 0, 0, 1001, 128, 128),
 			"an empty preallocated save array header is accepted");
 		Require(IsValidPortableSaveArrayHeader(20, 20, 8, 42, 128, 128),
