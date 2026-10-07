@@ -1070,8 +1070,8 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mShieldType),
 			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)
 		|| !IsValidPortableSaveRow(theZombie.mRow, MAX_GRID_SIZE_Y)
-		|| !IsValidPortableSaveAnimationTiming(theZombie.mAnimTicksPerFrame,
-			theZombie.mAnimFrames, false)
+		|| !IsValidPortableSaveAnimationState(theZombie.mAnimTicksPerFrame,
+			theZombie.mAnimFrames, theZombie.mAnimCounter, theZombie.mFrame, false)
 		|| !IsValidPortableSaveWorldCoordinate(theZombie.mPosX)
 		|| !IsValidPortableSaveWorldCoordinate(theZombie.mPosY)
 		|| !IsValidPortableSaveWorldCoordinate(theZombie.mVelX)
@@ -1149,8 +1149,8 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))
 		|| !IsValidPortableSaveGridPosition(thePlant.mPlantCol, thePlant.mRow,
 			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)
-		|| !IsValidPortableSaveAnimationTiming(thePlant.mFrameLength,
-			thePlant.mNumFrames, false)
+		|| !IsValidPortableSaveAnimationState(thePlant.mFrameLength,
+			thePlant.mNumFrames, thePlant.mAnimCounter, thePlant.mFrame, false)
 		|| !IsValidPortableSaveRow(thePlant.mStartRow, MAX_GRID_SIZE_Y)
 		|| !IsValidPortableSaveWorldCoordinate(thePlant.mTargetX)
 		|| !IsValidPortableSaveWorldCoordinate(thePlant.mTargetY)))
@@ -1212,8 +1212,8 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 			PROJECTILE_PEA, NUM_PROJECTILES)
 		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)
 		|| !IsValidPortableSaveOptionalIndex(theProjectile.mHitTorchwoodGridX, MAX_GRID_SIZE_X)
-		|| !IsValidPortableSaveAnimationTiming(theProjectile.mAnimTicksPerFrame,
-			theProjectile.mNumFrames, true)
+		|| !IsValidPortableSaveAnimationState(theProjectile.mAnimTicksPerFrame,
+			theProjectile.mNumFrames, theProjectile.mAnimCounter, theProjectile.mFrame, true)
 		|| !IsValidPortableSaveRow(theProjectile.mCobTargetRow, MAX_GRID_SIZE_Y)
 		|| !IsValidPortableSaveRow(theProjectile.mRow, MAX_GRID_SIZE_Y)
 		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mPosX)

@@ -256,14 +256,17 @@ namespace
 			&& !IsValidPortableSaveGridPosition(9, 5, 9, 6)
 			&& !IsValidPortableSaveGridPosition(8, 6, 9, 6),
 			"portable save grid coordinates stay inside fixed board dimensions");
-		Require(IsValidPortableSaveAnimationTiming(12, 5, false)
-			&& IsValidPortableSaveAnimationTiming(0, 1, true)
-			&& !IsValidPortableSaveAnimationTiming(0, 5, false)
-			&& !IsValidPortableSaveAnimationTiming(12, 0, false)
-			&& !IsValidPortableSaveAnimationTiming(-1, 5, true)
-			&& !IsValidPortableSaveAnimationTiming(10000, 101, false)
-			&& !IsValidPortableSaveAnimationTiming(10001, 1, false),
-			"portable save animation timing rejects zero divisors and unsafe frame products");
+		Require(IsValidPortableSaveAnimationState(12, 5, 24, 2, false)
+			&& IsValidPortableSaveAnimationState(0, 1, 0, 0, true)
+			&& !IsValidPortableSaveAnimationState(0, 5, 0, 0, false)
+			&& !IsValidPortableSaveAnimationState(12, 0, 0, 0, false)
+			&& !IsValidPortableSaveAnimationState(-1, 5, 0, 0, true)
+			&& !IsValidPortableSaveAnimationState(10000, 101, 0, 0, false)
+			&& !IsValidPortableSaveAnimationState(10001, 1, 0, 0, false)
+			&& !IsValidPortableSaveAnimationState(12, 5, -1, 0, false)
+			&& !IsValidPortableSaveAnimationState(12, 5, 60, 0, false)
+			&& !IsValidPortableSaveAnimationState(12, 5, 0, 5, false),
+			"portable save animation state rejects zero divisors, unsafe counters, and invalid frame indexes");
 		Require(IsValidPortableSaveGridLook(0) && IsValidPortableSaveGridLook(19)
 			&& !IsValidPortableSaveGridLook(-1) && !IsValidPortableSaveGridLook(20)
 			&& IsValidPortableSaveRow(0, 6) && IsValidPortableSaveRow(5, 6)
