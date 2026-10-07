@@ -39,8 +39,8 @@
 ### Checkpoint: branch CI coverage
 
 - **Change:** GitHub Actions now runs on pushes and pull requests for `feature/coop-online`, and the Arch, MSYS2, MSVC, and macOS desktop build jobs run their available CTest suites after compilation.
-- **Verification:** local Debug CTest remains green in both configurations (2/2 and 4/4); `git diff --check` passes. This machine has no YAML parser module, so workflow syntax has not been independently parsed locally. The GitHub Actions API still returns no workflow runs for the feature branch after subsequent pushes.
-- **Known limit:** the remote workflow result is unavailable; WebRTC-enabled CI is not configured by this workflow yet.
+- **Verification:** local Debug CTest remains green in both configurations (2/2 and 4/4); the WebRTC run includes its signaling process test. This machine has no YAML parser module, so workflow syntax has not been independently parsed locally. The GitHub Actions API returned no workflow runs for the feature branch at the last query.
+- **Known limit:** the remote workflow result is unavailable. The MSVC CI job now enables the vcpkg `coop-webrtc` feature, installs Node 22 and signaling dependencies, and will run the WebRTC signaling integration test after the next push.
 - **Next:** inspect the GitHub run after push and continue the SAVE4/simulation review.
 
 ### Checkpoint: hidden-garden widget updates

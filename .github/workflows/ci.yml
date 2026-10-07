@@ -130,10 +130,18 @@ jobs:
       with:
         vcpkgJsonGlob: vcpkg.json
 
+    - name: Setup Node.js for signaling integration tests
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install signaling service dependencies
+      run: npm ci --prefix services/coop-signaling
+
     - name: Compile PvZ-Mod for Windows (MSVC)
       shell: pwsh
       run: |
-        cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=Release -DCONSOLE=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
+        cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=Release -DCONSOLE=OFF -DCOOP_ENABLE_WEBRTC=ON -DVCPKG_MANIFEST_FEATURES=coop-webrtc -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
         cmake --build build
         ctest --test-dir build --output-on-failure
 

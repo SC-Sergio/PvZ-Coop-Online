@@ -91,7 +91,7 @@ SAVE4 also checks plant `mStartRow` and projectile `mCobTargetRow`, and restrict
 
 Zombie `mFromWave` validation accepts only `-4` through `-1` (the engine's reserved debug/cutscene/UI/winner sources) or a wave index below capacity. Tests cover both reserved-range boundaries and the first/last valid wave indices, while rejecting one-past-end and values below the reserved range. Both Debug CTest suites pass after integration.
 
-The GitHub Actions workflow now includes `feature/coop-online` for pushes and pull requests. Desktop build jobs run CTest after compiling. Remote CI is not yet evidenced; local full CTest remains 2/2 without WebRTC and 4/4 with WebRTC.
+The GitHub Actions workflow now includes `feature/coop-online` for pushes and pull requests. Desktop build jobs run CTest after compiling. The MSVC job also enables WebRTC, installs Node 22 and the signaling service package, and will run the local signaling process test. Remote CI is not yet evidenced; local full CTest remains 2/2 without WebRTC and 4/4 with WebRTC.
 
 `Board::UpdateAll` now limits an isolated hidden garden to one simulation update per widget-manager update and skips its child-widget traversal; the selected Board keeps the original child update path under its garden context. Both MSVC Debug application targets compile this override and pass CTest (2/2 and 4/4). Multi-Board frame behavior still needs manual runtime verification with legal assets.
 
