@@ -40,6 +40,13 @@ inline bool IsValidPortableSaveOptionalIndex(std::int32_t index,
 	return index == -1 || (index >= 0 && static_cast<std::uint32_t>(index) < count);
 }
 
+inline bool IsValidPortableSaveGridPosition(std::int32_t x, std::int32_t y,
+	std::uint32_t width, std::uint32_t height) noexcept
+{
+	return x >= 0 && static_cast<std::uint32_t>(x) < width
+		&& y >= 0 && static_cast<std::uint32_t>(y) < height;
+}
+
 template <typename ApplyFn, typename RestoreFn>
 inline bool ApplyPortableSaveWithRollback(ApplyFn apply, RestoreFn restore)
 {

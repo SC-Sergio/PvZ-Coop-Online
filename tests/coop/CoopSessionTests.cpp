@@ -97,6 +97,12 @@ namespace
 			&& !IsValidPortableSaveOptionalIndex(3, 3)
 			&& !IsValidPortableSaveOptionalIndex(-2, 3),
 			"portable save optional indices accept only the null sentinel or an in-range slot");
+		Require(IsValidPortableSaveGridPosition(0, 0, 9, 6)
+			&& IsValidPortableSaveGridPosition(8, 5, 9, 6)
+			&& !IsValidPortableSaveGridPosition(-1, 0, 9, 6)
+			&& !IsValidPortableSaveGridPosition(9, 5, 9, 6)
+			&& !IsValidPortableSaveGridPosition(8, 6, 9, 6),
+			"portable save grid coordinates stay inside fixed board dimensions");
 		Require(IsValidPortableSaveWaveState(0, 0, 100)
 			&& IsValidPortableSaveWaveState(100, 100, 100)
 			&& IsValidPortableSaveWaveState(10, 9, 100)
