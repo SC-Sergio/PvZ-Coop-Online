@@ -650,9 +650,40 @@ static void SyncGameObjectPortable(PortableSaveContext& theContext, GameObject& 
 
 static constexpr const uint32_t PORTABLE_FIELD_TAIL = 100U;
 
+static bool ClearParticleSystemEmitterListForRead(TodParticleSystem& theParticleSystem)
+{
+	TodList<ParticleEmitterID>& emitterList = theParticleSystem.mEmitterList;
+	if (emitterList.mHead == nullptr)
+		return emitterList.mTail == nullptr && emitterList.mSize == 0;
+
+	TodAllocator* allocator = emitterList.mpAllocator;
+	if (allocator == nullptr || emitterList.mTail == nullptr || emitterList.mSize <= 0)
+		return false;
+
+	int nodeCount = 0;
+	TodListNode<ParticleEmitterID>* previous = nullptr;
+	for (TodListNode<ParticleEmitterID>* node = emitterList.mHead; node != nullptr; node = node->mNext)
+	{
+		if (node->mPrev != previous || !allocator->IsPointerFromAllocator(node)
+			|| allocator->IsPointerOnFreeList(node) || ++nodeCount > emitterList.mSize)
+			return false;
+		previous = node;
+	}
+	if (previous != emitterList.mTail || nodeCount != emitterList.mSize)
+		return false;
+
+	emitterList.RemoveAll();
+	return true;
+}
+
 template <typename T>
 static bool ResetItemForRead(T& theItem)
 {
+	if constexpr (std::is_same_v<T, TodParticleSystem>)
+	{
+		if (!ClearParticleSystemEmitterListForRead(theItem))
+			return false;
+	}
 	if constexpr (std::is_same_v<T, Reanimation>)
 	{
 		if (theItem.mTrackInstances != nullptr)
