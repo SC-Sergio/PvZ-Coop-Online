@@ -8391,7 +8391,7 @@ static void TodCrash()
 
 void Board::KeyChar(char theChar)
 {
-	if (!mApp->mDebugKeysEnabled)
+	if (mGardenStateIsolated || !mApp->mDebugKeysEnabled)
 		return;
 
 	TodTraceAndLog("Board cheat key '%c'", theChar);
