@@ -352,6 +352,8 @@ namespace
 			if (!returnedTransport || returnedTransport->GetResumeToken() == resumeTokens[returningIndex])
 				throw std::runtime_error("lobby controller could not reclaim its slot with a rotated resume token: "
 					+ guests[returningIndex]->GetConnectionError());
+			if (!returnedTransport->CanResumeSession())
+				throw std::runtime_error("rejoined transport lost its authenticated session-resume capability");
 			const std::vector<std::uint8_t> reconnectProbe{0x52, 0x45, 0x4A, 0x01};
 			if (!returnedTransport->SendTo(hostId, reconnectProbe))
 				throw std::runtime_error("rejoined guest could not send through the new DataChannel");
