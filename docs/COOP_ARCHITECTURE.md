@@ -64,6 +64,8 @@ After all SAVE4 chunks are applied, optional plant, zombie, projectile, coin, Gr
 
 Restored plant and zombie animation timing must have positive frame duration and count; projectile timing may be disabled only with a zero tick interval. Frame indexes must remain inside the entity's declared cycle, and counters must remain nonnegative and before its cycle end. Each product is bounded to one million ticks, preventing division by zero, out-of-range frame drawing, and signed frame-duration overflow in the next simulation update.
 
+Restored reanimations validate the definition-backed first-track frame window and base-pose sentinel/index, plus animation time/rate, loop count, loop type, reanimation type, and filter enum before track instances are used. The transform definitions come from locally loaded game resources, while the snapshot supplies only bounded indexes into them.
+
 Board-level ice particle IDs and each row's fwoosh reanimation IDs are also nullable references and must resolve against the app's active particle/reanimation holders before the snapshot is accepted.
 
 Plant potted-plant indexes must be either `-1` or inside the fixed profile array capacity before any plant update or cursor rendering can use them. The check uses the array bound, not the receiving profile's populated count, so it does not assume peer profiles share garden inventory.
