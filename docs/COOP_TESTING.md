@@ -90,3 +90,5 @@ The SAVE4 row helper accepts 0 through `rowCount - 1` and rejects negative and o
 SAVE4 also checks plant `mStartRow` and projectile `mCobTargetRow`, and restricts `mHitTorchwoodGridX` to the null sentinel or board columns. The helper boundary tests cover the valid endpoints, sentinel, negative and one-past-end cases; initialized-Board behavior remains unverified without assets.
 
 Zombie `mFromWave` validation accepts only `-4` through `-1` (the engine's reserved debug/cutscene/UI/winner sources) or a wave index below capacity. Tests cover both reserved-range boundaries and the first/last valid wave indices, while rejecting one-past-end and values below the reserved range. Both Debug CTest suites pass after integration.
+
+The GitHub Actions workflow now includes `feature/coop-online` for pushes and pull requests. Desktop build jobs run CTest after compiling. Remote CI is not yet evidenced; local full CTest remains 2/2 without WebRTC and 4/4 with WebRTC.

@@ -2,10 +2,10 @@ name: CI build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feature/coop-online" ]
     tags: [ "*" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feature/coop-online" ]
   workflow_dispatch:
 
 concurrency:
@@ -56,6 +56,7 @@ jobs:
           mkdir build
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build
+          ctest --test-dir build --output-on-failure
 
           mkdir -p dist
           cp build/pvz-mod dist/
@@ -99,6 +100,7 @@ jobs:
         mkdir build
         cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCONSOLE=OFF -DBUILD_STATIC=ON -DCMAKE_COLOR_DIAGNOSTICS=ON
         cmake --build build
+        ctest --test-dir build --output-on-failure
         
         mkdir -p dist
         cp build/pvz-mod.exe dist/
@@ -133,6 +135,7 @@ jobs:
       run: |
         cmake -G "Ninja" -B build -DCMAKE_BUILD_TYPE=Release -DCONSOLE=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
         cmake --build build
+        ctest --test-dir build --output-on-failure
 
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Copy-Item build/pvz-mod.exe dist/
@@ -206,6 +209,7 @@ jobs:
         mkdir build
         cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build
+        ctest --test-dir build --output-on-failure
 
         mkdir -p dist
         mkdir -p dist/libs

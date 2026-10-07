@@ -35,3 +35,10 @@
 - **Verification:** both MSVC 19.44 Debug app builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. Helper tests cover every boundary and reserved-range edges.
 - **Known limit:** malformed-load behavior is helper/build covered; an initialized-Board save restore still awaits legal game assets.
 - **Next:** continue checking bounded counters and gameplay indices, prioritizing values directly used by array lookup or arithmetic.
+
+### Checkpoint: branch CI coverage
+
+- **Change:** GitHub Actions now runs on pushes and pull requests for `feature/coop-online`, and the Arch, MSYS2, MSVC, and macOS desktop build jobs run their available CTest suites after compilation.
+- **Verification:** local Debug CTest remained green in both configurations (2/2 and 4/4) before this workflow-only edit; `git diff --check` passes. This machine has no YAML parser module, so workflow syntax has not been independently parsed locally.
+- **Known limit:** the remote workflow result is pending the next push; WebRTC-enabled CI is not configured by this workflow yet.
+- **Next:** inspect the GitHub run after push and continue the SAVE4/simulation review.
