@@ -79,4 +79,4 @@ Portable SAVE4 scalar helper tests accept canonical false/true and finite floats
 The session test target links `DataSync.cpp` and its case-insensitive file-open helper. It reuses one `DataReader` across canonical false/true and invalid boolean buffers to check both strict decoding and cursor reset.
 
 
-SAVE4 helper tests cover signed count bounds and resource ID ranges including the explicit null sentinel. The Debug app is rebuilt with list-count, trail/grid-item count, plant reference-count, seed-packet blob, and resource-index checks enabled.
+SAVE4 helper tests cover signed count bounds, resource ID ranges including the explicit null sentinel, global payload size, and bounded/unique linked-ID lists with resolver callbacks. The Debug app is rebuilt with list-count, trail/grid-item count, plant reference-count, seed-packet blob, particle/emitter reference, and resource-index checks enabled. A Board-backed malformed SAVE4 load test remains unverified because the test process has no legal game data initialized.
