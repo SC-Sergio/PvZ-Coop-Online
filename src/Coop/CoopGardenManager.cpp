@@ -178,6 +178,8 @@ namespace Coop
 		command.senderId = *mLocalPlayerId;
 		command.gardenId = garden->id;
 		command.sequence = mNextLocalCommandSequence++;
+		if (IsLocalOnlyCommand(command.type))
+			return Execute(command);
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 			return ProcessCommand(command) == CommandRejection::NONE;
 		return mTransport && SendCommandToHost(*mTransport, *mSession->GetHostPlayerId(), command);

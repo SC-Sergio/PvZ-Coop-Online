@@ -11,7 +11,7 @@ namespace Coop
 {
 	bool SendCommandToHost(INetworkTransport& transport, PlayerId hostPlayerId, const PlayerCommand& command)
 	{
-		if (hostPlayerId == 0 || transport.GetLocalPlayerId() == hostPlayerId
+		if (IsLocalOnlyCommand(command.type) || hostPlayerId == 0 || transport.GetLocalPlayerId() == hostPlayerId
 			|| command.senderId == 0 || command.senderId != transport.GetLocalPlayerId()
 			|| command.protocolVersion != PROTOCOL_VERSION)
 			return false;
@@ -23,6 +23,8 @@ namespace Coop
 	std::size_t BroadcastCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
 		TransportPlayerId excludedPeerId)
 	{
+		if (IsLocalOnlyCommand(command.type))
+			return 0;
 		const std::optional<SerializedCommand> bytes = SerializeCommand(command);
 		if (!bytes)
 			return 0;

@@ -333,9 +333,17 @@ namespace
 		command.gardenId = firstGarden;
 		command.type = Coop::CommandType::CHANGE_VIEW;
 		command.targetGardenId = secondGarden;
-		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "player may observe another active garden");
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "host may observe another active garden locally");
+		command.senderId = 52;
+		command.gardenId = secondGarden;
+		command.sequence = 1;
+		command.targetGardenId = firstGarden;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_TARGET,
+			"guest view changes are rejected by the shared command authority");
 
 		command.sequence = 4;
+		command.senderId = 51;
+		command.gardenId = firstGarden;
 		command.type = Coop::CommandType::SEND_RESOURCE;
 		command.targetPlayerId = 52;
 		command.amount = Coop::MAX_RESOURCE_TRANSFER + 1;
@@ -422,6 +430,15 @@ namespace
 		Require(!Coop::SendCommandToHost(*guest, 81, command), "client cannot spoof transport identity in outgoing helper");
 		command.senderId = 82;
 		Require(!Coop::SendCommandToHost(*guest, 82, command), "client cannot route a host-directed command to itself");
+		Coop::PlayerCommand viewCommand;
+		viewCommand.senderId = 82;
+		viewCommand.gardenId = session.GetGardens()[1].id;
+		viewCommand.sequence = 4;
+		viewCommand.type = Coop::CommandType::CHANGE_VIEW;
+		viewCommand.targetGardenId = session.GetGardens()[0].id;
+		Require(!Coop::SendCommandToHost(*guest, 81, viewCommand), "view changes stay local to each player");
+		Require(Coop::BroadcastCommandToPeers(*host, viewCommand) == 0 && !guest->Receive(),
+			"view changes are never broadcast to other players");
 		Require(unrelatedPeer->SendTo(82, *valid), "unrelated peer can send a frame for authority-origin validation");
 		auto spoofedHost = Coop::DrainReplicatedCommands(*guest, session, guestProcessor, guestExecutor);
 		Require(spoofedHost.size() == 1 && spoofedHost[0] == Coop::CommandRejection::SENDER_MISMATCH

@@ -29,6 +29,11 @@ namespace Coop
 		SEND_RESOURCE
 	};
 
+	inline constexpr bool IsLocalOnlyCommand(CommandType type) noexcept
+	{
+		return type == CommandType::CHANGE_VIEW;
+	}
+
 	enum class PingType : std::uint8_t
 	{
 		DANGER,

@@ -65,7 +65,8 @@ namespace Coop
 			if (command.value < 0 || command.value >= 10) return CommandRejection::INVALID_VALUE;
 			break;
 		case CommandType::CHANGE_VIEW:
-			if (command.targetGardenId == 0 || std::none_of(session.GetGardens().begin(), session.GetGardens().end(), [&command](const GardenInstance& candidate)
+			if (!session.GetHostPlayerId() || command.senderId != *session.GetHostPlayerId()
+				|| command.targetGardenId == 0 || std::none_of(session.GetGardens().begin(), session.GetGardens().end(), [&command](const GardenInstance& candidate)
 				{ return candidate.id == command.targetGardenId; }))
 				return CommandRejection::INVALID_TARGET;
 			break;
