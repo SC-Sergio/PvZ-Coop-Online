@@ -97,7 +97,7 @@ The engine build now includes `CoopGardenManager`, wired to `LawnApp` lifecycle/
 
 The portable SAVE4 validation suite also checks reanimation type bindings: a definition and its serialized type must agree, the empty-definition sentinel must be paired on both sides, and mismatched or out-of-range types are rejected. Required special-zombie body references are checked against the expected type in the validated zombie definition before `FixBoardAfterLoad()` applies image overrides. Track definition counts and backing arrays are checked before allocating restored per-instance tracks; tests cover negative counts and missing arrays. Both MSVC Debug build configurations compile, and CTest passes 2/2 without WebRTC and 4/4 with WebRTC. This is parser and policy coverage; loading and resuming a real game save still requires legal game assets.
 
-## Required expansion
+V4 reanimation restore validation also covers each track's transform array. Negative counts and positive counts with null arrays fail before any track instance is restored. The standard and WebRTC Debug builds succeeded; CTest passed 2/2 and 4/4.`r`n`r`n## Required expansion
 
 Add focused tests for ready/unready/start rules, ownership, team defeat/victory, commands and resource validation, serialization bounds and protocol version, deterministic difficulty, transport duplicates/order, disconnect/reconnect, and 2–4 process sessions. Use controllable latency/loss/reordering only after a real transport exists. Keep each test claim tied to commands and outcomes recorded in `COOP_PROGRESS.md`.
 
