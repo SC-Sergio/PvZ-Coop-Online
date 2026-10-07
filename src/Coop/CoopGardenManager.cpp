@@ -7,10 +7,12 @@
 #include "CommandEndpoint.h"
 #include "CommandSerialization.h"
 #include "CoopLobbyController.h"
+#include "CoopSnapshotProtocol.h"
 
 #include "../Lawn/Board.h"
 #include "../Lawn/MessageWidget.h"
 #include "../Lawn/System/PoolEffect.h"
+#include "../Lawn/System/SaveGame.h"
 #include "../LawnApp.h"
 #include "../Sexy.TodLib/Attachment.h"
 #include "../Sexy.TodLib/EffectSystem.h"
@@ -21,6 +23,7 @@
 #include "../SexyAppFramework/widget/WidgetManager.h"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 
 namespace Coop
@@ -125,6 +128,8 @@ namespace Coop
 		mLocalPlayerId.reset();
 		mTransport = nullptr;
 		mHeartbeatMonitor.Reset();
+		mSnapshotReceiver.Reset();
+		mSnapshotSenders.clear();
 		if (mHasAppStateSnapshot)
 		{
 			mApp->mGameScene = mPreviousGameScene;
@@ -176,6 +181,15 @@ namespace Coop
 			return false;
 		mTransport = &transport;
 		mHeartbeatMonitor.Reset();
+		mSnapshotReceiver.Reset();
+		mSnapshotSenders.clear();
+		if (mSession->GetHostPlayerId() && *mSession->GetHostPlayerId() != *mLocalPlayerId)
+		{
+			const auto ownedGarden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+				[this](const GardenInstance& garden) { return garden.owner == *mLocalPlayerId; });
+			if (ownedGarden != mSession->GetGardens().end())
+				mSnapshotReceiver.Configure(*mSession->GetHostPlayerId(), *mLocalPlayerId, ownedGarden->id);
+		}
 		const auto peers = transport.GetConnectedPeerIds();
 		mLastConnectedPeerIds = std::unordered_set<TransportPlayerId>(peers.begin(), peers.end());
 		return true;
@@ -264,7 +278,10 @@ namespace Coop
 				else if ((slot.state == PlayerState::DISCONNECTED || slot.state == PlayerState::AI_TEMPORARY) && connected)
 				{
 					if (mSession->BeginReconnect(slot.playerId))
+					{
 						disconnected = mSession->CompleteReconnect(slot.playerId) || disconnected;
+						BeginSnapshotRecovery(slot.playerId, slot.playerId);
+					}
 				}
 				else if (slot.state == PlayerState::PLAYING && connected
 					&& !mLastConnectedPeerIds.contains(slot.playerId))
@@ -273,19 +290,81 @@ namespace Coop
 			mLastConnectedPeerIds = connectedSet;
 			if (disconnected)
 				BroadcastSessionSnapshot(*mTransport, *mSession);
+			PumpSnapshotSends();
 		}
 		else
 		{
 			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this,
 				[this](const TransportPacket& packet) { return HandleControlPacket(packet); });
 			PumpHeartbeat();
+			PumpSnapshotSends();
 		}
 	}
 
 	bool CoopGardenManager::HandleControlPacket(const TransportPacket& packet)
 	{
-		return mTransport && mHeartbeatMonitor.HandlePacket(*mTransport, packet,
-			HeartbeatMonitor::Clock::now());
+		if (!mTransport)
+			return false;
+		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZS", 4) == 0)
+		{
+			mSnapshotReceiver.HandlePacket(*mTransport, packet);
+			return true;
+		}
+		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZA", 4) == 0
+			&& packet.bytes.size() == COOP_SNAPSHOT_ACK_BYTES)
+		{
+			const auto sender = mSnapshotSenders.find(packet.senderId);
+			if (sender != mSnapshotSenders.end())
+				sender->second.HandleAck(packet);
+			return true;
+		}
+		return mHeartbeatMonitor.HandlePacket(*mTransport, packet, HeartbeatMonitor::Clock::now());
+	}
+
+	bool CoopGardenManager::BeginSnapshotRecovery(TransportPlayerId peerId, PlayerId playerId)
+	{
+		if (!mTransport || !mSession || !mSession->GetHostPlayerId()
+			|| *mSession->GetHostPlayerId() != mTransport->GetLocalPlayerId()
+			|| peerId != playerId || mNextSnapshotTransferId == 0
+			|| mNextSnapshotTransferId == std::numeric_limits<std::uint64_t>::max())
+			return false;
+		const auto gardenState = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+			[playerId](const GardenInstance& garden) { return garden.owner == playerId; });
+		const auto managedGarden = gardenState == mSession->GetGardens().end() ? mGardens.end()
+			: std::find_if(mGardens.begin(), mGardens.end(), [&gardenState](const ManagedGarden& garden)
+				{ return garden.id == gardenState->id; });
+		if (gardenState == mSession->GetGardens().end() || managedGarden == mGardens.end())
+			return false;
+
+		std::vector<unsigned char> snapshotBytes;
+		if (!LawnSerializeGameV4(managedGarden->board, snapshotBytes))
+			return false;
+		GardenSnapshotSender& sender = mSnapshotSenders[peerId];
+		const bool started = sender.Begin(*mTransport, peerId, mNextSnapshotTransferId,
+			gardenState->id, gardenState->simulationTicks, snapshotBytes);
+		if (started)
+			++mNextSnapshotTransferId;
+		return started;
+	}
+
+	void CoopGardenManager::PumpSnapshotSends()
+	{
+		if (!mTransport)
+			return;
+		for (auto iterator = mSnapshotSenders.begin(); iterator != mSnapshotSenders.end();)
+		{
+			const SnapshotSendStatus status = iterator->second.Pump(*mTransport);
+			if (status == SnapshotSendStatus::COMPLETE || status == SnapshotSendStatus::PEER_DISCONNECTED
+				|| status == SnapshotSendStatus::TRANSPORT_CHANGED || status == SnapshotSendStatus::RETRY_EXHAUSTED)
+				iterator = mSnapshotSenders.erase(iterator);
+			else
+				++iterator;
+		}
+	}
+
+	std::optional<GardenSnapshot> CoopGardenManager::TakeCompletedSnapshotRecovery()
+	{
+		return mSnapshotReceiver.TakeCompletedSnapshot();
 	}
 
 	void CoopGardenManager::PumpHeartbeat()

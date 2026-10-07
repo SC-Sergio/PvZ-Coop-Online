@@ -417,6 +417,86 @@ namespace Coop
 		std::vector<std::uint8_t> mAttempts;
 		std::vector<Clock::time_point> mLastSent;
 	};
+
+	class GardenSnapshotReceiver
+	{
+	public:
+		bool Configure(TransportPlayerId expectedHostId, TransportPlayerId localPlayerId, GardenId ownedGardenId)
+		{
+			if (expectedHostId == 0 || localPlayerId == 0 || expectedHostId == localPlayerId || ownedGardenId == 0)
+				return false;
+			Reset();
+			mExpectedHostId = expectedHostId;
+			mLocalPlayerId = localPlayerId;
+			mOwnedGardenId = ownedGardenId;
+			return true;
+		}
+
+		SnapshotReceiveResult HandlePacket(INetworkTransport& transport, const TransportPacket& packet)
+		{
+			if (mExpectedHostId == 0 || transport.GetLocalPlayerId() != mLocalPlayerId
+				|| packet.senderId != mExpectedHostId || packet.bytes.size() < COOP_SNAPSHOT_HEADER_BYTES
+				|| std::memcmp(packet.bytes.data(), "PVZS", 4) != 0
+				|| ReadSnapshotU32(packet.bytes, 16) != mOwnedGardenId)
+				return SnapshotReceiveResult::REJECTED;
+
+			const std::uint64_t transferId = ReadSnapshotU64(packet.bytes, 8);
+			const GardenId gardenId = ReadSnapshotU32(packet.bytes, 16);
+			const std::uint16_t chunkIndex = ReadSnapshotU16(packet.bytes, 34);
+			if (mCompletedTransferId == transferId && mCompletedGardenId == gardenId
+				&& chunkIndex < mCompletedChunkCount)
+			{
+				const auto ack = SerializeGardenSnapshotAck({transferId, gardenId, chunkIndex});
+				transport.SendTo(mExpectedHostId, ack);
+				return SnapshotReceiveResult::DUPLICATE;
+			}
+
+			GardenSnapshot completed;
+			const SnapshotReceiveResult result = mAssembler.Accept(packet.bytes, completed);
+			if (result == SnapshotReceiveResult::REJECTED)
+				return result;
+			if (result == SnapshotReceiveResult::COMPLETE)
+			{
+				mCompletedTransferId = completed.transferId;
+				mCompletedGardenId = completed.gardenId;
+				mCompletedChunkCount = static_cast<std::uint16_t>(ReadSnapshotU16(packet.bytes, 32));
+				mCompleted = std::move(completed);
+			}
+			const auto ack = SerializeGardenSnapshotAck({transferId, gardenId, chunkIndex});
+			if (ack.empty() || !transport.SendTo(mExpectedHostId, ack))
+				return SnapshotReceiveResult::INCOMPLETE;
+			return result;
+		}
+
+		std::optional<GardenSnapshot> TakeCompletedSnapshot()
+		{
+			std::optional<GardenSnapshot> completed = std::move(mCompleted);
+			mCompleted.reset();
+			return completed;
+		}
+
+		void Reset() noexcept
+		{
+			mExpectedHostId = 0;
+			mLocalPlayerId = 0;
+			mOwnedGardenId = 0;
+			mCompletedTransferId = 0;
+			mCompletedGardenId = 0;
+			mCompletedChunkCount = 0;
+			mAssembler.Reset();
+			mCompleted.reset();
+		}
+
+	private:
+		TransportPlayerId mExpectedHostId = 0;
+		TransportPlayerId mLocalPlayerId = 0;
+		GardenId mOwnedGardenId = 0;
+		std::uint64_t mCompletedTransferId = 0;
+		GardenId mCompletedGardenId = 0;
+		std::uint16_t mCompletedChunkCount = 0;
+		GardenSnapshotAssembler mAssembler;
+		std::optional<GardenSnapshot> mCompleted;
+	};
 }
 
 #endif

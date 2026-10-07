@@ -416,6 +416,44 @@ namespace
 		}
 		Require(retryExhausted && !sender.IsActive(),
 			"sender releases a transfer after its bounded acknowledgement retry budget");
+
+		Coop::LocalTransportHub receiverHub;
+		auto receiverHost = receiverHub.CreateTransport(81);
+		auto receiverClient = receiverHub.CreateTransport(82);
+		Coop::GardenSnapshotReceiver receiver;
+		Require(receiverHost && receiverClient && receiver.Configure(81, 82, 77),
+			"snapshot receiver binds the expected host, local player and owned garden");
+		Require(receiver.HandlePacket(*receiverClient, {99, (*frames)[0]}) == Coop::SnapshotReceiveResult::REJECTED,
+			"snapshot receiver rejects an unauthenticated sender");
+		std::vector<std::uint8_t> wrongGardenFrame = (*frames)[0];
+		wrongGardenFrame[16] = 78;
+		Require(receiver.HandlePacket(*receiverClient, {81, wrongGardenFrame}) == Coop::SnapshotReceiveResult::REJECTED,
+			"snapshot receiver rejects a garden not owned by the local player");
+		for (std::size_t index = 0; index + 1 < frames->size(); ++index)
+		{
+			Require(receiverHost->SendTo(82, (*frames)[index]), "test delivers each non-final snapshot frame");
+			auto packet = receiverClient->Receive();
+			Require(packet && receiver.HandlePacket(*receiverClient, *packet) != Coop::SnapshotReceiveResult::REJECTED,
+				"receiver assembles frames from the authenticated host and acknowledges them");
+			Require(receiverHost->Receive().has_value(), "host receives receiver acknowledgements");
+		}
+		for (std::size_t index = 0; index < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++index)
+			Require(receiverClient->SendTo(81, std::span<const std::uint8_t>(&fillerByte, 1)),
+				"test fills the host queue before the final receiver acknowledgement");
+		Require(receiverHost->SendTo(82, frames->back()), "test delivers final snapshot frame");
+		auto finalPacket = receiverClient->Receive();
+		Require(finalPacket && receiver.HandlePacket(*receiverClient, *finalPacket) == Coop::SnapshotReceiveResult::INCOMPLETE,
+			"receiver retains complete snapshot data when its ACK encounters backpressure");
+		while (receiverHost->Receive()) { }
+		Require(receiverHost->SendTo(82, frames->back()), "test retransmits final frame after ACK backpressure");
+		finalPacket = receiverClient->Receive();
+		Require(finalPacket && receiver.HandlePacket(*receiverClient, *finalPacket) == Coop::SnapshotReceiveResult::DUPLICATE,
+			"receiver recognizes the completed transfer and retries its final ACK");
+		auto completedAck = receiverHost->Receive();
+		const auto receivedSnapshot = receiver.TakeCompletedSnapshot();
+		Require(completedAck && Coop::DeserializeGardenSnapshotAck(completedAck->bytes).has_value()
+			&& receivedSnapshot && receivedSnapshot->bytes == source && receivedSnapshot->serverTick == 987654,
+			"receiver exposes a complete authenticated snapshot without applying it to a Board");
 		Require(sender.Begin(*host, 72, 11, 77, 1236, source)
 			&& host->DisconnectPeer(72)
 			&& sender.Pump(*host, now) == Coop::SnapshotSendStatus::PEER_DISCONNECTED

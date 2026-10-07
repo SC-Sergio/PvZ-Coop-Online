@@ -10,12 +10,14 @@
 #include "HeartbeatProtocol.h"
 #include "PlayerCommand.h"
 #include "NetworkTransport.h"
+#include "CoopSnapshotProtocol.h"
 #include "../ConstEnums.h"
 
 #include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 class Board;
@@ -48,8 +50,11 @@ namespace Coop
 		void PumpNetwork();
 	bool HandleControlPacket(const TransportPacket& packet);
 	void PumpHeartbeat();
+		std::optional<GardenSnapshot> TakeCompletedSnapshotRecovery();
 		bool AdvanceSimulationTick();
 		bool Execute(const PlayerCommand& command) override;
+		bool BeginSnapshotRecovery(TransportPlayerId peerId, PlayerId playerId);
+		void PumpSnapshotSends();
 		void SyncTeamResults();
 		void ProcessDeleteQueues();
 		TeamResult GetTeamResult() const noexcept;
@@ -77,6 +82,9 @@ namespace Coop
 		INetworkTransport* mTransport = nullptr;
 	HeartbeatMonitor mHeartbeatMonitor;
 	std::unordered_set<TransportPlayerId> mLastConnectedPeerIds;
+		GardenSnapshotReceiver mSnapshotReceiver;
+		std::unordered_map<TransportPlayerId, GardenSnapshotSender> mSnapshotSenders;
+		std::uint64_t mNextSnapshotTransferId = 1;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
