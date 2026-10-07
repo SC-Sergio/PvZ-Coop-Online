@@ -747,6 +747,23 @@ namespace
 		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE, "bounded resource transfer intent passes");
 
 		command.sequence = 5;
+		command.type = Coop::CommandType::PING;
+		command.value = static_cast<std::int32_t>(Coop::PingType::GARGANTUAR);
+		command.x = -1;
+		command.y = -1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE,
+			"valid location-free cooperative pings pass authority validation");
+		command.sequence = 6;
+		command.value = static_cast<std::int32_t>(Coop::PingType::ALL_GOOD) + 1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_VALUE,
+			"unknown cooperative ping types are rejected");
+		command.sequence = 7;
+		command.value = static_cast<std::int32_t>(Coop::PingType::DANGER);
+		command.x = 9;
+		command.y = 0;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COORDINATES,
+			"cooperative ping coordinates must be inside the garden");
+		command.sequence = 8;
 		command.type = static_cast<Coop::CommandType>(255);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COMMAND, "unknown command type is rejected");
 	}

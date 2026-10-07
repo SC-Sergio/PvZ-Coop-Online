@@ -9,6 +9,7 @@
 #include "CoopLobbyController.h"
 
 #include "../Lawn/Board.h"
+#include "../Lawn/MessageWidget.h"
 #include "../Lawn/System/PoolEffect.h"
 #include "../LawnApp.h"
 #include "../Sexy.TodLib/Attachment.h"
@@ -337,6 +338,34 @@ namespace Coop
 		case CommandType::SELECT_PLANT:
 			return source->board->ApplyCooperativeCommand(command);
 		case CommandType::PING:
+		{
+			const auto sender = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(),
+				[&command](const PlayerSlot& slot) { return slot.playerId == command.senderId; });
+			if (sender == mSession->GetSlots().end())
+				return false;
+			const char* pingLabel = "DANGER";
+			switch (static_cast<PingType>(command.value))
+			{
+			case PingType::DANGER: pingLabel = "DANGER"; break;
+			case PingType::NEED_SUN: pingLabel = "NEED SUN"; break;
+			case PingType::HELP: pingLabel = "HELP"; break;
+			case PingType::LOOK_HERE: pingLabel = "LOOK HERE"; break;
+			case PingType::GARGANTUAR: pingLabel = "GARGANTUAR"; break;
+			case PingType::ALL_GOOD: pingLabel = "ALL GOOD"; break;
+			default: return false;
+			}
+			const auto pingGarden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
+				[&command](const GardenInstance& garden) { return garden.id == command.gardenId; });
+			if (pingGarden == mSession->GetGardens().end())
+				return false;
+			std::string label = sender->displayName + " [G" + std::to_string(command.gardenId)
+				+ " T" + std::to_string(pingGarden->simulationTicks) + "]: " + pingLabel;
+			if (command.x >= 0 && command.y >= 0)
+				label += " (" + std::to_string(command.x + 1) + ", " + std::to_string(command.y + 1) + ")";
+			if (mApp && mApp->mBoard && mApp->mBoard->mAdvice)
+				mApp->mBoard->mAdvice->SetLabel(label, MESSAGE_STYLE_HINT_LONG);
+			return true;
+		}
 		default:
 			return false;
 		}
