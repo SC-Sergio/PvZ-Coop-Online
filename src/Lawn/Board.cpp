@@ -3964,6 +3964,25 @@ void Board::UpdateToolTip()
 
 void Board::MouseDownCobcannonFire(int x, int y, int theClickCount)
 {
+	if (theClickCount >= 0 && mGardenStateIsolated && !mApplyingCooperativeCommand
+		&& mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive()
+		&& mCursorObject->mCursorType == CursorType::CURSOR_TYPE_COBCANNON_TARGET)
+	{
+		Plant* cannon = mPlants.DataArrayTryToGet(mCursorObject->mCobCannonPlantID);
+		if (cannon && x >= 0 && x <= Coop::MAX_COMMAND_PIXEL_COORDINATE
+			&& y >= 80 && y <= Coop::MAX_COMMAND_PIXEL_COORDINATE)
+		{
+			Coop::PlayerCommand command;
+			command.type = Coop::CommandType::FIRE_COB_CANNON;
+			command.entityId = static_cast<std::uint32_t>(mCursorObject->mCobCannonPlantID);
+			command.x = static_cast<std::int16_t>(x);
+			command.y = static_cast<std::int16_t>(y);
+			mApp->mCoopGardenManager->SubmitLocalCommand(*this, command);
+		}
+		ClearCursor();
+		return;
+	}
+
 	if (theClickCount >= 0 && y >= 80)
 	{
 		if (mCobCannonCursorDelayCounter > 0 && Distance2D(x, y, mCobCannonMouseX, mCobCannonMouseY) < 100.0f)
@@ -6415,6 +6434,17 @@ bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 		ScopedCooperativeCommandApplication aApplying(this);
 		coin->MouseDown(static_cast<int>(coin->mPosX), static_cast<int>(coin->mPosY), 1);
 		return coin->mIsBeingCollected;
+	}
+	case Coop::CommandType::FIRE_COB_CANNON:
+	{
+		Plant* cannon = mPlants.DataArrayTryToGet(static_cast<PlantID>(command.entityId));
+		if (cannon == nullptr || cannon->mSeedType != SeedType::SEED_COBCANNON
+			|| cannon->mMindControlled || cannon->mState != PlantState::STATE_COBCANNON_READY
+			|| command.x < 0 || command.x > Coop::MAX_COMMAND_PIXEL_COORDINATE
+			|| command.y < 80 || command.y > Coop::MAX_COMMAND_PIXEL_COORDINATE)
+			return false;
+		cannon->CobCannonFire(command.x, command.y);
+		return true;
 	}
 	case Coop::CommandType::SELECT_PLANT:
 	{

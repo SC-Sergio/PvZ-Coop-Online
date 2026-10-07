@@ -80,6 +80,12 @@ namespace Coop
 			if (!validTargetPlayer()) return CommandRejection::INVALID_TARGET;
 			if (command.amount == 0 || command.amount > MAX_RESOURCE_TRANSFER) return CommandRejection::INVALID_VALUE;
 			break;
+		case CommandType::FIRE_COB_CANNON:
+			if (command.entityId == 0) return CommandRejection::INVALID_ID;
+			if (command.x < 0 || command.x > MAX_COMMAND_PIXEL_COORDINATE
+				|| command.y < 80 || command.y > MAX_COMMAND_PIXEL_COORDINATE)
+				return CommandRejection::INVALID_COORDINATES;
+			break;
 		default:
 			return CommandRejection::INVALID_COMMAND;
 		}

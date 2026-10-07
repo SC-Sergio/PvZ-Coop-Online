@@ -20,6 +20,7 @@ namespace Coop
 	constexpr double COMMAND_RATE_BURST = 32.0;
 	constexpr std::int16_t BOARD_COLUMNS = 9;
 	constexpr std::int16_t BOARD_ROWS = 6;
+	constexpr std::int16_t MAX_COMMAND_PIXEL_COORDINATE = 2000;
 
 	enum class CommandType : std::uint8_t
 	{
@@ -29,7 +30,8 @@ namespace Coop
 		SELECT_PLANT,
 		CHANGE_VIEW,
 		PING,
-		SEND_RESOURCE
+		SEND_RESOURCE,
+		FIRE_COB_CANNON
 	};
 
 	inline constexpr bool IsLocalOnlyCommand(CommandType type) noexcept

@@ -1031,6 +1031,16 @@ namespace
 		command.sequence = 8;
 		command.type = static_cast<Coop::CommandType>(255);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COMMAND, "unknown command type is rejected");
+		command.type = Coop::CommandType::FIRE_COB_CANNON;
+		command.entityId = 1;
+		command.x = 400;
+		command.y = 300;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::NONE,
+			"bounded Cob Cannon target intent passes ownership validation");
+		command.sequence++;
+		command.x = Coop::MAX_COMMAND_PIXEL_COORDINATE + 1;
+		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COORDINATES,
+			"Cob Cannon target intent rejects out-of-range world coordinates");
 
 		Coop::PlayerCommandValidator rateValidator;
 		auto rateCommand = command;
