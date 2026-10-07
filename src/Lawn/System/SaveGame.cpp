@@ -618,6 +618,12 @@ static void SyncGameObjectPortable(PortableSaveContext& theContext, GameObject& 
 	theContext.SyncBool(theObject.mVisible);
 	theContext.SyncInt32(theObject.mRow);
 	theContext.SyncInt32(theObject.mRenderOrder);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveWorldCoordinate(theObject.mX)
+		|| !IsValidPortableSaveWorldCoordinate(theObject.mY)
+		|| !IsValidPortableSaveWorldExtent(theObject.mWidth)
+		|| !IsValidPortableSaveWorldExtent(theObject.mHeight)))
+		theContext.mFailed = true;
 }
 
 static constexpr const uint32_t PORTABLE_FIELD_TAIL = 100U;
@@ -1039,6 +1045,10 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mShieldType),
 			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)
 		|| !IsValidPortableSaveRow(theZombie.mRow, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWorldCoordinate(theZombie.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theZombie.mPosY)
+		|| !IsValidPortableSaveWorldCoordinate(theZombie.mVelX)
+		|| !IsValidPortableSaveWorldCoordinate(theZombie.mVelZ)
 		|| !IsValidPortableSaveWaveSource(theZombie.mFromWave,
 			Zombie::ZOMBIE_WAVE_WINNER, MAX_ZOMBIE_WAVES)))
 		theContext.mFailed = true;
@@ -1172,7 +1182,18 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)
 		|| !IsValidPortableSaveOptionalIndex(theProjectile.mHitTorchwoodGridX, MAX_GRID_SIZE_X)
 		|| !IsValidPortableSaveRow(theProjectile.mCobTargetRow, MAX_GRID_SIZE_Y)
-		|| !IsValidPortableSaveRow(theProjectile.mRow, MAX_GRID_SIZE_Y)))
+		|| !IsValidPortableSaveRow(theProjectile.mRow, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mPosY)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mPosZ)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mVelX)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mVelY)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mVelZ)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mAccZ)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mShadowY)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mCobTargetX)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mTargetX)
+		|| !IsValidPortableSaveWorldCoordinate(theProjectile.mTargetY)))
 		theContext.mFailed = true;
 }
 
@@ -1206,7 +1227,14 @@ static void SyncCoinTailPortable(PortableSaveContext& theContext, Coin& theCoin)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theCoin.mCoinMotion),
 			COIN_MOTION_FROM_SKY, COIN_MOTION_FROM_BOSS + 1)
 		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(theCoin.mUsableSeedType), SEED_NONE,
-			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)))
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mPosY)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mVelX)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mVelY)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mCollectX)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mCollectY)
+		|| !IsValidPortableSaveWorldCoordinate(theCoin.mGroundY)))
 		theContext.mFailed = true;
 }
 
@@ -1236,7 +1264,10 @@ static void SyncLawnMowerTailPortable(PortableSaveContext& theContext, LawnMower
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerHeight),
 			MOWER_HEIGHT_LAND, MOWER_HEIGHT_UP_TO_LAND + 1)
 		|| !IsValidPortableSaveOptionalIndex(theMower.mLastPortalX, MAX_GRID_SIZE_X)
-		|| !IsValidPortableSaveGridPosition(0, theMower.mRow, 1, MAX_GRID_SIZE_Y)))
+		|| !IsValidPortableSaveGridPosition(0, theMower.mRow, 1, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWorldCoordinate(theMower.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theMower.mPosY)
+		|| !IsValidPortableSaveWorldCoordinate(theMower.mAltitude)))
 		theContext.mFailed = true;
 }
 
@@ -1275,7 +1306,11 @@ static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& 
 			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mScaryPotType), SCARYPOT_NONE, SCARYPOT_SUN + 1)
 		|| !IsValidPortableSaveGridPosition(theItem.mGridX, theItem.mGridY,
-			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)))
+			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWorldCoordinate(theItem.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theItem.mPosY)
+		|| !IsValidPortableSaveWorldCoordinate(theItem.mGoalX)
+		|| !IsValidPortableSaveWorldCoordinate(theItem.mGoalY)))
 		theContext.mFailed = true;
 }
 

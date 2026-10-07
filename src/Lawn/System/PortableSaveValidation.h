@@ -17,6 +17,7 @@
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_ARRAY_CAPACITY = 65536;
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_BLOB_BYTES = 16 * 1024 * 1024;
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_PAYLOAD_BYTES = 64 * 1024 * 1024;
+inline constexpr std::int32_t MAX_PORTABLE_SAVE_WORLD_COORDINATE = 10000;
 
 inline bool IsValidPortableSavePayloadSize(std::size_t payloadSize) noexcept
 {
@@ -64,6 +65,23 @@ inline bool IsValidPortableSaveGridPosition(std::int32_t x, std::int32_t y,
 inline bool IsValidPortableSaveRow(std::int32_t row, std::uint32_t rowCount) noexcept
 {
 	return row >= 0 && static_cast<std::uint32_t>(row) < rowCount;
+}
+
+inline bool IsValidPortableSaveWorldCoordinate(std::int32_t coordinate) noexcept
+{
+	return coordinate >= -MAX_PORTABLE_SAVE_WORLD_COORDINATE
+		&& coordinate <= MAX_PORTABLE_SAVE_WORLD_COORDINATE;
+}
+
+inline bool IsValidPortableSaveWorldCoordinate(float coordinate) noexcept
+{
+	return std::isfinite(coordinate) && coordinate >= -MAX_PORTABLE_SAVE_WORLD_COORDINATE
+		&& coordinate <= MAX_PORTABLE_SAVE_WORLD_COORDINATE;
+}
+
+inline bool IsValidPortableSaveWorldExtent(std::int32_t extent) noexcept
+{
+	return extent >= 0 && extent <= MAX_PORTABLE_SAVE_WORLD_COORDINATE;
 }
 
 inline bool IsValidPortableSaveGridLook(std::int32_t look) noexcept

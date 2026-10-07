@@ -94,3 +94,5 @@ Zombie `mFromWave` validation accepts only `-4` through `-1` (the engine's reser
 The GitHub Actions workflow now includes `feature/coop-online` for pushes and pull requests. Desktop build jobs run CTest after compiling. Remote CI is not yet evidenced; local full CTest remains 2/2 without WebRTC and 4/4 with WebRTC.
 
 `Board::UpdateAll` now limits an isolated hidden garden to one simulation update per widget-manager update and skips its child-widget traversal; the selected Board keeps the original child update path under its garden context. Both MSVC Debug application targets compile this override and pass CTest (2/2 and 4/4). Multi-Board frame behavior still needs manual runtime verification with legal assets.
+
+Portable-save world-coordinate helpers accept ±10,000 pixels, reject non-finite floats and reject extents outside 0–10,000. They are applied to base GameObject positions/extents and the saved positions/targets for zombies, projectiles, coins, mowers, and GridItems. Both Debug CTest suites pass; Board-backed load behavior remains unverified.

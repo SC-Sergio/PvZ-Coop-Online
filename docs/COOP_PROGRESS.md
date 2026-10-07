@@ -49,3 +49,10 @@
 - **Verification:** both MSVC 19.44 Debug application builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. `git diff --check` passed.
 - **Known limit:** only build/test evidence exists; with no legal game data available, the live widget/frame behavior and independent simulation remain unverified.
 - **Next:** continue source review for remaining app-global per-garden services, then exercise 2–4 garden frames in-game when legal assets are supplied.
+
+### Checkpoint: bounded SAVE4 world coordinates
+
+- **Change:** base game-object positions/extents and zombie, projectile, coin, mower, and grid-item world positions are bounded to ±10,000 pixels (extents 0–10,000). This is a generous off-screen margin that prevents finite but extreme values from reaching integer conversions and geometry calculations. Projectile target and movement fields are included.
+- **Verification:** helper tests cover signed/float coordinate edges, NaN/infinity, and invalid extents. Both MSVC 19.44 Debug apps build; CTest passes 2/2 without WebRTC and 4/4 with WebRTC.
+- **Known limit:** a real SAVE4 restore against an initialized Board remains unavailable without legal game assets; velocities and other non-positional floats still need an audited semantic range.
+- **Next:** continue checking restored values that feed conversions, arithmetic, or direct indexes, then run malformed and compatibility loads in the engine when assets are available.
