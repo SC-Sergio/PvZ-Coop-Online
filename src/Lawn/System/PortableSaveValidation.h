@@ -27,6 +27,13 @@ inline bool IsPortableSaveFieldFullyConsumed(bool readFailed,
 	return !readFailed && remainingBytes == 0;
 }
 
+template <typename IsValidId>
+inline bool IsValidPortableSaveReference(std::uint32_t id, bool allowNull,
+	IsValidId isValidId)
+{
+	return id == 0 ? allowNull : isValidId(id);
+}
+
 inline bool IsValidPortableSaveArrayHeader(std::uint32_t freeListHead,
 	std::uint32_t maxUsedCount, std::uint32_t size, std::uint32_t nextKey,
 	std::uint32_t maxSize, std::uint32_t allocatedMaxSize) noexcept

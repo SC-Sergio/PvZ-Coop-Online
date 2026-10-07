@@ -86,6 +86,11 @@ namespace
 			&& !IsPortableSaveFieldFullyConsumed(false, 1)
 			&& !IsPortableSaveFieldFullyConsumed(true, 0),
 			"portable save fields reject read errors and unconsumed trailing bytes");
+		Require(IsValidPortableSaveReference(0, true, [](std::uint32_t id) { return id == 7; })
+			&& !IsValidPortableSaveReference(0, false, [](std::uint32_t id) { return id == 7; })
+			&& IsValidPortableSaveReference(7, false, [](std::uint32_t id) { return id == 7; })
+			&& !IsValidPortableSaveReference(8, false, [](std::uint32_t id) { return id == 7; }),
+			"portable save references enforce nullability and resolver membership");
 		Require(IsValidPortableSaveResourceId(0, 10, 10)
 			&& IsValidPortableSaveResourceId(9, 10, 10)
 			&& IsValidPortableSaveResourceId(10, 10, 10)

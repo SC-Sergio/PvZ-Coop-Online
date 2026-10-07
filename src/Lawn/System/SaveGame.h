@@ -31,8 +31,8 @@ class Board;
 bool				LawnLoadGame(Board* theBoard, const std::string& theFilePath);
 bool				LawnSaveGame(Board* theBoard, const std::string& theFilePath);
 bool				LawnSerializeGameV4(Board* theBoard, std::vector<unsigned char>& theBytes);
-// Structural validation is bounded, but a decode failure may still partially mutate the Board.
-// Do not use this entry point for untrusted network payloads until decode/apply is transactional.
+// Captures a bounded SAVE4 backup and attempts to restore it if semantic decoding fails.
+// The payload still is not safe for untrusted network use until field validation is complete.
 bool				LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes);
 
 #endif

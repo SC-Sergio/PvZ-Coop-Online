@@ -2799,6 +2799,40 @@ static bool ReadChunkV4(uint32_t theChunkType, const unsigned char* theData, siz
 	return aApplied;
 }
 
+static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
+{
+	Zombie* aZombie = nullptr;
+	while (theBoard->mZombies.IterateNext(aZombie))
+	{
+		bool aRequiresBodyReanimation = false;
+		switch (aZombie->mZombieType)
+		{
+		case ZombieType::ZOMBIE_GARGANTUAR:
+		case ZombieType::ZOMBIE_REDEYE_GARGANTUAR:
+		case ZombieType::ZOMBIE_ZAMBONI:
+		case ZombieType::ZOMBIE_CATAPULT:
+		case ZombieType::ZOMBIE_BOSS:
+			aRequiresBodyReanimation = true;
+			break;
+		default:
+			break;
+		}
+		if (aRequiresBodyReanimation
+			&& !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBodyReanimID), false,
+				[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; }))
+			return false;
+	}
+
+	LawnMower* aMower = nullptr;
+	while (theBoard->mLawnMowers.IterateNext(aMower))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aMower->mReanimID), false,
+			[&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; }))
+			return false;
+	}
+	return true;
+}
+
 static void FixBoardAfterLoad(Board* theBoard)
 {
 	{
@@ -2967,7 +3001,7 @@ static void FixBoardAfterLoad(Board* theBoard)
 	theBoard->mApp->mMusic->mMusicInterface = theBoard->mApp->mMusicInterface;
 }
 
-static bool LawnLoadGameV4FromBytes(Board* theBoard,
+static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	std::span<const unsigned char> theBytes, bool theRequireExactSize)
 {
 	if (theBytes.size() < sizeof(SaveFileHeaderV4)
@@ -3017,10 +3051,52 @@ static bool LawnLoadGameV4FromBytes(Board* theBoard,
 
 	if (!aBaseLoaded)
 		return false;
+	if (!ValidateV4RequiredReanimationReferences(theBoard))
+		return false;
 
 	FixBoardAfterLoad(theBoard);
 	theBoard->mApp->mGameScene = GameScenes::SCENE_PLAYING;
 	return true;
+}
+
+static bool IsStructurallyValidV4Bytes(std::span<const unsigned char> theBytes,
+	bool theRequireExactSize)
+{
+	if (theBytes.size() < sizeof(SaveFileHeaderV4))
+		return false;
+	SaveFileHeaderV4 aHeader;
+	memcpy(&aHeader, theBytes.data(), sizeof(aHeader));
+	aHeader.mVersion = FromLE32(aHeader.mVersion);
+	aHeader.mPayloadSize = FromLE32(aHeader.mPayloadSize);
+	aHeader.mPayloadCrc = FromLE32(aHeader.mPayloadCrc);
+	if (memcmp(aHeader.mMagic, SAVE_FILE_MAGIC_V4, sizeof(aHeader.mMagic)) != 0
+		|| aHeader.mVersion != SAVE_FILE_V4_VERSION)
+		return false;
+	const size_t aAvailablePayloadSize = theBytes.size() - sizeof(SaveFileHeaderV4);
+	if (!IsValidPortableSavePayloadSize(aHeader.mPayloadSize)
+		|| aHeader.mPayloadSize > aAvailablePayloadSize
+		|| (theRequireExactSize && aHeader.mPayloadSize != aAvailablePayloadSize))
+		return false;
+	const unsigned char* aPayload = theBytes.data() + sizeof(SaveFileHeaderV4);
+	return crc32(0, reinterpret_cast<const Bytef*>(aPayload), aHeader.mPayloadSize) == aHeader.mPayloadCrc
+		&& ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize);
+}
+
+static bool LawnLoadGameV4FromBytes(Board* theBoard,
+	std::span<const unsigned char> theBytes, bool theRequireExactSize)
+{
+	if (!IsStructurallyValidV4Bytes(theBytes, theRequireExactSize))
+		return false;
+
+	std::vector<unsigned char> aOriginalBoard;
+	if (!LawnSerializeGameV4(theBoard, aOriginalBoard))
+		return false;
+	if (LawnLoadGameV4FromBytesImpl(theBoard, theBytes, theRequireExactSize))
+		return true;
+
+	// Restore the known-good state after any semantic or cross-reference failure.
+	LawnLoadGameV4FromBytesImpl(theBoard, aOriginalBoard, true);
+	return false;
 }
 
 bool LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes)
