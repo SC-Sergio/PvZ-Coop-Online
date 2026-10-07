@@ -67,6 +67,11 @@ namespace Coop
 		{
 			return localTick < mLatestTick && mLatestTick - localTick > AUTHORITATIVE_TICK_RESYNC_LAG;
 		}
+		bool ShouldRequestSnapshotRecovery(std::uint64_t localTick, bool canResumeSession,
+			bool recoveryAlreadyActive) const noexcept
+		{
+			return canResumeSession && !recoveryAlreadyActive && NeedsResynchronization(localTick);
+		}
 		std::uint64_t GetLatestTick() const noexcept { return mLatestTick; }
 		void Reset() noexcept { mLatestTick = 0; }
 

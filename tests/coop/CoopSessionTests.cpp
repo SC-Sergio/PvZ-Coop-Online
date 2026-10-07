@@ -850,6 +850,10 @@ namespace
 			&& !clock.NeedsResynchronization(12)
 			&& clock.NeedsResynchronization(11),
 			"only clients more than the bounded recovery lag behind require snapshot resynchronization");
+		Require(clock.ShouldRequestSnapshotRecovery(11, true, false)
+			&& !clock.ShouldRequestSnapshotRecovery(11, false, false)
+			&& !clock.ShouldRequestSnapshotRecovery(11, true, true),
+			"snapshot recovery requires resume credentials and cannot restart during an active recovery");
 	}
 
 	void TestCoopClassicLoadouts()

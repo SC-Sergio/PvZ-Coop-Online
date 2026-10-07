@@ -554,11 +554,18 @@ namespace Coop
 				|| packet.senderId != *mSession->GetHostPlayerId()
 				|| (mLocalPlayerId && *mLocalPlayerId == *mSession->GetHostPlayerId()))
 			{
+				if (mLocalPlayerId && mSession && mSession->GetHostPlayerId()
+					&& packet.senderId == *mSession->GetHostPlayerId())
+					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
 				mTransport->DisconnectPeer(packet.senderId);
 				return true;
 			}
 			if (!mAuthoritativeSimulationClock.Observe(tick->tick))
+			{
+				if (mLocalPlayerId)
+					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
 				mTransport->DisconnectPeer(packet.senderId);
+			}
 			return true;
 		}
 		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZS", 4) == 0)
@@ -880,9 +887,13 @@ namespace Coop
 		{
 			if (mSession->GetGardens().empty())
 				return false;
+			const bool recoveryAlreadyActive = mLocalPlayerId
+				&& GetGardenRecoveryStatus(*mLocalPlayerId) != GardenRecoveryStatus::NONE;
+			if (recoveryAlreadyActive)
+				return false;
 			const std::uint64_t localTick = mSession->GetGardens().front().simulationTicks;
-			if (mTransport && mTransport->CanResumeSession()
-				&& mAuthoritativeSimulationClock.NeedsResynchronization(localTick))
+			if (mTransport && mAuthoritativeSimulationClock.ShouldRequestSnapshotRecovery(localTick,
+				mTransport->CanResumeSession(), recoveryAlreadyActive))
 			{
 				SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
 				mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
