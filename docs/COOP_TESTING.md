@@ -45,7 +45,7 @@ When the manifest feature and CMake option are enabled, CTest also builds `coop-
 
 The latest MSVC Debug build compiles the isolated Board Yeti-history state in both the standard and WebRTC configurations. CTest passed 2/2 and 4/4 respectively. These checks do not instantiate Boards or verify multi-garden behavior in a playable engine session; legal user-provided assets are still required for that.
 
-Co-op now makes a temporary `PlayerInfo` copy for each garden and scopes `LawnApp::mPlayerInfo` to the Board being initialized, simulated, or viewed. This isolates profile-backed consumables and coin rewards. The temporary profile ID is derived from the session seed to avoid client-specific level RNG seeds. Both MSVC Debug app variants compile this path; runtime profile isolation and deterministic Board simulation still require initialized Boards and legal assets.
+Co-op starts from a fresh deterministic `PlayerInfo` sandbox instead of cloning each player's save, then the manager copies that common state for each local garden. The profile ID derives from the session seed, and purchases, Zen Garden capacity, and coin balances no longer vary based on local progression during Board setup or loot selection. Both MSVC Debug app variants compile this path and CTest passes 2/2 without WebRTC and 4/4 with WebRTC; profile and loot parity still need initialized Boards with legal assets.
 
 The lobby exposes all six Classic difficulty profiles. Starting sun is defined by a profile and receives a small per-garden adjustment based on the number of active players; EMPTY slots are excluded. Current profiles control starting economy only. Wave composition and zombie stat scaling are not yet implemented.
 
