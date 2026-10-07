@@ -775,6 +775,9 @@ static void SyncSeedBankTailPortable(PortableSaveContext& theContext, SeedBank& 
 	theContext.SyncInt32(theSeedBank.mNumPackets);
 	theContext.SyncInt32(theSeedBank.mCutSceneDarken);
 	theContext.SyncInt32(theSeedBank.mConveyorBeltCounter);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveCount(theSeedBank.mNumPackets, SEEDBANK_MAX)))
+		theContext.mFailed = true;
 }
 
 static void SyncSeedPacketTailPortable(PortableSaveContext& theContext, SeedPacket& thePacket)
@@ -2833,6 +2836,13 @@ static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
 	return true;
 }
 
+static bool ValidateV4SeedBankIndices(Board* theBoard)
+{
+	return IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
+		&& IsValidPortableSaveOptionalIndex(theBoard->mCursorObject->mSeedBankIndex,
+			static_cast<uint32_t>(theBoard->mSeedBank->mNumPackets));
+}
+
 static void FixBoardAfterLoad(Board* theBoard)
 {
 	{
@@ -3052,6 +3062,8 @@ static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	if (!aBaseLoaded)
 		return false;
 	if (!ValidateV4RequiredReanimationReferences(theBoard))
+		return false;
+	if (!ValidateV4SeedBankIndices(theBoard))
 		return false;
 
 	FixBoardAfterLoad(theBoard);

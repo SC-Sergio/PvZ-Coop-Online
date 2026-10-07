@@ -91,6 +91,12 @@ namespace
 			&& IsValidPortableSaveReference(7, false, [](std::uint32_t id) { return id == 7; })
 			&& !IsValidPortableSaveReference(8, false, [](std::uint32_t id) { return id == 7; }),
 			"portable save references enforce nullability and resolver membership");
+		Require(IsValidPortableSaveOptionalIndex(-1, 3)
+			&& IsValidPortableSaveOptionalIndex(0, 3)
+			&& IsValidPortableSaveOptionalIndex(2, 3)
+			&& !IsValidPortableSaveOptionalIndex(3, 3)
+			&& !IsValidPortableSaveOptionalIndex(-2, 3),
+			"portable save optional indices accept only the null sentinel or an in-range slot");
 		int aTransactionalValue = 3;
 		Require(!ApplyPortableSaveWithRollback([&]() { aTransactionalValue = 9; return false; },
 			[&]() { aTransactionalValue = 3; })

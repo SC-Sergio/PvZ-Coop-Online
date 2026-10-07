@@ -34,6 +34,12 @@ inline bool IsValidPortableSaveReference(std::uint32_t id, bool allowNull,
 	return id == 0 ? allowNull : isValidId(id);
 }
 
+inline bool IsValidPortableSaveOptionalIndex(std::int32_t index,
+	std::uint32_t count) noexcept
+{
+	return index == -1 || (index >= 0 && static_cast<std::uint32_t>(index) < count);
+}
+
 template <typename ApplyFn, typename RestoreFn>
 inline bool ApplyPortableSaveWithRollback(ApplyFn apply, RestoreFn restore)
 {
