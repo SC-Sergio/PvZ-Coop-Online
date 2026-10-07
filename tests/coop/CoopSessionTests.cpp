@@ -7,6 +7,7 @@
 #include "../../src/Coop/SessionSnapshotSerialization.h"
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
+#include "../../src/Coop/CoopSnapshotProtocol.h"
 #include "../../src/ConstEnums.h"
 #include "../../src/Lawn/System/PortableSaveValidation.h"
 
@@ -145,6 +146,71 @@ namespace
 		trailing.push_back(0xFF);
 		Require(!ValidatePortableSavePayload(trailing.data(), trailing.size(), 21, 1, 1),
 			"trailing incomplete chunk headers are rejected");
+	}
+
+	void TestGardenSnapshotProtocol()
+	{
+		std::vector<std::uint8_t> source(200000);
+		for (std::size_t i = 0; i < source.size(); ++i)
+			source[i] = static_cast<std::uint8_t>((i * 37) & 0xFF);
+		const auto frames = Coop::BuildGardenSnapshotFrames(0x123456789ABCDEF0ULL, 77, 987654,
+			source);
+		Require(frames.has_value() && frames->size() > 1, "large garden snapshot is split into bounded frames");
+		for (const auto& frame : *frames)
+			Require(frame.size() <= Coop::MAX_TRANSPORT_MESSAGE_BYTES, "garden snapshot frame fits the transport cap");
+		Require(!Coop::BuildGardenSnapshotFrames(0, 77, 1, source), "zero transfer IDs are rejected");
+		Require(!Coop::BuildGardenSnapshotFrames(1, 0, 1, source), "zero garden IDs are rejected");
+		Require(!Coop::BuildGardenSnapshotFrames(1, 77, 1, {}), "empty garden snapshots are rejected");
+
+		Coop::GardenSnapshotAssembler assembler;
+		Coop::GardenSnapshot completed;
+		const auto& firstFrame = (*frames)[0];
+		Require(assembler.Accept(firstFrame, completed) == Coop::SnapshotReceiveResult::INCOMPLETE,
+			"the first garden snapshot chunk starts bounded reassembly");
+		Require(assembler.Accept(firstFrame, completed) == Coop::SnapshotReceiveResult::DUPLICATE,
+			"an identical duplicate chunk is idempotent");
+		std::vector<std::uint8_t> conflictingDuplicate = firstFrame;
+		conflictingDuplicate.back() ^= 1;
+		Require(assembler.Accept(conflictingDuplicate, completed) == Coop::SnapshotReceiveResult::REJECTED,
+			"a duplicate chunk with conflicting bytes is rejected");
+		std::vector<std::uint8_t> inconsistentMetadata = (*frames)[1];
+		inconsistentMetadata[16] ^= 1;
+		Require(assembler.Accept(inconsistentMetadata, completed) == Coop::SnapshotReceiveResult::REJECTED,
+			"chunks with mismatched garden metadata are rejected");
+		for (std::size_t i = frames->size(); i-- > 1;)
+		{
+			const auto result = assembler.Accept((*frames)[i], completed);
+			if (i == 1)
+				Require(result == Coop::SnapshotReceiveResult::COMPLETE, "out-of-order chunks complete the snapshot");
+			else
+				Require(result == Coop::SnapshotReceiveResult::INCOMPLETE, "partial out-of-order data remains pending");
+		}
+		Require(completed.transferId == 0x123456789ABCDEF0ULL && completed.gardenId == 77
+			&& completed.serverTick == 987654 && completed.bytes == source,
+			"reassembled snapshot preserves identity, tick, and exact bytes");
+		Require(!assembler.HasPendingSnapshot(), "completed snapshot releases its assembly buffer");
+
+		std::vector<std::uint8_t> corrupted = (*frames)[0];
+		corrupted.back() ^= 0x80;
+		Coop::GardenSnapshotAssembler corruptedAssembler;
+		Require(corruptedAssembler.Accept(corrupted, completed) == Coop::SnapshotReceiveResult::INCOMPLETE,
+			"a payload corruption is retained only until complete checksum validation");
+		for (std::size_t i = 1; i < frames->size(); ++i)
+		{
+			const auto result = corruptedAssembler.Accept((*frames)[i], completed);
+			if (i + 1 == frames->size())
+				Require(result == Coop::SnapshotReceiveResult::REJECTED, "checksum mismatch rejects completed snapshot data");
+		}
+		Require(!corruptedAssembler.HasPendingSnapshot(), "checksum failure clears partial snapshot memory");
+
+		std::vector<std::uint8_t> oversized = firstFrame;
+		oversized[28] = static_cast<std::uint8_t>((Coop::MAX_COOP_SNAPSHOT_BYTES + 1) & 0xFF);
+		oversized[29] = static_cast<std::uint8_t>(((Coop::MAX_COOP_SNAPSHOT_BYTES + 1) >> 8) & 0xFF);
+		oversized[30] = static_cast<std::uint8_t>(((Coop::MAX_COOP_SNAPSHOT_BYTES + 1) >> 16) & 0xFF);
+		oversized[31] = static_cast<std::uint8_t>(((Coop::MAX_COOP_SNAPSHOT_BYTES + 1) >> 24) & 0xFF);
+		Coop::GardenSnapshotAssembler boundsAssembler;
+		Require(boundsAssembler.Accept(oversized, completed) == Coop::SnapshotReceiveResult::REJECTED
+			&& !boundsAssembler.HasPendingSnapshot(), "oversized transfer metadata is rejected before allocation");
 	}
 
 	void TestCoopDifficultyProfiles()
@@ -1079,6 +1145,7 @@ int main(int argc, char** argv)
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
 	TestPortableSaveBounds();
+	TestGardenSnapshotProtocol();
 	TestCoopDifficultyProfiles();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();
