@@ -37,7 +37,7 @@ The repository includes a Docker Compose deployment for a Linux VPS with a publi
 4. Run `docker compose up --build -d` in this directory. Verify `https://<domain>/healthz`, then configure the game's Internet lobby with `wss://<domain>`.
 5. Test from two unrelated networks and check both direct ICE and TURN relay paths. A healthy signaling endpoint does not prove TURN reachability. Monitor bandwidth and rotate the secret if it is exposed.
 
-The coturn command deliberately disables TLS/DTLS and uses authenticated UDP TURN only; WSS protects signaling, while WebRTC encrypts DataChannels. Some restrictive networks block UDP. Add a separately tested TURN/TCP or TURN/TLS endpoint before claiming those networks are supported. Caddy and the service should be kept patched; the template currently pins major service images, so operators should choose and regularly update reviewed image digests for production.
+The template pins the official `coturn/coturn:4.18.0-r0` image. It disables the TLS listener and uses authenticated UDP TURN; DTLS listeners are opt-in in current coturn, and 4.18 removed the old `--no-dtls` and `--no-cli` flags. WSS protects signaling, while WebRTC encrypts DataChannels. Some restrictive networks block UDP. Add and test a TURN/TLS endpoint for those networks before claiming support; verify libdatachannel's TURN-over-TLS configuration and the relay transport path instead of assuming TCP control also relays over TCP. Caddy and the service should be kept patched; operators should pin reviewed image digests for production.
 
 ## Wire messages
 

@@ -36,13 +36,11 @@ services:
       - caddy_config:/config
 
   coturn:
-    image: coturn/coturn:4.6.3-alpine
+    image: coturn/coturn:4.18.0-r0
     restart: unless-stopped
     network_mode: host
     command:
-      - --no-cli
       - --no-tls
-      - --no-dtls
       - --fingerprint
       - --use-auth-secret
       - --static-auth-secret=${COOP_TURN_SHARED_SECRET:?set a private TURN shared secret in .env}
