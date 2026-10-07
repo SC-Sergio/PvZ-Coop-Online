@@ -1185,7 +1185,8 @@ static void SyncLawnMowerTailPortable(PortableSaveContext& theContext, LawnMower
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerType),
 			LAWNMOWER_LAWN, NUM_MOWER_TYPES)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerHeight),
-			MOWER_HEIGHT_LAND, MOWER_HEIGHT_UP_TO_LAND + 1)))
+			MOWER_HEIGHT_LAND, MOWER_HEIGHT_UP_TO_LAND + 1)
+		|| !IsValidPortableSaveGridPosition(0, theMower.mRow, 1, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }
 
@@ -1222,7 +1223,9 @@ static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& 
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mZombieType), ZOMBIE_INVALID, NUM_CACHED_ZOMBIE_TYPES)
 		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(theItem.mSeedType), SEED_NONE,
 			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
-		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mScaryPotType), SCARYPOT_NONE, SCARYPOT_SUN + 1)))
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mScaryPotType), SCARYPOT_NONE, SCARYPOT_SUN + 1)
+		|| !IsValidPortableSaveGridPosition(theItem.mGridX, theItem.mGridY,
+			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }
 
