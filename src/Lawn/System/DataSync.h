@@ -42,6 +42,7 @@ public:
 	void					OpenMemory(const void* theData, uint32_t theDataLen, bool takeOwnership);
 	void					Close();
 	void					ReadBytes(void* theMem, uint32_t theNumBytes);
+	uint32_t				GetRemainingBytes() const { return mData && mDataPos <= mDataLen ? mDataLen - mDataPos : 0; }
 	void					Rewind(uint32_t theNumBytes);
 	uint64_t				ReadUInt64();
 	uint32_t				ReadUInt32();

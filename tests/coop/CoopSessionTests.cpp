@@ -8,6 +8,7 @@
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/ConstEnums.h"
+#include "../../src/Lawn/System/PortableSaveValidation.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,6 +16,8 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -39,6 +42,94 @@ namespace
 			for (std::size_t i = count; i < Coop::MAX_PLAYERS; ++i)
 				Require(session.GetSlots()[i].state == Coop::PlayerState::EMPTY, "unused lobby slots remain empty");
 		}
+	}
+
+	void TestPortableSaveBounds()
+	{
+		Require(IsValidPortableSaveArrayHeader(0, 0, 0, 1001, 128, 128),
+			"an empty preallocated save array header is accepted");
+		Require(IsValidPortableSaveArrayHeader(20, 20, 8, 42, 128, 128),
+			"a bounded partially used save array header is accepted");
+		Require(!IsValidPortableSaveArrayHeader(0, 129, 0, 42, 128, 128),
+			"save array count above allocated capacity is rejected");
+		Require(!IsValidPortableSaveArrayHeader(0, 20, 21, 42, 128, 128),
+			"save array live size above used count is rejected");
+		Require(!IsValidPortableSaveArrayHeader(129, 20, 8, 42, 128, 128),
+			"save array free-list head outside used entries is rejected");
+		Require(!IsValidPortableSaveArrayHeader(0, 20, 8, 0, 128, 128),
+			"save array zero generation key is rejected");
+		Require(!IsValidPortableSaveArrayHeader(0, 20, 8, 42, 127, 128),
+			"save array capacity mismatch is rejected");
+		Require(IsValidPortableSaveBlobSize(64, 64), "a blob fitting the remaining input is accepted");
+		Require(!IsValidPortableSaveBlobSize(65, 64), "a blob extending beyond remaining input is rejected");
+		Require(!IsValidPortableSaveBlobSize(MAX_PORTABLE_SAVE_BLOB_BYTES + 1, MAX_PORTABLE_SAVE_BLOB_BYTES + 1),
+			"an oversized save blob is rejected before allocation");
+
+		auto appendU32 = [](std::vector<std::uint8_t>& bytes, std::uint32_t value)
+		{
+			for (unsigned int shift = 0; shift < 32; shift += 8)
+				bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFF));
+		};
+		auto makeChunk = [&appendU32](std::uint32_t type, std::uint32_t version,
+			const std::vector<std::pair<std::uint32_t, std::vector<std::uint8_t>>>& fields)
+		{
+			std::vector<std::uint8_t> chunk;
+			appendU32(chunk, version);
+			for (const auto& [fieldId, data] : fields)
+			{
+				appendU32(chunk, fieldId);
+				appendU32(chunk, static_cast<std::uint32_t>(data.size()));
+				chunk.insert(chunk.end(), data.begin(), data.end());
+			}
+			std::vector<std::uint8_t> frame;
+			appendU32(frame, type);
+			appendU32(frame, static_cast<std::uint32_t>(chunk.size()));
+			frame.insert(frame.end(), chunk.begin(), chunk.end());
+			return frame;
+		};
+		const std::vector<std::uint8_t> base = makeChunk(1, 1, {{1, {0xA5}}});
+		const std::vector<std::uint8_t> plants = makeChunk(3, 1, {{1, {0x11, 0x22}}});
+		std::vector<std::uint8_t> validPayload = base;
+		validPayload.insert(validPayload.end(), plants.begin(), plants.end());
+		Require(ValidatePortableSavePayload(validPayload.data(), validPayload.size(), 21, 1, 1),
+			"a fully framed SAVE4 payload with its required base chunk is accepted");
+		std::vector<std::uint8_t> futurePayload = makeChunk(22, 99, {});
+		futurePayload.insert(futurePayload.end(), base.begin(), base.end());
+		Require(ValidatePortableSavePayload(futurePayload.data(), futurePayload.size(), 21, 1, 1),
+			"well-framed unknown chunks remain forward compatible");
+		Require(ValidatePortableSavePayload(nullptr, 0, 21, 1, 1) == false,
+			"an empty SAVE4 payload is rejected");
+		std::vector<std::uint8_t> truncated = validPayload;
+		truncated.pop_back();
+		Require(!ValidatePortableSavePayload(truncated.data(), truncated.size(), 21, 1, 1),
+			"truncated nested chunk data is rejected");
+		std::vector<std::uint8_t> invalidLength = base;
+		invalidLength[4] = 0xFF;
+		invalidLength[5] = 0xFF;
+		invalidLength[6] = 0xFF;
+		invalidLength[7] = 0x7F;
+		Require(!ValidatePortableSavePayload(invalidLength.data(), invalidLength.size(), 21, 1, 1),
+			"a chunk claiming more bytes than the containing payload is rejected");
+		std::vector<std::uint8_t> duplicate = validPayload;
+		duplicate.insert(duplicate.end(), base.begin(), base.end());
+		Require(!ValidatePortableSavePayload(duplicate.data(), duplicate.size(), 21, 1, 1),
+			"duplicate known chunks are rejected");
+		const auto wrongVersion = makeChunk(1, 2, {{1, {0xA5}}});
+		Require(!ValidatePortableSavePayload(wrongVersion.data(), wrongVersion.size(), 21, 1, 1),
+			"unsupported chunk versions are rejected");
+		const auto missingField = makeChunk(1, 1, {});
+		Require(!ValidatePortableSavePayload(missingField.data(), missingField.size(), 21, 1, 1),
+			"known chunks without their required data field are rejected");
+		const auto duplicateField = makeChunk(1, 1, {{1, {0xA5}}, {1, {0x5A}}});
+		Require(!ValidatePortableSavePayload(duplicateField.data(), duplicateField.size(), 21, 1, 1),
+			"duplicate required fields are rejected");
+		const auto missingBase = makeChunk(3, 1, {{1, {0x11}}});
+		Require(!ValidatePortableSavePayload(missingBase.data(), missingBase.size(), 21, 1, 1),
+			"SAVE4 payloads without the required board base are rejected");
+		std::vector<std::uint8_t> trailing = validPayload;
+		trailing.push_back(0xFF);
+		Require(!ValidatePortableSavePayload(trailing.data(), trailing.size(), 21, 1, 1),
+			"trailing incomplete chunk headers are rejected");
 	}
 
 	void TestCoopDifficultyProfiles()
@@ -972,6 +1063,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestPortableSaveBounds();
 	TestCoopDifficultyProfiles();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();

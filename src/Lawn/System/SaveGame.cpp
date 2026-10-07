@@ -38,6 +38,7 @@
 #include "../../Sexy.TodLib/DataArray.h"
 #include "../../Sexy.TodLib/TodList.h"
 #include "DataSync.h"
+#include "PortableSaveValidation.h"
 #include "misc/Buffer.h"
 #include <algorithm>
 #include <cstdint>
@@ -133,7 +134,7 @@ public:
 
 	bool ReadU32(uint32_t& theValue)
 	{
-		if (mPos + 4 > mSize)
+		if (mPos > mSize || mSize - mPos < 4)
 		{
 			mOk = false;
 			theValue = 0;
@@ -149,7 +150,7 @@ public:
 
 	bool ReadBytes(const unsigned char*& thePtr, size_t theLen)
 	{
-		if (mPos + theLen > mSize)
+		if (mPos > mSize || theLen > mSize - mPos)
 		{
 			mOk = false;
 			thePtr = nullptr;
@@ -188,6 +189,13 @@ public:
 		{
 			if (mReading)
 			{
+				if (theDataLen > mReader->GetRemainingBytes())
+				{
+					mFailed = true;
+					if (theDataLen > 0)
+						memset(theData, 0, theDataLen);
+					return;
+				}
 				mReader->ReadBytes(theData, theDataLen);
 			}
 			else
@@ -251,6 +259,11 @@ public:
 		{
 			mWriter->WriteUInt32(theValue);
 		}
+	}
+
+	uint32_t GetRemainingBytes() const
+	{
+		return mReading && mReader ? mReader->GetRemainingBytes() : 0;
 	}
 
 	void SyncInt32(int32_t& theValue)
@@ -1134,8 +1147,11 @@ static bool ReadTLVBlob(PortableSaveContext& theContext, std::vector<unsigned ch
 {
 	uint32_t aSize = 0;
 	theContext.SyncUInt32(aSize);
-	if (theContext.mFailed)
+	if (theContext.mFailed || !IsValidPortableSaveBlobSize(aSize, theContext.GetRemainingBytes()))
+	{
+		theContext.mFailed = true;
 		return false;
+	}
 	theBlob.resize(aSize);
 	if (aSize > 0)
 		theContext.SyncBytes(theBlob.data(), aSize);
@@ -1388,19 +1404,42 @@ static void SyncTrailPortable(Board* theBoard, Trail* theTrail, PortableSaveCont
 	SyncColorPortable(theContext, theTrail->mColorOverride);
 }
 
+template <typename T>
+static bool SyncDataArrayHeaderPortable(PortableSaveContext& theContext, DataArray<T>& theDataArray)
+{
+	uint32_t aFreeListHead = theDataArray.mFreeListHead;
+	uint32_t aMaxUsedCount = theDataArray.mMaxUsedCount;
+	uint32_t aSize = theDataArray.mSize;
+	uint32_t aNextKey = theDataArray.mNextKey;
+	uint32_t aMaxSize = theDataArray.mMaxSize;
+	theContext.SyncUInt32(aFreeListHead);
+	theContext.SyncUInt32(aMaxUsedCount);
+	theContext.SyncUInt32(aSize);
+	theContext.SyncUInt32(aNextKey);
+	theContext.SyncUInt32(aMaxSize);
+	if (theContext.mFailed)
+		return false;
+	if (theContext.mReading)
+	{
+		if (!theDataArray.mBlock || !IsValidPortableSaveArrayHeader(aFreeListHead,
+			aMaxUsedCount, aSize, aNextKey, aMaxSize, theDataArray.mMaxSize))
+		{
+			theContext.mFailed = true;
+			return false;
+		}
+		theDataArray.mFreeListHead = aFreeListHead;
+		theDataArray.mMaxUsedCount = aMaxUsedCount;
+		theDataArray.mSize = aSize;
+		theDataArray.mNextKey = aNextKey;
+	}
+	return true;
+}
+
 template <typename T, typename TSyncFn>
 static void SyncDataArrayPortable(PortableSaveContext& theContext, DataArray<T>& theDataArray, TSyncFn theSyncFn)
 {
-	theContext.SyncUInt32(theDataArray.mFreeListHead);
-	theContext.SyncUInt32(theDataArray.mMaxUsedCount);
-	theContext.SyncUInt32(theDataArray.mSize);
-	theContext.SyncUInt32(theDataArray.mNextKey);
-	uint32_t aMaxSize = theDataArray.mMaxSize;
-	theContext.SyncUInt32(aMaxSize);
-	if (theContext.mReading && aMaxSize != theDataArray.mMaxSize)
-	{
-		theContext.mFailed = true;
-	}
+	if (!SyncDataArrayHeaderPortable(theContext, theDataArray))
+		return;
 
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
@@ -1412,16 +1451,8 @@ static void SyncDataArrayPortable(PortableSaveContext& theContext, DataArray<T>&
 template <typename T>
 static void SyncDataArrayIdsOnlyPortable(PortableSaveContext& theContext, DataArray<T>& theDataArray)
 {
-	theContext.SyncUInt32(theDataArray.mFreeListHead);
-	theContext.SyncUInt32(theDataArray.mMaxUsedCount);
-	theContext.SyncUInt32(theDataArray.mSize);
-	theContext.SyncUInt32(theDataArray.mNextKey);
-	uint32_t aMaxSize = theDataArray.mMaxSize;
-	theContext.SyncUInt32(aMaxSize);
-	if (theContext.mReading && aMaxSize != theDataArray.mMaxSize)
-	{
-		theContext.mFailed = true;
-	}
+	if (!SyncDataArrayHeaderPortable(theContext, theDataArray))
+		return;
 
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
@@ -1432,16 +1463,8 @@ static void SyncDataArrayIdsOnlyPortable(PortableSaveContext& theContext, DataAr
 template <typename T, typename TWriteFn, typename TReadFn>
 static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<T>& theDataArray, TWriteFn theWriteFn, TReadFn theReadFn)
 {
-	theContext.SyncUInt32(theDataArray.mFreeListHead);
-	theContext.SyncUInt32(theDataArray.mMaxUsedCount);
-	theContext.SyncUInt32(theDataArray.mSize);
-	theContext.SyncUInt32(theDataArray.mNextKey);
-	uint32_t aMaxSize = theDataArray.mMaxSize;
-	theContext.SyncUInt32(aMaxSize);
-	if (theContext.mReading && aMaxSize != theDataArray.mMaxSize)
-	{
-		theContext.mFailed = true;
-	}
+	if (!SyncDataArrayHeaderPortable(theContext, theDataArray))
+		return;
 
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
@@ -1450,6 +1473,11 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 		{
 			uint32_t aItemSize = 0;
 			theContext.SyncUInt32(aItemSize);
+			if (theContext.mFailed || !IsValidPortableSaveBlobSize(aItemSize, theContext.GetRemainingBytes()))
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			ResetItemForRead(theDataArray.mBlock[i].mItem);
 			std::vector<unsigned char> aItemData;
 			aItemData.resize(aItemSize);
@@ -1466,6 +1494,11 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 				if (!aReader.ReadBytes(aFieldData, aFieldSize))
 					break;
 				theReadFn(aFieldId, aFieldData, aFieldSize, theDataArray.mBlock[i].mItem);
+			}
+			if (!aReader.mOk || aReader.mPos != aReader.mSize)
+			{
+				theContext.mFailed = true;
+				return;
 			}
 		}
 		else
@@ -2408,6 +2441,12 @@ static ChunkSyncFn GetChunkSyncFn(uint32_t theChunkType)
 	}
 }
 
+static bool ValidateV4PayloadStructure(const unsigned char* thePayload, size_t thePayloadSize)
+{
+	return ValidatePortableSavePayload(thePayload, thePayloadSize, SAVE4_CHUNK_CUSTOMSURVIVALOPTION,
+		SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_VERSION);
+}
+
 static bool WriteChunkV4(std::vector<unsigned char>& thePayload, uint32_t theChunkType, Board* theBoard)
 {
 	ChunkSyncFn aSyncFn = GetChunkSyncFn(theChunkType);
@@ -2467,7 +2506,7 @@ static bool ReadChunkV4(uint32_t theChunkType, const unsigned char* theData, siz
 			aFieldReader.OpenMemory(aFieldData, static_cast<uint32_t>(aFieldSize), false);
 			PortableSaveContext aContext(aFieldReader);
 			aSyncFn(aContext, theBoard);
-			if (aContext.mFailed)
+			if (aContext.mFailed || aFieldReader.GetRemainingBytes() != 0)
 				return false;
 			aApplied = true;
 		}
@@ -2667,6 +2706,8 @@ static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)
 	unsigned char* aPayload = (unsigned char*)aBuffer.GetDataPtr() + sizeof(SaveFileHeaderV4);
 	uint32_t aCrc = crc32(0, (Bytef*)aPayload, aHeader.mPayloadSize);
 	if (aCrc != aHeader.mPayloadCrc)
+		return false;
+	if (!ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize))
 		return false;
 
 	TLVReader aReader(aPayload, aHeader.mPayloadSize);
