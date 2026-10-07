@@ -90,6 +90,14 @@ inline bool IsValidPortableSaveWaveState(std::int32_t waveCount,
 		&& currentWave <= waveCount;
 }
 
+inline bool IsValidPortableSaveSeedType(std::int32_t value,
+	std::int32_t noneValue, std::int32_t numSeedTypes,
+	std::int32_t endExtendedSeedTypes, bool allowExtended) noexcept
+{
+	return value == noneValue || (value >= 0 && value < numSeedTypes)
+		|| (allowExtended && value > numSeedTypes && value < endExtendedSeedTypes);
+}
+
 inline bool IsValidPortableSaveResourceId(std::int32_t resourceId,
 	std::uint32_t resourceCount, std::int32_t nullResourceId) noexcept
 {

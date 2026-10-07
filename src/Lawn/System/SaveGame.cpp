@@ -702,6 +702,14 @@ static void SyncPottedPlantPortable(PortableSaveContext& theContext, PottedPlant
 	theContext.SyncInt64(thePlant.mLastFertilizedTime);
 	theContext.SyncInt64(thePlant.mLastChocolateTime);
 	theContext.SyncInt64(thePlant.mFutureAttribute[0]);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mSeedType), SEED_NONE, NUM_SEED_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mWhichZenGarden), GARDEN_MAIN, GARDEN_AQUARIUM + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mFacing), PottedPlant::FACING_RIGHT, PottedPlant::FACING_LEFT + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mDrawVariation), VARIATION_NORMAL, VARIATION_AQUARIUM + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mPlantAge), PLANTAGE_SPROUT, PLANTAGE_FULL + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mPlantNeed), PLANTNEED_NONE, PLANTNEED_PHONOGRAPH + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncMotionTrailFramePortable(PortableSaveContext& theContext, MotionTrailFrame& theFrame)
@@ -718,6 +726,10 @@ static void SyncMagnetItemPortable(PortableSaveContext& theContext, MagnetItem& 
 	theContext.SyncFloat(theItem.mDestOffsetX);
 	theContext.SyncFloat(theItem.mDestOffsetY);
 	SyncEnum32(theContext, theItem.mItemType);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mItemType), MAGNET_ITEM_NONE,
+			MAGNET_ITEM_GIGA_FOOTBALL_HELMET_3 + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncAttachEffectPortable(PortableSaveContext& theContext, AttachEffect& theEffect)
@@ -794,6 +806,14 @@ static void SyncSeedPacketTailPortable(PortableSaveContext& theContext, SeedPack
 	theContext.SyncBool(thePacket.mActive);
 	theContext.SyncBool(thePacket.mRefreshing);
 	theContext.SyncInt32(thePacket.mTimesUsed);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(thePacket.mPacketType), SEED_NONE,
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(thePacket.mImitaterType), SEED_NONE,
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, false)
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(thePacket.mSlotMachiningNextSeed), SEED_NONE,
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)))
+		theContext.mFailed = true;
 }
 
 static void SyncChallengeTailPortable(PortableSaveContext& theContext, Challenge& theChallenge)
@@ -1114,7 +1134,9 @@ static void SyncCoinTailPortable(PortableSaveContext& theContext, Coin& theCoin)
 	if (theContext.mReading && (theContext.mFailed
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theCoin.mType), COIN_NONE, COIN_ULTIMATESUN + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theCoin.mCoinMotion),
-			COIN_MOTION_FROM_SKY, COIN_MOTION_FROM_BOSS + 1)))
+			COIN_MOTION_FROM_SKY, COIN_MOTION_FROM_BOSS + 1)
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(theCoin.mUsableSeedType), SEED_NONE,
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)))
 		theContext.mFailed = true;
 }
 
@@ -1175,7 +1197,11 @@ static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& 
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mGridItemType),
 			GRIDITEM_NONE, GRIDITEM_IZOMBIE_BRAIN + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mGridItemState),
-			GRIDITEM_STATE_NORMAL, GRIDITEM_STATE_BRAIN_SQUISHED + 1)))
+			GRIDITEM_STATE_NORMAL, GRIDITEM_STATE_BRAIN_SQUISHED + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mZombieType), ZOMBIE_INVALID, NUM_CACHED_ZOMBIE_TYPES)
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(theItem.mSeedType), SEED_NONE,
+			NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mScaryPotType), SCARYPOT_NONE, SCARYPOT_SUN + 1)))
 		theContext.mFailed = true;
 }
 

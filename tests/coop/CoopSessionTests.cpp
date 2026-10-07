@@ -104,6 +104,19 @@ namespace
 			&& !IsValidPortableSaveWaveState(101, 0, 100)
 			&& !IsValidPortableSaveWaveState(10, 11, 100),
 			"portable save wave cursors stay within wave count and capacity");
+		Require(IsValidPortableSaveSeedType(SEED_NONE, SEED_NONE, NUM_SEED_TYPES,
+			SEED_ZOMBIE_IMP + 1, true)
+			&& IsValidPortableSaveSeedType(NUM_SEED_TYPES - 1, SEED_NONE, NUM_SEED_TYPES,
+				SEED_ZOMBIE_IMP + 1, false)
+			&& IsValidPortableSaveSeedType(SEED_BEGHOULED_BUTTON_SHUFFLE, SEED_NONE, NUM_SEED_TYPES,
+				SEED_ZOMBIE_IMP + 1, true)
+			&& !IsValidPortableSaveSeedType(NUM_SEED_TYPES, SEED_NONE, NUM_SEED_TYPES,
+				SEED_ZOMBIE_IMP + 1, true)
+			&& !IsValidPortableSaveSeedType(SEED_BEGHOULED_BUTTON_SHUFFLE, SEED_NONE, NUM_SEED_TYPES,
+				SEED_ZOMBIE_IMP + 1, false)
+			&& !IsValidPortableSaveSeedType(SEED_ZOMBIE_IMP + 1, SEED_NONE, NUM_SEED_TYPES,
+				SEED_ZOMBIE_IMP + 1, true),
+			"portable save seed enums reject sentinels and enforce extended-seed policy");
 		int aTransactionalValue = 3;
 		Require(!ApplyPortableSaveWithRollback([&]() { aTransactionalValue = 9; return false; },
 			[&]() { aTransactionalValue = 3; })
