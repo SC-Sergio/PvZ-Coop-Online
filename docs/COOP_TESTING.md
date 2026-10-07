@@ -93,6 +93,8 @@ Add focused tests for ready/unready/start rules, ownership, team defeat/victory,
 
 The WebRTC signaling process integration also closes the host room after a guest rejoin in 2-, 3-, and 4-player sessions. It submits a well-formed but invalid resume token and requires the typed `REJOIN_REJECTED` result, then pumps each guest controller until `room-closed` is surfaced. This covers terminal failure classification and verifies the controller stops retrying after the host ends a session. Repeat with `ctest --test-dir out/webrtc-build -R coop-webrtc-signaling-process --repeat until-fail:5 --output-on-failure -C Debug`; this is a same-machine signaling test, not a public Internet or Board-backed match test.
 
+The reconnect worker uses a promise-backed future so controller teardown does not wait on the network attempt. Both Debug build variants and full CTest suites pass after this change. The existing process integration exercises successful rejoin, but does not deliberately hold the rejoin socket open while timing controller destruction; add that case when a controllable signaling delay is available.
+
 ## Manual play evidence still required
 
 Verify single-player using legally supplied assets, then host/client complete matches for 2, 3, and 4 players across distinct home networks. Confirm three players display one empty slot and run exactly three gardens; switch views while confirming all gardens keep ticking; exercise global victory/defeat and disconnect/rejoin. No such gameplay evidence exists yet.
