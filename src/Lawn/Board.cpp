@@ -6290,7 +6290,6 @@ void Board::UpdateAll(ModalFlags* theFlags)
 		&& mLastWMUpdateCount != static_cast<ulong>(mWidgetManager->mUpdateCnt))
 	{
 		mLastWMUpdateCount = static_cast<ulong>(mWidgetManager->mUpdateCnt);
-		ScopedGardenSimulationState aGardenState(this);
 		Update();
 	}
 }
