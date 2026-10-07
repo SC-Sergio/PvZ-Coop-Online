@@ -39,6 +39,7 @@ namespace Coop
 		bool Start(CoopSession& session, const ConfigureGarden& configureGarden);
 		void Stop();
 		bool SelectGarden(GardenId gardenId);
+	bool SelectNextGarden();
 		bool SetLocalPlayerId(PlayerId playerId);
 		bool AttachTransport(INetworkTransport& transport);
 		bool SubmitLocalCommand(Board& board, PlayerCommand command);

@@ -8300,6 +8300,9 @@ void Board::DoTypingCheck(KeyCode theKey)
 void Board::KeyDown(KeyCode theKey)
 {
 	DoTypingCheck(theKey);
+	if (theKey == KeyCode::KEYCODE_TAB && mApp->mCoopGardenManager
+		&& mApp->mCoopGardenManager->IsActive() && mApp->mCoopGardenManager->SelectNextGarden())
+		return;
 
 	if (GetGardenGameScene() == GameScenes::SCENE_LEVEL_INTRO &&
 		mApp->mGameMode != GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN && 

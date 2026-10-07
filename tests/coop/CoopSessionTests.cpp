@@ -46,6 +46,15 @@ namespace
 			for (std::size_t i = count; i < Coop::MAX_PLAYERS; ++i)
 				Require(session.GetSlots()[i].state == Coop::PlayerState::EMPTY, "unused lobby slots remain empty");
 		}
+		const std::vector<Coop::GardenInstance> gardens{{11, 1}, {22, 2}, {33, 3}, {44, 4}};
+		Require(!Coop::GetNextViewedGardenId({}, std::nullopt).has_value(),
+			"garden view cycling handles no active gardens");
+		Require(Coop::GetNextViewedGardenId(std::vector<Coop::GardenInstance>{{11, 1}}, 11) == 11,
+			"single-garden view cycling remains on its only garden");
+		Require(Coop::GetNextViewedGardenId(gardens, 11) == 22
+			&& Coop::GetNextViewedGardenId(gardens, 44) == 11
+			&& Coop::GetNextViewedGardenId(gardens, 99) == 11,
+			"multi-garden view cycling advances, wraps, and recovers an unknown selection");
 	}
 
 	void TestPortableSaveBounds()

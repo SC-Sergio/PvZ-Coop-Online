@@ -67,6 +67,19 @@ namespace Coop
 		bool completed = false;
 	};
 
+	inline std::optional<GardenId> GetNextViewedGardenId(const std::vector<GardenInstance>& gardens,
+		std::optional<GardenId> viewedGarden) noexcept
+	{
+		if (gardens.empty())
+			return std::nullopt;
+		for (std::size_t i = 0; i < gardens.size(); ++i)
+		{
+			if (viewedGarden && gardens[i].id == *viewedGarden)
+				return gardens[(i + 1) % gardens.size()].id;
+		}
+		return gardens.front().id;
+	}
+
 	struct PlayerSlot
 	{
 		PlayerState state = PlayerState::EMPTY;

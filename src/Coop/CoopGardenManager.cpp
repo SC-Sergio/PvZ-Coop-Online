@@ -151,6 +151,14 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopGardenManager::SelectNextGarden()
+	{
+		if (!mSession)
+			return false;
+		const std::optional<GardenId> nextGarden = GetNextViewedGardenId(mSession->GetGardens(), mViewedGarden);
+		return nextGarden && SelectGarden(*nextGarden);
+	}
+
 	bool CoopGardenManager::SetLocalPlayerId(PlayerId playerId)
 	{
 		if (!mSession || playerId == 0 || std::none_of(mSession->GetSlots().begin(), mSession->GetSlots().end(), [playerId](const PlayerSlot& slot)
