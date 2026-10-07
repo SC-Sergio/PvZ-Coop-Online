@@ -53,7 +53,7 @@
 
 ### Checkpoint: bounded SAVE4 world coordinates
 
-- **Change:** base game-object positions/extents and zombie, projectile, coin, mower, and grid-item world positions are bounded to ±10,000 pixels (extents 0–10,000). This is a generous off-screen margin that prevents finite but extreme values from reaching integer conversions and geometry calculations. Projectile target and movement fields are included.
+- **Change:** base game-object positions/extents and zombie, plant, projectile, coin, mower, and grid-item world positions are bounded to ±10,000 pixels (extents 0–10,000). Plant/projectile targets, collision rectangles, particle/trail vectors, attachment/reanimation matrices and projectile movement fields use the same bound. This is a generous off-screen margin that prevents finite but extreme values from reaching integer conversions and geometry calculations.
 - **Verification:** helper tests cover signed/float coordinate edges, NaN/infinity, and invalid extents. Both MSVC 19.44 Debug apps build; CTest passes 2/2 without WebRTC and 4/4 with WebRTC.
 - **Known limit:** a real SAVE4 restore against an initialized Board remains unavailable without legal game assets; velocities and other non-positional floats still need an audited semantic range.
 - **Next:** continue checking restored values that feed conversions, arithmetic, or direct indexes, then run malformed and compatibility loads in the engine when assets are available.

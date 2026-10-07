@@ -368,6 +368,10 @@ static void SyncVector2Portable(PortableSaveContext& theContext, SexyVector2& th
 {
 	theContext.SyncFloat(theVector.x);
 	theContext.SyncFloat(theVector.y);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveWorldCoordinate(theVector.x)
+		|| !IsValidPortableSaveWorldCoordinate(theVector.y)))
+		theContext.mFailed = true;
 }
 
 static void SyncMatrixPortable(PortableSaveContext& theContext, SexyMatrix3& theMatrix)
@@ -381,6 +385,17 @@ static void SyncMatrixPortable(PortableSaveContext& theContext, SexyMatrix3& the
 	theContext.SyncFloat(theMatrix.m20);
 	theContext.SyncFloat(theMatrix.m21);
 	theContext.SyncFloat(theMatrix.m22);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m00)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m01)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m02)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m10)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m11)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m12)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m20)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m21)
+		|| !IsValidPortableSaveWorldCoordinate(theMatrix.m22)))
+		theContext.mFailed = true;
 }
 
 static void SyncRectPortable(PortableSaveContext& theContext, Rect& theRect)
@@ -389,6 +404,12 @@ static void SyncRectPortable(PortableSaveContext& theContext, Rect& theRect)
 	theContext.SyncInt32(theRect.mY);
 	theContext.SyncInt32(theRect.mWidth);
 	theContext.SyncInt32(theRect.mHeight);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveWorldCoordinate(theRect.mX)
+		|| !IsValidPortableSaveWorldCoordinate(theRect.mY)
+		|| !IsValidPortableSaveWorldExtent(theRect.mWidth)
+		|| !IsValidPortableSaveWorldExtent(theRect.mHeight)))
+		theContext.mFailed = true;
 }
 
 static void SyncReanimationDefPortable(PortableSaveContext& theContext, ReanimatorDefinition*& theDefinition)
@@ -724,6 +745,10 @@ static void SyncMotionTrailFramePortable(PortableSaveContext& theContext, Motion
 	theContext.SyncFloat(theFrame.mPosX);
 	theContext.SyncFloat(theFrame.mPosY);
 	theContext.SyncFloat(theFrame.mAnimTime);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveWorldCoordinate(theFrame.mPosX)
+		|| !IsValidPortableSaveWorldCoordinate(theFrame.mPosY)))
+		theContext.mFailed = true;
 }
 
 static void SyncMagnetItemPortable(PortableSaveContext& theContext, MagnetItem& theItem)
@@ -1122,7 +1147,9 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))
 		|| !IsValidPortableSaveGridPosition(thePlant.mPlantCol, thePlant.mRow,
 			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)
-		|| !IsValidPortableSaveRow(thePlant.mStartRow, MAX_GRID_SIZE_Y)))
+		|| !IsValidPortableSaveRow(thePlant.mStartRow, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWorldCoordinate(thePlant.mTargetX)
+		|| !IsValidPortableSaveWorldCoordinate(thePlant.mTargetY)))
 	{
 		theContext.mFailed = true;
 		return;
