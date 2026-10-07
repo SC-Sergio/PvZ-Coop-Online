@@ -230,6 +230,85 @@ namespace Coop
 		std::vector<std::uint8_t> mBytes;
 		std::vector<bool> mReceivedChunks;
 	};
+
+	enum class SnapshotSendStatus
+	{
+		IDLE,
+		IN_PROGRESS,
+		COMPLETE,
+		PEER_DISCONNECTED,
+		TRANSPORT_CHANGED
+	};
+
+	class GardenSnapshotSender
+	{
+	public:
+		bool Begin(INetworkTransport& transport, TransportPlayerId recipientId,
+			std::uint64_t transferId, GardenId gardenId, std::uint64_t serverTick,
+			std::span<const std::uint8_t> snapshotBytes)
+		{
+			const std::vector<TransportPlayerId> peers = transport.GetConnectedPeerIds();
+			if (IsActive() || recipientId == 0 || transport.GetLocalPlayerId() == 0
+				|| transport.GetLocalPlayerId() == recipientId
+				|| std::find(peers.begin(), peers.end(), recipientId) == peers.end())
+				return false;
+			auto frames = BuildGardenSnapshotFrames(transferId, gardenId, serverTick, snapshotBytes);
+			if (!frames)
+				return false;
+			mRecipientId = recipientId;
+			mSenderId = transport.GetLocalPlayerId();
+			mFrames = std::move(*frames);
+			mNextFrame = 0;
+			return true;
+		}
+
+		SnapshotSendStatus Pump(INetworkTransport& transport, std::size_t maxFramesPerPump = 4)
+		{
+			if (!IsActive())
+				return SnapshotSendStatus::IDLE;
+			if (transport.GetLocalPlayerId() != mSenderId)
+			{
+				Reset();
+				return SnapshotSendStatus::TRANSPORT_CHANGED;
+			}
+			const std::vector<TransportPlayerId> peers = transport.GetConnectedPeerIds();
+			if (transport.GetLocalPlayerId() == mRecipientId
+				|| std::find(peers.begin(), peers.end(), mRecipientId) == peers.end())
+			{
+				Reset();
+				return SnapshotSendStatus::PEER_DISCONNECTED;
+			}
+			if (maxFramesPerPump == 0)
+				return SnapshotSendStatus::IN_PROGRESS;
+			for (std::size_t sent = 0; sent < maxFramesPerPump && mNextFrame < mFrames.size(); ++sent)
+			{
+				if (!transport.SendTo(mRecipientId, mFrames[mNextFrame]))
+					return SnapshotSendStatus::IN_PROGRESS;
+				++mNextFrame;
+			}
+			if (mNextFrame != mFrames.size())
+				return SnapshotSendStatus::IN_PROGRESS;
+			Reset();
+			return SnapshotSendStatus::COMPLETE;
+		}
+
+		void Reset() noexcept
+		{
+			mRecipientId = 0;
+			mSenderId = 0;
+			mNextFrame = 0;
+			std::vector<std::vector<std::uint8_t>>().swap(mFrames);
+		}
+
+		bool IsActive() const noexcept { return mRecipientId != 0 && !mFrames.empty(); }
+		std::size_t GetRemainingFrameCount() const noexcept { return mFrames.size() - mNextFrame; }
+
+	private:
+		TransportPlayerId mRecipientId = 0;
+		TransportPlayerId mSenderId = 0;
+		std::size_t mNextFrame = 0;
+		std::vector<std::vector<std::uint8_t>> mFrames;
+	};
 }
 
 #endif

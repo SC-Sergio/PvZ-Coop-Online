@@ -334,6 +334,48 @@ namespace
 		Coop::GardenSnapshotAssembler boundsAssembler;
 		Require(boundsAssembler.Accept(oversized, completed) == Coop::SnapshotReceiveResult::REJECTED
 			&& !boundsAssembler.HasPendingSnapshot(), "oversized transfer metadata is rejected before allocation");
+
+		Coop::LocalTransportHub hub;
+		auto host = hub.CreateTransport(71);
+		auto guest = hub.CreateTransport(72);
+		Coop::GardenSnapshotSender sender;
+		Require(host && guest, "snapshot sender test creates both transport peers");
+		const std::uint8_t fillerByte = 0xA5;
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(host->SendTo(72, std::span<const std::uint8_t>(&fillerByte, 1)),
+				"test fills the bounded recipient queue");
+		Require(sender.Begin(*host, 72, 9, 77, 1234, source),
+			"snapshot sender accepts a connected recipient and bounded payload");
+		const std::size_t queuedFrames = sender.GetRemainingFrameCount();
+		Require(sender.Pump(*host, 2) == Coop::SnapshotSendStatus::IN_PROGRESS
+			&& sender.GetRemainingFrameCount() == queuedFrames,
+			"transport backpressure leaves the current snapshot frame queued for retry");
+		while (auto packet = guest->Receive())
+			Require(packet->bytes.size() == 1 && packet->bytes[0] == fillerByte,
+				"test drains only the packets used to fill the bounded queue");
+		Coop::GardenSnapshotAssembler transferAssembler;
+		Coop::GardenSnapshot transferred;
+		std::size_t pumpCount = 0;
+		while (sender.IsActive() && pumpCount++ < 16)
+		{
+			const Coop::SnapshotSendStatus status = sender.Pump(*host, 2);
+			Require(status == Coop::SnapshotSendStatus::IN_PROGRESS || status == Coop::SnapshotSendStatus::COMPLETE,
+				"snapshot sender stays active until its bounded frames are queued");
+			while (auto packet = guest->Receive())
+			{
+				Require(packet->senderId == 71, "snapshot transfer preserves transport-authenticated sender identity");
+				const auto receive = transferAssembler.Accept(packet->bytes, transferred);
+				Require(receive != Coop::SnapshotReceiveResult::REJECTED,
+					"pumped snapshot frame is accepted by the bounded assembler");
+			}
+		}
+		Require(!sender.IsActive() && transferred.bytes == source && transferred.serverTick == 1234,
+			"paced sender completes a real multi-peer snapshot transfer");
+		Require(sender.Begin(*host, 72, 10, 77, 1235, source)
+			&& host->DisconnectPeer(72)
+			&& sender.Pump(*host) == Coop::SnapshotSendStatus::PEER_DISCONNECTED
+			&& !sender.IsActive(),
+			"snapshot sender releases pending frames when its recipient disconnects");
 	}
 
 	void TestHeartbeatTimeout()
