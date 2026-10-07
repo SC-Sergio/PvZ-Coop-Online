@@ -391,7 +391,8 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 		return false;
 	const std::optional<int> configuredStartingSun = Coop::GetCoopStartingSun(settings.difficulty,
 		lobby->GetSession().GetActivePlayerCount());
-	if (!configuredStartingSun)
+	const std::optional<int> zombiePointScale = Coop::GetCoopZombiePointScalePermille(settings.difficulty);
+	if (!configuredStartingSun || !zombiePointScale)
 		return false;
 	const int startingSun = *configuredStartingSun;
 	int coopLevel = 0;
@@ -440,8 +441,10 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	}
 
 	const bool gardensStarted = mCoopGardenManager->Start(mCoopLobbyController->GetSession(),
-		[deck, startingSun](Board& board, const Coop::GardenInstance&)
+		[deck, startingSun, zombiePointScale](Board& board, const Coop::GardenInstance&)
 		{
+			if (!board.SetCoopZombiePointScalePermille(*zombiePointScale))
+				return false;
 			board.InitLevel();
 			if (board.mSeedBank == nullptr || board.mSeedBank->mNumPackets < 3)
 				return false;

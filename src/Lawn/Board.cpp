@@ -27,6 +27,7 @@
 #include "SeedPacket.h"
 #include "../Coop/PlayerCommand.h"
 #include "../Coop/CoopGardenManager.h"
+#include "../Coop/CoopDifficulty.h"
 #include "System/Music.h"
 #include "System/SaveGame.h"
 #include "Widget/LawnDialog.h"
@@ -355,6 +356,14 @@ void Board::EnableGardenStateIsolation(bool enabled)
 		mGardenSawYeti = mApp->mSawYeti;
 	}
 	mGardenStateIsolated = enabled;
+}
+
+bool Board::SetCoopZombiePointScalePermille(int scalePermille) noexcept
+{
+	if (!mGardenStateIsolated || mCoopZombieDifficultyLocked || scalePermille < 500 || scalePermille > 2000)
+		return false;
+	mCoopZombiePointScalePermille = scalePermille;
+	return true;
 }
 
 GameScenes Board::GetGardenGameScene() const noexcept
@@ -783,6 +792,7 @@ void Board::PutInMissingZombies(int theWaveNumber, ZombiePicker* theZombiePicker
 
 void Board::PickZombieWaves()
 {
+	mCoopZombieDifficultyLocked = true;
 	// ====================================================================================================
 	// ▲ 设定关卡总波数
 	// ====================================================================================================
@@ -922,6 +932,8 @@ void Board::PickZombieWaves()
 		{
 			aZombiePoints *= 2;
 		}
+		if (mGardenStateIsolated)
+			aZombiePoints = Coop::ScaleCoopZombiePoints(aZombiePoints, mCoopZombiePointScalePermille);
 		
 		// ------------------------------------------------------------------------------------------------
 		// △ 向出怪列表中加入固定刷出的僵尸

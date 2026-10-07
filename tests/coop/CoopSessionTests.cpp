@@ -677,16 +677,25 @@ namespace
 	void TestCoopDifficultyProfiles()
 	{
 		static constexpr int expected[] = {115, 65, 40, 25, 15, 65};
+		static constexpr int expectedZombieScales[] = {850, 1000, 1150, 1300, 1450, 1000};
 		for (std::size_t i = 0; i < Coop::COOP_DIFFICULTY_PROFILES.size(); ++i)
 		{
 			const auto difficulty = Coop::COOP_DIFFICULTY_PROFILES[i].difficulty;
 			Require(Coop::GetCoopStartingSun(difficulty, 1) == expected[i], "single-player garden gets defined difficulty starting sun");
 			Require(Coop::GetCoopStartingSun(difficulty, 4) == Coop::COOP_DIFFICULTY_PROFILES[i].startingSun,
 				"four-player starting sun follows the selected difficulty profile");
+			Require(Coop::GetCoopZombiePointScalePermille(difficulty) == expectedZombieScales[i],
+				"difficulty profile defines the per-garden zombie budget scale");
 		}
+		Require(Coop::ScaleCoopZombiePoints(10, 850) == 9, "relaxed difficulty scales and rounds the zombie budget");
+		Require(Coop::ScaleCoopZombiePoints(10, 1450) == 15, "insane difficulty scales up the zombie budget");
+		Require(Coop::ScaleCoopZombiePoints(0, 1450) == 0, "empty zombie budgets remain empty");
+		Require(Coop::ScaleCoopZombiePoints(10, 0) == 10, "invalid scale leaves the base budget unchanged");
 		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 0), "zero-player difficulty configuration is rejected");
 		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 5), "player counts above room capacity are rejected");
 		Require(!Coop::GetCoopStartingSun(static_cast<Coop::CoopDifficulty>(255), 1), "unknown difficulty values are rejected");
+		Require(!Coop::GetCoopZombiePointScalePermille(static_cast<Coop::CoopDifficulty>(255)),
+			"unknown difficulty has no zombie budget scale");
 	}
 
 	void TestCapacityIdentityAndLeave()

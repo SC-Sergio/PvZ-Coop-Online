@@ -177,6 +177,8 @@ public:
 	LevelStats						mGardenLastLevelStats;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
+	int							mCoopZombiePointScalePermille = 1000;
+	bool							mCoopZombieDifficultyLocked = false;
 	EffectSystem*					mGardenEffectSystem;
 	std::shared_ptr<EffectSystem>		mGardenEffectSystemOwner;
 	PoolEffect*					mGardenPoolEffect;
@@ -328,6 +330,7 @@ public:
 	void							UpdateSimulation();
 	bool							ApplyCooperativeCommand(const Coop::PlayerCommand& command);
 	void							EnableGardenStateIsolation(bool enabled);
+	bool							SetCoopZombiePointScalePermille(int scalePermille) noexcept;
 	GameScenes						GetGardenGameScene() const noexcept;
 	void							SetGardenGameScene(GameScenes scene) noexcept;
 	BoardResult						GetGardenBoardResult() const noexcept;
