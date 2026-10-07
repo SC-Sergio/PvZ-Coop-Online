@@ -147,6 +147,10 @@ test("creates private rooms and routes bounded signaling only through the host",
     type: "signal", from: "1", kind: "offer", payload: offer,
   });
 
+  send(host, { type: "signal", to: "2", kind: "offer", payload: "x".repeat(32_600) });
+  assert.deepEqual(await waitForType(host, "error"), { type: "error", code: "INVALID_SIGNAL" },
+    "the signaling relay rejects descriptions that exceed its bounded forwarding envelope");
+
   send(guest, { type: "signal", to: "3", kind: "candidate", payload: "candidate:1" });
   assert.deepEqual(await waitForType(guest, "error"), { type: "error", code: "INVALID_PEER" });
   send(host, { type: "signal", to: "99", kind: "candidate", payload: "candidate:1" });

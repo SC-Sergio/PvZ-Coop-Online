@@ -49,6 +49,14 @@ namespace Coop
 	namespace
 	{
 		using Json = nlohmann::json;
+		constexpr std::size_t MAX_SIGNALING_MESSAGE_BYTES = 32 * 1024;
+		constexpr std::size_t MAX_SIGNALING_DESCRIPTION_BYTES = 32 * 1024 - 512;
+
+		bool IsValidRoomCode(const std::string& roomCode)
+		{
+			return roomCode.size() == 16 && std::all_of(roomCode.begin(), roomCode.end(), [](unsigned char character)
+				{ return (character >= '0' && character <= '9') || (character >= 'A' && character <= 'F'); });
+		}
 
 		bool ParsePlayerId(const Json& value, TransportPlayerId& playerId)
 		{
@@ -207,7 +215,8 @@ namespace Coop
 			{
 				const auto code = message.find("roomCode");
 				std::string resumeToken;
-				if (code == message.end() || !code->is_string() || !ParseResumeToken(message, resumeToken))
+				if (code == message.end() || !code->is_string()
+					|| !IsValidRoomCode(code->get<std::string>()) || !ParseResumeToken(message, resumeToken))
 					return SetError(state, "Signaling service returned an invalid room code.");
 				if (!ApplyIceServers(state, message))
 					return SetError(state, "Signaling service returned invalid ICE server configuration.");
@@ -224,6 +233,7 @@ namespace Coop
 				TransportPlayerId hostId = 0;
 				std::string resumeToken;
 				if (!message.contains("hostId") || !ParsePlayerId(message["hostId"], hostId)
+					|| hostId == state->localPlayerId
 					|| !ParseResumeToken(message, resumeToken))
 					return SetError(state, "Signaling service returned an invalid host identity.");
 				if (!ApplyIceServers(state, message))
@@ -249,9 +259,22 @@ namespace Coop
 				TransportPlayerId sender = 0;
 				if (!message.contains("from") || !ParsePlayerId(message["from"], sender)
 					|| !message.contains("kind") || !message["kind"].is_string()
-					|| !message.contains("payload") || !message["payload"].is_string())
+					|| !message.contains("payload") || !message["payload"].is_string()
+					|| message["payload"].get_ref<const std::string&>().empty()
+					|| message["payload"].get_ref<const std::string&>().size() > MAX_SIGNALING_DESCRIPTION_BYTES)
 					return SetError(state, "Signaling service returned a malformed peer signal.");
-				OnSignal(state, sender, message["kind"].get<std::string>(), message["payload"].get<std::string>());
+				const std::string kind = message["kind"].get<std::string>();
+				if (kind != "offer" && kind != "answer" && kind != "candidate")
+					return SetError(state, "Signaling service returned an unsupported peer signal.");
+				bool knownPeer = false;
+				{
+					std::lock_guard lock(state->mutex);
+					knownPeer = (!state->isHost && sender == state->hostPlayerId)
+						|| (state->isHost && state->peers.contains(sender));
+				}
+				if (!knownPeer || sender == state->localPlayerId)
+					return SetError(state, "Signaling service routed a signal from an unknown peer.");
+				OnSignal(state, sender, kind, message["payload"].get<std::string>());
 				return;
 			}
 			if (type == "peer-left" || type == "room-closed")
@@ -404,9 +427,12 @@ namespace Coop
 					return;
 				if (!std::holds_alternative<rtc::string>(data))
 					return SetError(locked, "Signaling service sent a non-text frame.");
+				const rtc::string& payload = std::get<rtc::string>(data);
+				if (payload.size() > MAX_SIGNALING_MESSAGE_BYTES)
+					return SetError(locked, "Signaling service sent an oversized frame.");
 				try
 				{
-					HandleMessage(locked, Json::parse(std::get<rtc::string>(data)));
+					HandleMessage(locked, Json::parse(payload));
 				}
 				catch (const std::exception& exception)
 				{

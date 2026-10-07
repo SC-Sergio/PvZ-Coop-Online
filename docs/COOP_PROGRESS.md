@@ -306,3 +306,10 @@
 - **Verification:** both MSVC Debug application/test configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC.
 - **Limit:** this does not roll back a partially applied failure and is not end-to-end tested with initialized Boards or injected manager execution failure. Arbitrary state drift remains undetected.
 - **Next:** keep closing synchronization failure paths, then validate snapshot recovery against initialized Boards when legal user-provided game data is available.
+
+### Checkpoint: bound and authenticate WebRTC signaling input
+
+- **Change:** the WebRTC signaling client now rejects incoming text frames over 32 KiB, SDP/candidate payloads above the relay's 32 KiB-minus-512-byte bound, malformed room codes, host identities equal to the local player, unsupported signal kinds, and signal senders that are not the known host or an admitted guest. The signaling service test now exercises its oversized-description rejection.
+- **Verification:** MSVC Debug application and test builds succeeded with WebRTC and without it. CTest passed 2/2 without WebRTC and 4/4 with WebRTC; the 2/3/4-player signaling process test passed five consecutive repetitions; signaling Node tests passed 8/8; `git diff --check` passed.
+- **Limit:** validation is local and does not prove malicious-service resistance beyond these bounds, public WSS/TURN deployment, cross-network ICE traversal, or initialized-Board matches.
+- **Next:** continue closing reconnect/synchronization failures, then validate restore behavior with legal assets and pursue distinct-network Internet evidence.
