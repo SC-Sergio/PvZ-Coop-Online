@@ -28,7 +28,7 @@ public:
 	virtual bool AllowChar(int id, char character);
 
 private:
-	struct PendingJoin;
+	struct PendingLobbyOperation;
 	void SetStatus(std::string status);
 	void StartIfReplicated();
 	void ApplySelectedSettings();
@@ -49,7 +49,7 @@ private:
 	bool mUseInternet;
 	std::string mRoomCode;
 	std::unique_ptr<Coop::CoopLobbyController> mLobby;
-	std::shared_ptr<PendingJoin> mPendingJoin;
+	std::shared_ptr<PendingLobbyOperation> mPendingLobbyOperation;
 	Coop::CoopLobbySettings mSelectedSettings;
 	std::string mStatus;
 };
