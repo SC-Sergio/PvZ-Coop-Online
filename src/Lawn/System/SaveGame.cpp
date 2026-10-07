@@ -920,6 +920,17 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 	theContext.SyncBool(theZombie.mIsFireBall);
 	SyncEnumU32(theContext, theZombie.mMoweredReanimID);
 	theContext.SyncInt32(theZombie.mLastPortalX);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombieType), 0, NUM_ZOMBIE_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombiePhase),
+			PHASE_ZOMBIE_NORMAL, PHASE_SQUASH_DONE_FALLING + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mZombieHeight),
+			HEIGHT_ZOMBIE_NORMAL, HEIGHT_ZOMBIQUARIUM + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mHelmType),
+			HELMTYPE_NONE, HELMTYPE_GIGA_FOOTBALL + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mShieldType),
+			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePlant)
@@ -994,6 +1005,15 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 	}
 	for (int i = 0; i < thePlant.mRelatedZombieCount; i++)
 		SyncEnumU32(theContext, thePlant.mRelatedZombieID[i]);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mSeedType), 0, SeedType::NUM_SEED_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mState),
+			STATE_NOTREADY, STATE_LILYPAD_INVULNERABLE + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mOnBungeeState),
+			NOT_ON_BUNGEE, RISING_WITH_BUNGEE + 1)
+		|| (thePlant.mImitaterType != SeedType::SEED_NONE
+			&& !IsValidPortableSaveEnumValue(static_cast<int32_t>(thePlant.mImitaterType), 0, SeedType::NUM_SEED_TYPES))))
+		theContext.mFailed = true;
 }
 
 static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projectile& theProjectile)
@@ -1029,6 +1049,12 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 	theContext.SyncInt32(theProjectile.mTargetX);
 	theContext.SyncInt32(theProjectile.mTargetY);
 	theContext.SyncInt32(theProjectile.mLastPortalX);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mMotionType),
+			MOTION_STRAIGHT, MOTION_HOMING + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mProjectileType),
+			PROJECTILE_PEA, NUM_PROJECTILES)))
+		theContext.mFailed = true;
 }
 
 static void SyncCoinTailPortable(PortableSaveContext& theContext, Coin& theCoin)
@@ -1056,6 +1082,11 @@ static void SyncCoinTailPortable(PortableSaveContext& theContext, Coin& theCoin)
 	theContext.SyncBool(theCoin.mHasBouncyArrow);
 	theContext.SyncBool(theCoin.mHitGround);
 	theContext.SyncInt32(theCoin.mTimesDropped);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theCoin.mType), COIN_NONE, COIN_ULTIMATESUN + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theCoin.mCoinMotion),
+			COIN_MOTION_FROM_SKY, COIN_MOTION_FROM_BOSS + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncLawnMowerTailPortable(PortableSaveContext& theContext, LawnMower& theMower)
@@ -1076,6 +1107,14 @@ static void SyncLawnMowerTailPortable(PortableSaveContext& theContext, LawnMower
 	theContext.SyncFloat(theMower.mAltitude);
 	SyncEnum32(theContext, theMower.mMowerHeight);
 	theContext.SyncInt32(theMower.mLastPortalX);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerState),
+			MOWER_ROLLING_IN, MOWER_SQUISHED + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerType),
+			LAWNMOWER_LAWN, NUM_MOWER_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMower.mMowerHeight),
+			MOWER_HEIGHT_LAND, MOWER_HEIGHT_UP_TO_LAND + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& theItem)
@@ -1103,7 +1142,11 @@ static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& 
 		SyncMotionTrailFramePortable(theContext, theItem.mMotionTrailFrames[i]);
 	theContext.SyncInt32(theItem.mMotionTrailCount);
 	if (theContext.mReading && (theContext.mFailed
-		|| !IsValidPortableSaveCount(theItem.mMotionTrailCount, NUM_MOTION_TRAIL_FRAMES)))
+		|| !IsValidPortableSaveCount(theItem.mMotionTrailCount, NUM_MOTION_TRAIL_FRAMES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mGridItemType),
+			GRIDITEM_NONE, GRIDITEM_IZOMBIE_BRAIN + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theItem.mGridItemState),
+			GRIDITEM_STATE_NORMAL, GRIDITEM_STATE_BRAIN_SQUISHED + 1)))
 		theContext.mFailed = true;
 }
 

@@ -60,6 +60,11 @@ namespace
 		Require(IsValidPortableSaveCount(0, 256) && IsValidPortableSaveCount(256, 256)
 			&& !IsValidPortableSaveCount(-1, 256) && !IsValidPortableSaveCount(257, 256),
 			"portable save counts stay within their declared array capacity");
+		Require(IsValidPortableSaveEnumValue(0, 0, 4)
+			&& IsValidPortableSaveEnumValue(3, 0, 4)
+			&& !IsValidPortableSaveEnumValue(-1, 0, 4)
+			&& !IsValidPortableSaveEnumValue(4, 0, 4),
+			"portable save enum values stay within their declared range");
 		Require(IsValidPortableSaveResourceId(0, 10, 10)
 			&& IsValidPortableSaveResourceId(9, 10, 10)
 			&& IsValidPortableSaveResourceId(10, 10, 10)

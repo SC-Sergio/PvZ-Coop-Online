@@ -55,6 +55,12 @@ inline bool IsValidPortableSaveResourceId(std::int32_t resourceId,
 		|| (resourceId >= 0 && static_cast<std::uint32_t>(resourceId) < resourceCount);
 }
 
+inline bool IsValidPortableSaveEnumValue(std::int32_t value,
+	std::int32_t firstValue, std::int32_t endValue) noexcept
+{
+	return value >= firstValue && value < endValue;
+}
+
 template <typename GetEntryId>
 inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)
