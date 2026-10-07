@@ -42,3 +42,10 @@
 - **Verification:** local Debug CTest remained green in both configurations (2/2 and 4/4) before this workflow-only edit; `git diff --check` passes. This machine has no YAML parser module, so workflow syntax has not been independently parsed locally. The GitHub Actions API currently returns no workflow runs for the feature branch after the push.
 - **Known limit:** the remote workflow result is unavailable; WebRTC-enabled CI is not configured by this workflow yet.
 - **Next:** inspect the GitHub run after push and continue the SAVE4/simulation review.
+
+### Checkpoint: hidden-garden widget updates
+
+- **Change:** `Board::UpdateAll` now keeps selected garden widget traversal inside the garden scope. A hidden isolated garden updates once per widget-manager counter under that scope and skips all child widgets, avoiding updates to hidden seed-bank/advice/controls against the visible app Board.
+- **Verification:** both MSVC 19.44 Debug application builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. `git diff --check` passed.
+- **Known limit:** only build/test evidence exists; with no legal game data available, the live widget/frame behavior and independent simulation remain unverified.
+- **Next:** continue source review for remaining app-global per-garden services, then exercise 2–4 garden frames in-game when legal assets are supplied.

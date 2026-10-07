@@ -344,6 +344,7 @@ public:
 	void							KeyUp(KeyCode) override {}
 	void							KeyDown(KeyCode theKey) override;
 	void							Update() override;
+	void							UpdateAll(ModalFlags* theFlags) override;
 	void							UpdateLayers();
 	void							Draw(Graphics* g) override;
 	void							DrawBackdrop(Graphics* g);

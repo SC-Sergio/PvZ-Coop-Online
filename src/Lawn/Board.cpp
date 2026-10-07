@@ -43,6 +43,7 @@
 #include "../Sexy.TodLib/Attachment.h"
 #include "../Sexy.TodLib/Reanimator.h"
 #include "widget/Dialog.h"
+#include "widget/WidgetManager.h"
 #include "misc/MTRand.h"
 #include "../Sexy.TodLib/TodParticle.h"
 //#include "graphics/SysFont.h"
@@ -6267,6 +6268,31 @@ void Board::Update()
 	}
 	UpdateLayers();
 	UpdateSimulation();
+}
+
+void Board::UpdateAll(ModalFlags* theFlags)
+{
+	if (!mGardenStateIsolated || mVisible)
+	{
+		ScopedGardenSimulationState aGardenState(this);
+		Widget::UpdateAll(theFlags);
+		return;
+	}
+
+	AutoModalFlags anAutoModalFlags(theFlags, mWidgetFlagsMod);
+	if (theFlags->GetFlags() & WIDGETFLAGS_MARK_DIRTY)
+		MarkDirty();
+
+	if (!mWidgetManager)
+		return;
+
+	if ((theFlags->GetFlags() & WIDGETFLAGS_UPDATE)
+		&& mLastWMUpdateCount != static_cast<ulong>(mWidgetManager->mUpdateCnt))
+	{
+		mLastWMUpdateCount = static_cast<ulong>(mWidgetManager->mUpdateCnt);
+		ScopedGardenSimulationState aGardenState(this);
+		Update();
+	}
 }
 
 
