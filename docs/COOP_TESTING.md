@@ -112,3 +112,5 @@ App-level pause hooks now remain inert during co-op, since per-client modal paus
 Isolated Boards now reject both legacy typing codes and debug character cheats before those handlers run. Both Debug build variants compile the guard and CTest remains green (2/2 and 4/4); no in-engine input test is available.
 
 The `mTodCheatKeys` click shortcut is now disabled on isolated Boards. Both app builds and CTest suites pass; the shortcut guard has no live Board input test.
+
+Classic map loadouts are centralized in `CoopLoadout.h`; tests cover all five exact six-seed decks and reject unknown map IDs. The match bootstrap derives the same deck from the replicated host map setting for every garden. Static path review confirms that packet cooldown updates run through `UpdateGameObjects` inside each isolated Board simulation, including hidden gardens; cooldown timing and visual cursor behavior still need a live asset-backed check.
