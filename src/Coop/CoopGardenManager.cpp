@@ -288,13 +288,16 @@ namespace Coop
 				if (slot.playerId == *mLocalPlayerId || slot.state == PlayerState::EMPTY)
 					continue;
 				const bool connected = connectedSet.contains(slot.playerId);
-				if (slot.state == PlayerState::PLAYING && !connected)
+				if ((slot.state == PlayerState::PLAYING || slot.state == PlayerState::RECONNECTING) && !connected)
+				{
 					disconnected = mSession->MarkDisconnected(slot.playerId) || disconnected;
+					SetGardenRecoveryStatus(slot.playerId, GardenRecoveryStatus::FAILED);
+				}
 				else if ((slot.state == PlayerState::DISCONNECTED || slot.state == PlayerState::AI_TEMPORARY) && connected)
 				{
 					if (mSession->BeginReconnect(slot.playerId))
 					{
-						disconnected = mSession->CompleteReconnect(slot.playerId) || disconnected;
+						disconnected = true;
 						BeginSnapshotRecovery(slot.playerId, slot.playerId);
 					}
 				}
@@ -371,14 +374,21 @@ namespace Coop
 				const auto ownedGarden = std::find_if(mSession->GetGardens().begin(), mSession->GetGardens().end(),
 					[&packet](const GardenInstance& garden) { return garden.owner == packet.senderId; });
 				if (expected != mRecoveryTransferIds.end() && ownedGarden != mSession->GetGardens().end()
+					&& std::any_of(mSession->GetSlots().begin(), mSession->GetSlots().end(),
+						[&packet](const PlayerSlot& slot)
+							{ return slot.playerId == packet.senderId && slot.state == PlayerState::RECONNECTING; })
 					&& expected->second.transferId == confirmation->transferId
 					&& expected->second.gardenId == confirmation->gardenId
 					&& expected->second.serverTick == confirmation->serverTick
 					&& ownedGarden->id == confirmation->gardenId)
 				{
 					const auto response = SerializeGardenSnapshotRestoreMessage(*confirmation, true);
-					if (mTransport->SendTo(packet.senderId, response))
+					if (mTransport->SendTo(packet.senderId, response)
+						&& mSession->CompleteReconnect(packet.senderId))
+					{
 						SetGardenRecoveryStatus(packet.senderId, GardenRecoveryStatus::NONE);
+						BroadcastSessionSnapshot(*mTransport, *mSession);
+					}
 				}
 				return true;
 			}

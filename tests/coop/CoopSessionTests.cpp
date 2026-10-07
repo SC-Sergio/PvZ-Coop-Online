@@ -752,6 +752,10 @@ namespace
 		Require(restored.GetSlots()[1].state == Coop::PlayerState::RECONNECTING
 			&& restored.GetSlots()[1].gardenId == guestGarden && restored.GetGardenCount() == 2,
 			"snapshot retains reconnect state and garden ownership");
+		Require(restored.MarkDisconnected(62) && restored.GetSlots()[1].state == Coop::PlayerState::DISCONNECTED,
+			"a peer that drops during snapshot recovery returns to disconnected state");
+		Require(!restored.CompleteReconnect(62) && restored.BeginReconnect(62),
+			"a dropped restore cannot complete and can begin a fresh recovery attempt");
 		Require(restored.CompleteReconnect(62) && restored.GetSlots()[1].state == Coop::PlayerState::PLAYING,
 			"reconnected player regains control of the same slot");
 		Require(!restored.CompleteReconnect(62), "connected player cannot complete reconnect twice");

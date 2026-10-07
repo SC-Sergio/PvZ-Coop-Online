@@ -143,7 +143,8 @@ namespace Coop
 		if (!mStarted)
 			return false;
 		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
-			{ return candidate.playerId == playerId && candidate.state == PlayerState::PLAYING; });
+			{ return candidate.playerId == playerId
+				&& (candidate.state == PlayerState::PLAYING || candidate.state == PlayerState::RECONNECTING); });
 		if (slot == mSlots.end())
 			return false;
 		slot->state = PlayerState::DISCONNECTED;
