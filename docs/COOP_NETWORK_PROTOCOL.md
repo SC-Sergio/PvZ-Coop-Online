@@ -18,6 +18,8 @@ The garden manager routes command frames and receipts through a per-peer FIFO se
 
 The next envelope revision must add a message type, session epoch, and bounded payload length so command, lobby, snapshot, and heartbeat messages can share the transport. It must retain a separate schema version and explicit byte order. Reject unknown required versions/types, lengths above the configured maximum, invalid enum values, and trailing/short payloads.
 
+When the signaling service reports `room-closed`, the guest marks the room terminal, surfaces a host-closed message, and does not attempt another resume. `ROOM_NOT_FOUND` and `REJOIN_REJECTED` also stop retries because the server has stated that the prior session cannot be resumed. Transient host unavailability remains retryable. A terminal room state cannot advertise resume capability.
+
 ## Prepared garden snapshot fragments
 
 `CoopSnapshotProtocol.h` defines an explicit `PVZS` fragment frame, separate from the command/lobby envelope and routed by `CoopGardenManager`. All integer fields are little-endian. The 44-byte header is: bytes 0–3 magic; 4–5 protocol version (1); 6–7 header size (44); 8–15 transfer ID; 16–19 garden ID; 20–27 authoritative server tick; 28–31 total snapshot bytes; 32–33 chunk count; 34–35 chunk index; 36–39 whole-snapshot FNV-1a 32-bit checksum; 40–41 chunk payload bytes; 42–43 reserved zero. Chunk data follows at offset 44. Each chunk is at most `MAX_TRANSPORT_MESSAGE_BYTES - 44`; a transfer is capped at 12 MiB and uses fixed offsets/sizes, with a single bounded in-progress assembly per `GardenSnapshotAssembler`.
