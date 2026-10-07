@@ -1565,6 +1565,18 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 		theContext.mFailed = true;
 		return;
 	}
+	if (theContext.mReading && aDef)
+	{
+		for (int trackIndex = 0; trackIndex < aDef->mTracks.count; ++trackIndex)
+		{
+			const ReanimatorTransformArray& transforms = aDef->mTracks.tracks[trackIndex].mTransforms;
+			if (!IsValidPortableSaveTransformArray(transforms.count, transforms.mTransforms != nullptr))
+			{
+				theContext.mFailed = true;
+				return;
+			}
+		}
+	}
 
 	theContext.SyncEnum(theReanimation->mReanimationType);
 	theContext.SyncFloat(theReanimation->mAnimTime);
@@ -3288,6 +3300,9 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 			return false;
 		for (int aTrackIndex = 0; aTrackIndex < aReanimation->mDefinition->mTracks.count; ++aTrackIndex)
 		{
+			const ReanimatorTransformArray& transforms = aReanimation->mDefinition->mTracks.tracks[aTrackIndex].mTransforms;
+			if (!IsValidPortableSaveTransformArray(transforms.count, transforms.mTransforms != nullptr))
+				return false;
 			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aReanimation->mTrackInstances[aTrackIndex].mAttachmentID),
 				true, [&](uint32_t id) { return theBoard->mApp->mEffectSystem->mAttachmentHolder->mAttachments.DataArrayTryToGet(id) != nullptr; }))
 				return false;

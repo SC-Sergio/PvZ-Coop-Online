@@ -235,6 +235,12 @@ inline bool IsValidPortableSaveTrackDefinition(std::int32_t trackCount,
 	return trackCount >= 0 && (trackCount == 0 || hasTrackArray);
 }
 
+inline bool IsValidPortableSaveTransformArray(std::int32_t transformCount,
+	bool hasTransformArray) noexcept
+{
+	return transformCount >= 0 && (transformCount == 0 || hasTransformArray);
+}
+
 template <typename IsValidId>
 inline bool IsValidPortableSaveDataIdList(const std::vector<std::uint32_t>& ids,
 	std::uint32_t capacity, IsValidId isValidId)
