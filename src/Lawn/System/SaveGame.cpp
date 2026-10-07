@@ -2962,6 +2962,81 @@ static bool ValidateV4ZombieReferences(Board* theBoard)
 	return true;
 }
 
+static bool ValidateV4EntityReferences(Board* theBoard)
+{
+	auto aValidPlant = [&](uint32_t id) { return theBoard->mPlants.DataArrayTryToGet(id) != nullptr; };
+	auto aValidZombie = [&](uint32_t id) { return theBoard->mZombies.DataArrayTryToGet(id) != nullptr; };
+	auto aValidCoin = [&](uint32_t id) { return theBoard->mCoins.DataArrayTryToGet(id) != nullptr; };
+	auto aValidParticle = [&](uint32_t id) { return theBoard->mApp->ParticleTryToGet(static_cast<ParticleSystemID>(id)) != nullptr; };
+	auto aValidReanimation = [&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; };
+	Plant* aPlant = nullptr;
+	while (theBoard->mPlants.IterateNext(aPlant))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mParticleID), true, aValidParticle)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mBodyReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mHeadReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mHeadReanimID2), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mHeadReanimID3), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mBlinkReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mLightReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mSleepingReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aPlant->mTargetZombieID), true, aValidZombie))
+			return false;
+		for (ZombieID aRelatedID : aPlant->mRelatedZombieID)
+		{
+			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aRelatedID), true, aValidZombie))
+				return false;
+		}
+	}
+	Zombie* aZombie = nullptr;
+	while (theBoard->mZombies.IterateNext(aZombie))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mTargetPlantID), true, aValidPlant)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBodyReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mBossFireBallReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mSpecialHeadReanimID), true, aValidReanimation)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mMoweredReanimID), true, aValidReanimation))
+			return false;
+	}
+	Projectile* aProjectile = nullptr;
+	while (theBoard->mProjectiles.IterateNext(aProjectile))
+	{
+		const bool aValidTarget = aProjectile->mTargetID.mPlant
+			? IsValidPortableSaveReference(static_cast<uint32_t>(aProjectile->mTargetID.mID), true, aValidPlant)
+			: IsValidPortableSaveReference(static_cast<uint32_t>(aProjectile->mTargetID.mID), true, aValidZombie);
+		if (!aValidTarget
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aProjectile->mAttachmentID), true,
+				[&](uint32_t id) { return theBoard->mApp->mEffectSystem->mAttachmentHolder->mAttachments.DataArrayTryToGet(id) != nullptr; }))
+			return false;
+	}
+	Coin* aCoin = nullptr;
+	while (theBoard->mCoins.IterateNext(aCoin))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aCoin->mAttachmentID), true,
+			[&](uint32_t id) { return theBoard->mApp->mEffectSystem->mAttachmentHolder->mAttachments.DataArrayTryToGet(id) != nullptr; }))
+			return false;
+	}
+	GridItem* aGridItem = nullptr;
+	while (theBoard->mGridItems.IterateNext(aGridItem))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aGridItem->mGridItemParticleID), true, aValidParticle)
+			|| !IsValidPortableSaveReference(static_cast<uint32_t>(aGridItem->mGridItemReanimID), true, aValidReanimation))
+			return false;
+	}
+	CursorObject* aCursor = theBoard->mCursorObject;
+	if (!aCursor
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(aCursor->mType), SEED_NONE, NUM_SEED_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(aCursor->mImitaterType), SEED_NONE, NUM_SEED_TYPES)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(aCursor->mCursorType), CURSOR_TYPE_NORMAL, CURSOR_TYPE_TREE_FOOD + 1)
+		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mCoinID), true, aValidCoin)
+		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mGlovePlantID), true, aValidPlant)
+		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mDuplicatorPlantID), true, aValidPlant)
+		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mCobCannonPlantID), true, aValidPlant)
+		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mReanimCursorID), true, aValidReanimation))
+		return false;
+	return true;
+}
+
 static bool ValidateV4SeedBankIndices(Board* theBoard)
 {
 	if (!IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
@@ -3197,6 +3272,8 @@ static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	if (!ValidateV4RequiredReanimationReferences(theBoard))
 		return false;
 	if (!ValidateV4ZombieReferences(theBoard))
+		return false;
+	if (!ValidateV4EntityReferences(theBoard))
 		return false;
 	if (!ValidateV4SeedBankIndices(theBoard))
 		return false;

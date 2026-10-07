@@ -36,6 +36,8 @@ GridItems also validate both coordinates against the 9×6 board, and lawn mowers
 
 Each SAVE4 attachment is limited to `MAX_EFFECTS_PER_ATTACHMENT` active entries, and each active entry's effect type must be a known enum before the engine's attachment switch runs. Attachment target IDs use `DataArrayTryToGet` and remain subject to cleanup if their target has expired.
 
+After all SAVE4 chunks are applied, optional plant, zombie, projectile, coin, GridItem, and cursor entity/effect references must be null or resolve in the loaded Board/effect holders. Projectile target resolution follows its plant/zombie discriminator. This guards strict engine getters and keeps corrupt cross-entity IDs from surviving post-load repair.
+
 `HeartbeatMonitor` adds a transport-level liveness frame handled before gameplay-command decoding. It sends bounded PING/PONG sequence frames, accepts only matching recent PONGs as activity, rate-limits new remote PINGs, and times out peers after 8 seconds. `CoopGardenManager` closes timed-out links; existing roster reconciliation marks the slot disconnected and preserves the garden for rejoin. This detects silent links but does not authenticate, apply a grace-state AI, or restore Board state. The heartbeat monitor and session loop use a real monotonic clock; the monitor's unit tests use a controlled clock.
 
 ## Engine extraction plan
