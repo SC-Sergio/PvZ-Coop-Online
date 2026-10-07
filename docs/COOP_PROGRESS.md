@@ -29,7 +29,7 @@
 ### Checkpoint: nonblocking TCP lobby handshake
 
 - **Change:** the lobby's `AcceptNextPeer(0)` path now accepts sockets and incrementally reads a bounded eight-byte identity handshake. Partial or silent handshakes expire after one second without blocking the game update loop; completed peer IDs remain unique and capped at the three guest slots. The explicit timeout-based expected-peer API remains available for process tests.
-- **Verification:** added a Windows loopback test that connects with a two-byte partial hello, checks the zero-wait lobby poll returns under 250 ms, sends the remaining identity bytes, and confirms the peer is admitted. A second incomplete hello expires after one second without disturbing an active peer. Both MSVC Debug app configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC; signaling Node tests passed 8/8; `git diff --check` passed.
+- **Verification:** added a cross-platform loopback test that connects with a two-byte partial hello, checks the zero-wait lobby poll returns under 250 ms, sends the remaining identity bytes, and confirms the peer is admitted. A second incomplete hello expires after one second without disturbing an active peer. Both MSVC Debug app configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC; signaling Node tests passed 8/8; `git diff --check` passed.
 - **Limit:** this is same-machine handshake evidence. It does not verify a distinct-machine LAN, Internet deployment, or a playable Board. The engine executable exited successfully without staying open; there is no legal game data in the checked locations.
 - **Next:** continue network fault handling and attempt distinct-machine or public relay validation when deployment resources are available.
 

@@ -30,6 +30,11 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 namespace
@@ -1805,13 +1810,30 @@ namespace
 		host->Close();
 	}
 
-#if defined(_WIN32)
+	#if defined(_WIN32)
+	using RawTestSocket = SOCKET;
+	constexpr RawTestSocket INVALID_RAW_TEST_SOCKET = INVALID_SOCKET;
+	int SendTestBytes(RawTestSocket socket, const std::uint8_t* bytes, std::size_t size)
+	{
+		return send(socket, reinterpret_cast<const char*>(bytes), static_cast<int>(size), 0);
+	}
+	void CloseTestSocket(RawTestSocket socket) { closesocket(socket); }
+	#else
+	using RawTestSocket = int;
+	constexpr RawTestSocket INVALID_RAW_TEST_SOCKET = -1;
+	int SendTestBytes(RawTestSocket socket, const std::uint8_t* bytes, std::size_t size)
+	{
+		return static_cast<int>(send(socket, bytes, size, 0));
+	}
+	void CloseTestSocket(RawTestSocket socket) { close(socket); }
+	#endif
+
 	void TestTcpPartialHandshakeDoesNotBlockLobbyPoll()
 	{
 		auto host = Coop::TcpNetworkTransport::Listen(711, 0);
 		Require(host && host->GetBoundPort() != 0, "partial-handshake host binds an ephemeral port");
-		const SOCKET socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		Require(socket != INVALID_SOCKET, "partial-handshake client socket is created");
+		const RawTestSocket socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		Require(socket != INVALID_RAW_TEST_SOCKET, "partial-handshake client socket is created");
 		sockaddr_in address{};
 		address.sin_family = AF_INET;
 		address.sin_port = htons(host->GetBoundPort());
@@ -1820,8 +1842,7 @@ namespace
 			&& connect(socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
 			"partial-handshake client connects to the lobby listener");
 		const std::array<std::uint8_t, 2> partialHello{'P', 'V'};
-		Require(send(socket, reinterpret_cast<const char*>(partialHello.data()),
-			static_cast<int>(partialHello.size()), 0) == static_cast<int>(partialHello.size()),
+		Require(SendTestBytes(socket, partialHello.data(), partialHello.size()) == static_cast<int>(partialHello.size()),
 			"partial-handshake client sends only the beginning of its hello");
 
 		const auto started = std::chrono::steady_clock::now();
@@ -1831,8 +1852,7 @@ namespace
 			"zero-wait lobby polling does not block on a partial TCP handshake");
 
 		const std::array<std::uint8_t, 6> remainingHello{ 'Z', 'H', 0xC8, 0x02, 0x00, 0x00 };
-		Require(send(socket, reinterpret_cast<const char*>(remainingHello.data()),
-			static_cast<int>(remainingHello.size()), 0) == static_cast<int>(remainingHello.size()),
+		Require(SendTestBytes(socket, remainingHello.data(), remainingHello.size()) == static_cast<int>(remainingHello.size()),
 			"partial-handshake client completes its hello and player ID");
 		std::optional<Coop::TransportPlayerId> accepted;
 		for (int attempt = 0; attempt < 1000 && !accepted; ++attempt)
@@ -1843,24 +1863,22 @@ namespace
 		}
 		Require(accepted == 712 && host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
 			"lobby admits the peer after its fragmented identity handshake completes");
-		closesocket(socket);
+		CloseTestSocket(socket);
 
-		const SOCKET silentSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		Require(silentSocket != INVALID_SOCKET
+		const RawTestSocket silentSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		Require(silentSocket != INVALID_RAW_TEST_SOCKET
 			&& connect(silentSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
 			"silent-handshake client connects to the lobby listener");
-		Require(send(silentSocket, reinterpret_cast<const char*>(partialHello.data()),
-			static_cast<int>(partialHello.size()), 0) == static_cast<int>(partialHello.size()),
+		Require(SendTestBytes(silentSocket, partialHello.data(), partialHello.size()) == static_cast<int>(partialHello.size()),
 			"silent-handshake client sends a bounded partial hello");
 		Require(!host->AcceptNextPeer(0), "incomplete reconnecting handshake stays unadmitted");
 		std::this_thread::sleep_for(std::chrono::milliseconds(1100));
 		Require(!host->AcceptNextPeer(0)
 			&& host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
 			"expired partial handshake is closed without disturbing an active peer");
-		closesocket(silentSocket);
+		CloseTestSocket(silentSocket);
 		host->Close();
 	}
-#endif
 
 	void TestSessionSnapshotSerialization()
 	{
@@ -2051,9 +2069,7 @@ int main(int argc, char** argv)
 	TestAuthorityResponseRoundTrip();
 	TestLocalTransportHarness();
 	TestTcpTransportLoopback();
-#if defined(_WIN32)
 	TestTcpPartialHandshakeDoesNotBlockLobbyPoll();
-#endif
 	TestSessionSnapshotSerialization();
 	std::cout << "CoopSession tests passed\n";
 	return EXIT_SUCCESS;
