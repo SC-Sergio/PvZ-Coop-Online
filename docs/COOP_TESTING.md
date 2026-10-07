@@ -114,3 +114,5 @@ Isolated Boards now reject both legacy typing codes and debug character cheats b
 The `mTodCheatKeys` click shortcut is now disabled on isolated Boards. Both app builds and CTest suites pass; the shortcut guard has no live Board input test.
 
 Classic map loadouts are centralized in `CoopLoadout.h`; tests cover all five exact six-seed decks and reject unknown map IDs. The match bootstrap derives the same deck from the replicated host map setting for every garden. Static path review confirms that packet cooldown updates run through `UpdateGameObjects` inside each isolated Board simulation, including hidden gardens; cooldown timing and visual cursor behavior still need a live asset-backed check.
+
+Co-op coin input tests validate `COLLECT_COIN` ownership/entity framing and verify the command frame round-trip at command protocol v2. Source review covers sun, silver/gold, and click-required reward coins through the authority path; the 30-tick request throttle prevents duplicate cursor-hover intents while the scheduled command is pending. Exact Coin/Board application still requires a legal asset-backed run.
