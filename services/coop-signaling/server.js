@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 
@@ -8,10 +8,11 @@ const MAX_ROOMS = 10_000;
 const MAX_PAYLOAD_BYTES = 32 * 1024;
 const ROOM_CODE_PATTERN = /^[0-9A-F]{16}$/;
 const PLAYER_ID_PATTERN = /^[1-9][0-9]{0,9}$/;
+const RESUME_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const SIGNAL_KINDS = new Set(["offer", "answer", "candidate"]);
 
 function send(socket, message) {
-  if (socket.readyState === WebSocket.OPEN)
+  if (socket && socket.readyState === WebSocket.OPEN)
     socket.send(JSON.stringify(message));
 }
 
@@ -75,7 +76,7 @@ export function createSignalingServer({
   }, 30_000);
   heartbeat.unref();
 
-  function removeClient(socket) {
+  function removeClient(socket, permanent = false) {
     const session = sessions.get(socket);
     if (!session)
       return;
@@ -83,27 +84,39 @@ export function createSignalingServer({
     const room = rooms.get(session.roomCode);
     if (!room)
       return;
-    room.players.delete(session.playerId);
+    const player = room.players.get(session.playerId);
     if (room.hostId === session.playerId) {
       for (const peer of room.players.values())
         send(peer.socket, { type: "room-closed" });
       rooms.delete(session.roomCode);
       return;
     }
+    if (!player)
+      return;
+    if (permanent)
+      room.players.delete(session.playerId);
+    else {
+      player.socket = null;
+      player.disconnectedAt = Date.now();
+    }
     const host = room.players.get(room.hostId);
     if (host)
       send(host.socket, { type: "peer-left", playerId: session.playerId });
-    if (room.players.size === 0)
-      rooms.delete(session.roomCode);
   }
 
   function assign(socket, roomCode, playerId, role) {
     const room = rooms.get(roomCode);
     if (!room || room.players.has(playerId))
       return false;
-    room.players.set(playerId, { socket, role });
+    const resumeToken = randomBytes(32).toString("base64url");
+    room.players.set(playerId, {
+      socket,
+      role,
+      resumeTokenHash: createHash("sha256").update(resumeToken).digest(),
+      disconnectedAt: null,
+    });
     sessions.set(socket, { roomCode, playerId });
-    return true;
+    return resumeToken;
   }
 
   webSocketServer.on("connection", (socket) => {
@@ -152,8 +165,8 @@ export function createSignalingServer({
           roomCode = randomBytes(8).toString("hex").toUpperCase();
         } while (rooms.has(roomCode));
         rooms.set(roomCode, { hostId: message.playerId, players: new Map() });
-        assign(socket, roomCode, message.playerId, "host");
-        send(socket, { type: "created", roomCode, hostId: message.playerId, iceServers: issueIceServers(message.playerId) });
+        const resumeToken = assign(socket, roomCode, message.playerId, "host");
+        send(socket, { type: "created", roomCode, hostId: message.playerId, resumeToken, iceServers: issueIceServers(message.playerId) });
         return;
       }
 
@@ -168,19 +181,46 @@ export function createSignalingServer({
           send(socket, { type: "error", code: "ROOM_NOT_FOUND" });
           return;
         }
-        if (room.players.size >= MAX_PLAYERS) {
-          send(socket, { type: "error", code: "ROOM_FULL" });
-          return;
-        }
         if (room.players.has(message.playerId)) {
           send(socket, { type: "error", code: "DUPLICATE_PLAYER" });
           return;
         }
-        assign(socket, message.roomCode, message.playerId, "guest");
+        if (room.players.size >= MAX_PLAYERS) {
+          send(socket, { type: "error", code: "ROOM_FULL" });
+          return;
+        }
+        const resumeToken = assign(socket, message.roomCode, message.playerId, "guest");
         const host = room.players.get(room.hostId);
-        send(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId], iceServers: issueIceServers(message.playerId) });
-        if (host)
+        send(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId], resumeToken, iceServers: issueIceServers(message.playerId) });
+        if (host?.socket)
           send(host.socket, { type: "peer-joined", playerId: message.playerId });
+        return;
+      }
+
+      if (message.type === "rejoin") {
+        if (sessions.has(socket) || !validPlayerId(message.playerId)
+          || typeof message.roomCode !== "string" || !ROOM_CODE_PATTERN.test(message.roomCode)
+          || typeof message.resumeToken !== "string" || !RESUME_TOKEN_PATTERN.test(message.resumeToken)) {
+          send(socket, { type: "error", code: "INVALID_REJOIN" });
+          return;
+        }
+        const room = rooms.get(message.roomCode);
+        const player = room?.players.get(message.playerId);
+        if (!player || player.role !== "guest" || player.socket
+          || !timingSafeEqual(player.resumeTokenHash, createHash("sha256").update(message.resumeToken).digest())) {
+          send(socket, { type: "error", code: "REJOIN_REJECTED" });
+          return;
+        }
+        const host = room.players.get(room.hostId);
+        if (!host?.socket) {
+          send(socket, { type: "error", code: "HOST_UNAVAILABLE" });
+          return;
+        }
+        player.socket = socket;
+        player.disconnectedAt = null;
+        sessions.set(socket, { roomCode: message.roomCode, playerId: message.playerId });
+        send(socket, { type: "rejoined", hostId: room.hostId, peers: [room.hostId], iceServers: issueIceServers(message.playerId) });
+        send(host.socket, { type: "peer-joined", playerId: message.playerId });
         return;
       }
 
@@ -194,7 +234,7 @@ export function createSignalingServer({
         }
         const room = rooms.get(session.roomCode);
         const target = room?.players.get(message.to);
-        if (!target || message.to === session.playerId
+        if (!target?.socket || message.to === session.playerId
           || (session.playerId !== room.hostId && message.to !== room.hostId)) {
           send(socket, { type: "error", code: "INVALID_PEER" });
           return;
@@ -209,7 +249,7 @@ export function createSignalingServer({
       }
 
       if (message.type === "leave") {
-        removeClient(socket);
+        removeClient(socket, true);
         send(socket, { type: "left" });
         return;
       }

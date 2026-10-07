@@ -97,10 +97,12 @@ test("creates private rooms and routes bounded signaling only through the host",
   const created = await waitForType(host, "created");
   assert.match(created.roomCode, /^[0-9A-F]{16}$/);
   assert.equal(created.hostId, "1");
+  assert.match(created.resumeToken, /^[A-Za-z0-9_-]{43}$/);
 
   send(guest, { type: "join", playerId: "2", roomCode: created.roomCode });
   const joined = await waitForType(guest, "joined");
   assert.deepEqual(joined.peers, ["1"]);
+  assert.match(joined.resumeToken, /^[A-Za-z0-9_-]{43}$/);
   assert.deepEqual(await waitForType(host, "peer-joined"), { type: "peer-joined", playerId: "2" });
 
   send(guestTwo, { type: "join", playerId: "3", roomCode: created.roomCode });
@@ -128,6 +130,39 @@ test("creates private rooms and routes bounded signaling only through the host",
   await waitForType(host, "left");
   for (const socket of [guest, guestTwo, guestThree])
     assert.deepEqual(await waitForType(socket, "room-closed"), { type: "room-closed" });
+});
+
+test("reserves a disconnected player slot and permits only token-authenticated rejoin", async (t) => {
+  const host = await connect();
+  const guest = await connect();
+  const attacker = await connect();
+  const rejoinedSocket = await connect();
+  t.after(() => {
+    for (const socket of [host, guest, attacker, rejoinedSocket])
+      socket.terminate();
+  });
+
+  send(host, { type: "create", playerId: "301" });
+  const created = await waitForType(host, "created");
+  send(guest, { type: "join", playerId: "302", roomCode: created.roomCode });
+  const joined = await waitForType(guest, "joined");
+  await waitForType(host, "peer-joined");
+
+  const guestClosed = new Promise((resolve) => guest.once("close", resolve));
+  guest.close();
+  await guestClosed;
+  assert.deepEqual(await waitForType(host, "peer-left"), { type: "peer-left", playerId: "302" });
+
+  send(attacker, { type: "rejoin", playerId: "302", roomCode: created.roomCode, resumeToken: "A".repeat(43) });
+  assert.deepEqual(await waitForType(attacker, "error"), { type: "error", code: "REJOIN_REJECTED" });
+  send(rejoinedSocket, { type: "rejoin", playerId: "302", roomCode: created.roomCode, resumeToken: joined.resumeToken });
+  const resumed = await waitForType(rejoinedSocket, "rejoined");
+  assert.equal(resumed.hostId, "301");
+  assert.deepEqual(resumed.peers, ["301"]);
+  assert.deepEqual(await waitForType(host, "peer-joined"), { type: "peer-joined", playerId: "302" });
+
+  send(attacker, { type: "rejoin", playerId: "302", roomCode: created.roomCode, resumeToken: joined.resumeToken });
+  assert.deepEqual(await waitForType(attacker, "error"), { type: "error", code: "REJOIN_REJECTED" });
 });
 
 test("rejects invalid room IDs, peer IDs, and signal payloads", async (t) => {

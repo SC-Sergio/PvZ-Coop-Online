@@ -39,7 +39,7 @@ npm ci
 npm test
 ```
 
-Those tests cover local room allocation, four-player admission, host-only star-topology signaling, malformed identities, host-close notification, health, and temporary per-player Coturn credentials. They do not test NAT traversal, a public deployment, or a complete game connection.
+Those tests cover local room allocation, four-player admission, host-only star-topology signaling, malformed identities, host-close notification, guest-slot reservation and token-authenticated rejoin, health, and temporary per-player Coturn credentials. They do not test NAT traversal, a public deployment, app-level reconnect, or a complete game connection.
 
 When the manifest feature and CMake option are enabled, CTest also builds `coop-webrtc-transport-tests`. It creates two local libdatachannel peers, negotiates an ICE DataChannel, and verifies transport peer identity and binary packet bytes. This validates the adapter on one machine, not Internet reachability.
 
