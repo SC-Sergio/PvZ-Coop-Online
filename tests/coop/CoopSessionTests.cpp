@@ -100,6 +100,15 @@ namespace
 			&& IsValidPortableSaveReference(7, false, [](std::uint32_t id) { return id == 7; })
 			&& !IsValidPortableSaveReference(8, false, [](std::uint32_t id) { return id == 7; }),
 			"portable save references enforce nullability and resolver membership");
+		const std::array<std::uint32_t, 3> aReferenceRange{0, 7, 7};
+		const std::array<std::uint32_t, 2> aInvalidReferenceRange{7, 8};
+		Require(IsValidPortableSaveReferenceRange(aReferenceRange, true,
+			[](std::uint32_t id) { return id == 7; })
+			&& !IsValidPortableSaveReferenceRange(aReferenceRange, false,
+				[](std::uint32_t id) { return id == 7; })
+			&& !IsValidPortableSaveReferenceRange(aInvalidReferenceRange, true,
+				[](std::uint32_t id) { return id == 7; }),
+			"portable save reference arrays validate every nullable and required ID");
 		Require(IsValidPortableSaveOptionalIndex(-1, 3)
 			&& IsValidPortableSaveOptionalIndex(0, 3)
 			&& IsValidPortableSaveOptionalIndex(2, 3)

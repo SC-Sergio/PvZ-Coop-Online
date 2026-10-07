@@ -3010,6 +3010,13 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 	auto aValidCoin = [&](uint32_t id) { return theBoard->mCoins.DataArrayTryToGet(id) != nullptr; };
 	auto aValidParticle = [&](uint32_t id) { return theBoard->mApp->ParticleTryToGet(static_cast<ParticleSystemID>(id)) != nullptr; };
 	auto aValidReanimation = [&](uint32_t id) { return theBoard->mApp->ReanimationTryToGet(static_cast<ReanimationID>(id)) != nullptr; };
+	if (!IsValidPortableSaveReferenceRange(theBoard->mIceParticleID, true, aValidParticle))
+		return false;
+	for (int aRow = 0; aRow < MAX_GRID_SIZE_Y; ++aRow)
+	{
+		if (!IsValidPortableSaveReferenceRange(theBoard->mFwooshID[aRow], true, aValidReanimation))
+			return false;
+	}
 	Plant* aPlant = nullptr;
 	while (theBoard->mPlants.IterateNext(aPlant))
 	{

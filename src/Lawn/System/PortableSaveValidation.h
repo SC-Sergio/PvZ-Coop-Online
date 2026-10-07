@@ -36,6 +36,18 @@ inline bool IsValidPortableSaveReference(std::uint32_t id, bool allowNull,
 	return id == 0 ? allowNull : isValidId(id);
 }
 
+template <typename IdRange, typename IsValidId>
+inline bool IsValidPortableSaveReferenceRange(const IdRange& ids, bool allowNull,
+	IsValidId isValidId)
+{
+	for (const auto id : ids)
+	{
+		if (!IsValidPortableSaveReference(static_cast<std::uint32_t>(id), allowNull, isValidId))
+			return false;
+	}
+	return true;
+}
+
 inline bool IsValidPortableSaveOptionalIndex(std::int32_t index,
 	std::uint32_t count) noexcept
 {
