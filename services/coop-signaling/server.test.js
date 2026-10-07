@@ -126,10 +126,14 @@ test("creates private rooms and routes bounded signaling only through the host",
   send(host, { type: "signal", to: "99", kind: "candidate", payload: "candidate:1" });
   assert.deepEqual(await waitForType(host, "error"), { type: "error", code: "INVALID_PEER" });
 
+  const peerClosed = [guest, guestTwo, guestThree].map((socket) =>
+    new Promise((resolve) => socket.once("close", (code) => resolve(code))));
   send(host, { type: "leave" });
   await waitForType(host, "left");
   for (const socket of [guest, guestTwo, guestThree])
     assert.deepEqual(await waitForType(socket, "room-closed"), { type: "room-closed" });
+  assert.deepEqual(await Promise.all(peerClosed), [1000, 1000, 1000],
+    "host leave closes peer sockets so abandoned clients do not consume server capacity");
 });
 
 test("reserves a disconnected player slot and permits only token-authenticated rejoin", async (t) => {

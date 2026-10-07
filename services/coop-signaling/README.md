@@ -2,7 +2,7 @@
 
 This small Node service brokers WebRTC offer, answer, and ICE-candidate messages. Gameplay remains host-authoritative and does not run on this service. Room membership is capped at four player IDs. A 16-character random hexadecimal room code is a bearer invite; keep it private.
 
-The service does not relay gameplay packets. WebRTC DataChannels carry those packets directly when ICE succeeds and through the configured TURN server when direct paths fail. It does not authenticate player accounts or persist rooms. Room state is in memory and disappears when the service restarts. A disconnected guest's player ID and room slot remain reserved until the room closes; the guest can reclaim it only with its random resume token. The service stores only a hash of that token.
+The service does not relay gameplay packets. WebRTC DataChannels carry those packets directly when ICE succeeds and through the configured TURN server when direct paths fail. It does not authenticate player accounts or persist rooms. Room state is in memory and disappears when the service restarts. A disconnected guest's player ID and room slot remain reserved until the room closes; the guest can reclaim it only with its random resume token. The service stores only a hash of that token. When the host leaves, it closes the room and actively closes each connected guest socket so abandoned clients do not retain connection capacity.
 
 ## Run locally
 

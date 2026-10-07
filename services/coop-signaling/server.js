@@ -90,8 +90,13 @@ export function createSignalingServer({
       return;
     const player = room.players.get(session.playerId);
     if (room.hostId === session.playerId) {
-      for (const peer of room.players.values())
+      for (const peer of room.players.values()) {
+        if (!peer.socket || peer.socket === socket)
+          continue;
+        sessions.delete(peer.socket);
         send(peer.socket, { type: "room-closed" });
+        peer.socket.close(1000, "room closed");
+      }
       rooms.delete(session.roomCode);
       return;
     }
