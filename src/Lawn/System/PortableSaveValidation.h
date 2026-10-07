@@ -67,6 +67,23 @@ inline bool IsValidPortableSaveEnumValue(std::int32_t value,
 	return value >= firstValue && value < endValue;
 }
 
+template <typename IsValidId>
+inline bool IsValidPortableSaveDataIdList(const std::vector<std::uint32_t>& ids,
+	std::uint32_t capacity, IsValidId isValidId)
+{
+	if (ids.size() > capacity)
+		return false;
+	for (std::size_t index = 0; index < ids.size(); ++index)
+	{
+		if (!isValidId(ids[index]))
+			return false;
+		for (std::size_t previous = 0; previous < index; ++previous)
+			if (ids[previous] == ids[index])
+				return false;
+	}
+	return true;
+}
+
 template <typename GetEntryId>
 inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)

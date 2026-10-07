@@ -435,7 +435,9 @@ static void SyncParticleDefPortable(PortableSaveContext& theContext, TodParticle
 		{
 			theDefinition = nullptr;
 		}
-		else if (aParticleType >= 0 && aParticleType < static_cast<int>(ParticleEffect::NUM_PARTICLES))
+		else if (gParticleDefArray && aParticleType >= 0
+			&& aParticleType < static_cast<int>(ParticleEffect::NUM_PARTICLES)
+			&& aParticleType < gParticleDefCount)
 		{
 			theDefinition = &gParticleDefArray[aParticleType];
 		}
@@ -535,50 +537,73 @@ static void SyncImagePortable(PortableSaveContext& theContext, Image*& theImage)
 	}
 }
 
-static void SyncDataIDListPortable(TodList<uint32_t>* theDataIDList, PortableSaveContext& theContext, TodAllocator* theAllocator)
+template <typename IsValidId>
+static void SyncDataIDListPortable(TodList<uint32_t>* theDataIDList,
+	PortableSaveContext& theContext, TodAllocator* theAllocator,
+	uint32_t theCapacity, IsValidId theIsValidId)
 {
 	try
 	{
 		if (theContext.mReading)
 		{
-			if (theDataIDList)
-			{
-				theDataIDList->mHead = nullptr;
-				theDataIDList->mTail = nullptr;
-				theDataIDList->mSize = 0;
-				theDataIDList->SetAllocator(theAllocator);
-			}
-
 			int aCount = 0;
 			theContext.SyncInt32(aCount);
 			if (theContext.mFailed || !theDataIDList
-				|| !IsValidPortableSaveCount(aCount, MAX_PORTABLE_SAVE_ARRAY_CAPACITY)
+				|| !IsValidPortableSaveCount(aCount, theCapacity)
 				|| static_cast<uint32_t>(aCount) > theContext.GetRemainingBytes() / sizeof(uint32_t))
 			{
 				theContext.mFailed = true;
 				return;
 			}
+			std::vector<uint32_t> aIds;
+			aIds.reserve(static_cast<size_t>(aCount));
 			for (int i = 0; i < aCount; i++)
 			{
 				uint32_t aDataID = 0;
 				theContext.SyncUInt32(aDataID);
-				theDataIDList->AddTail(aDataID);
+				if (theContext.mFailed)
+					return;
+				aIds.push_back(aDataID);
 			}
+			if (!IsValidPortableSaveDataIdList(aIds, theCapacity, theIsValidId))
+			{
+				theContext.mFailed = true;
+				return;
+			}
+			theDataIDList->RemoveAll();
+			theDataIDList->SetAllocator(theAllocator);
+			for (uint32_t aDataID : aIds)
+				theDataIDList->AddTail(aDataID);
 		}
 		else
 		{
+			if (!theDataIDList)
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			int aCount = theDataIDList->mSize;
+			if (!IsValidPortableSaveCount(aCount, theCapacity))
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			theContext.SyncInt32(aCount);
 			for (TodListNode<uint32_t>* aNode = theDataIDList->mHead; aNode != nullptr; aNode = aNode->mNext)
 			{
 				uint32_t aDataID = aNode->mValue;
+				if (!theIsValidId(aDataID))
+				{
+					theContext.mFailed = true;
+					return;
+				}
 				theContext.SyncUInt32(aDataID);
 			}
 		}
 	}
-	catch (std::exception&)
+	catch (const std::exception&)
 	{
-		return;
+		theContext.mFailed = true;
 	}
 }
 
@@ -1382,6 +1407,12 @@ static void SyncParticlePortable(TodParticle* theParticle, PortableSaveContext& 
 	theContext.SyncFloat(theParticle->mSpinPosition);
 	theContext.SyncFloat(theParticle->mSpinVelocity);
 	theContext.SyncInt32(reinterpret_cast<int32_t&>(theParticle->mCrossFadeParticleID));
+	if (theContext.mReading && theParticle->mCrossFadeParticleID != ParticleID::PARTICLEID_NULL
+		&& (!theParticle->mParticleEmitter || !theParticle->mParticleEmitter->mParticleSystem
+			|| !theParticle->mParticleEmitter->mParticleSystem->mParticleHolder
+			|| !theParticle->mParticleEmitter->mParticleSystem->mParticleHolder->mParticles.DataArrayTryToGet(
+				static_cast<uint32_t>(theParticle->mCrossFadeParticleID))))
+		theContext.mFailed = true;
 	theContext.SyncInt32(theParticle->mCrossFadeDuration);
 	for (int i = 0; i < ParticleTracks::NUM_PARTICLE_TRACKS; i++)
 		theContext.SyncFloat(theParticle->mParticleInterp[i]);
@@ -1398,17 +1429,52 @@ static void SyncParticleEmitterPortable(TodParticleSystem* theParticleSystem, To
 	if (theContext.mReading)
 	{
 		theContext.SyncInt32(aEmitterDefIndex);
+		if (theContext.mFailed || !theParticleSystem->mParticleDef
+			|| !theParticleSystem->mParticleDef->mEmitterDefs
+			|| theParticleSystem->mParticleDef->mEmitterDefCount <= 0
+			|| !IsValidPortableSaveCount(aEmitterDefIndex,
+				static_cast<uint32_t>(theParticleSystem->mParticleDef->mEmitterDefCount - 1)))
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		theParticleEmitter->mParticleSystem = theParticleSystem;
 		theParticleEmitter->mEmitterDef = &theParticleSystem->mParticleDef->mEmitterDefs[aEmitterDefIndex];
 	}
 	else
 	{
-		aEmitterDefIndex = (reinterpret_cast<intptr_t>(theParticleEmitter->mEmitterDef) -
-			reinterpret_cast<intptr_t>(theParticleSystem->mParticleDef->mEmitterDefs)) / sizeof(TodEmitterDefinition);
+		if (!theParticleSystem->mParticleDef || !theParticleSystem->mParticleDef->mEmitterDefs
+			|| !theParticleEmitter->mEmitterDef)
+		{
+			theContext.mFailed = true;
+			return;
+		}
+		aEmitterDefIndex = -1;
+		for (int32_t i = 0; i < theParticleSystem->mParticleDef->mEmitterDefCount; i++)
+		{
+			if (&theParticleSystem->mParticleDef->mEmitterDefs[i] == theParticleEmitter->mEmitterDef)
+			{
+				aEmitterDefIndex = i;
+				break;
+			}
+		}
+		if (aEmitterDefIndex < 0)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		theContext.SyncInt32(aEmitterDefIndex);
 	}
 
-	SyncDataIDListPortable((TodList<uint32_t>*)&theParticleEmitter->mParticleList, theContext, &theParticleSystem->mParticleHolder->mParticleListNodeAllocator);
+	SyncDataIDListPortable((TodList<uint32_t>*)&theParticleEmitter->mParticleList, theContext,
+		&theParticleSystem->mParticleHolder->mParticleListNodeAllocator,
+		theParticleSystem->mParticleHolder->mParticles.mMaxSize,
+		[theParticleSystem](uint32_t theId)
+		{
+			return theParticleSystem->mParticleHolder->mParticles.DataArrayTryToGet(theId) != nullptr;
+		});
+	if (theContext.mFailed)
+		return;
 	SyncVector2Portable(theContext, theParticleEmitter->mSystemCenter);
 	SyncColorPortable(theContext, theParticleEmitter->mColorOverride);
 	SyncImagePortable(theContext, theParticleEmitter->mImageOverride);
@@ -1422,6 +1488,10 @@ static void SyncParticleEmitterPortable(TodParticleSystem* theParticleSystem, To
 	theContext.SyncBool(theParticleEmitter->mExtraAdditiveDrawOverride);
 	theContext.SyncFloat(theParticleEmitter->mScaleOverride);
 	theContext.SyncInt32(reinterpret_cast<int32_t&>(theParticleEmitter->mCrossFadeEmitterID));
+	if (theContext.mReading && theParticleEmitter->mCrossFadeEmitterID != ParticleEmitterID::PARTICLEEMITTERID_NULL
+		&& !theParticleSystem->mParticleHolder->mEmitters.DataArrayTryToGet(
+			static_cast<uint32_t>(theParticleEmitter->mCrossFadeEmitterID)))
+		theContext.mFailed = true;
 	theContext.SyncInt32(theParticleEmitter->mEmitterCrossFadeCountDown);
 	theContext.SyncInt32(theParticleEmitter->mFrameOverride);
 	for (int i = 0; i < ParticleSystemTracks::NUM_SYSTEM_TRACKS; i++)
@@ -1434,7 +1504,12 @@ static void SyncParticleEmitterPortable(TodParticleSystem* theParticleSystem, To
 
 	for (TodListNode<ParticleID>* aNode = theParticleEmitter->mParticleList.mHead; aNode != nullptr; aNode = aNode->mNext)
 	{
-		TodParticle* aParticle = theParticleSystem->mParticleHolder->mParticles.DataArrayGet(static_cast<uint32_t>(aNode->mValue));
+		TodParticle* aParticle = theParticleSystem->mParticleHolder->mParticles.DataArrayTryToGet(static_cast<uint32_t>(aNode->mValue));
+		if (!aParticle)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		if (theContext.mReading)
 		{
 			aParticle->mParticleEmitter = theParticleEmitter;
@@ -1448,13 +1523,36 @@ static void SyncParticleSystemPortable(Board* theBoard, TodParticleSystem* thePa
 	SyncParticleDefPortable(theContext, theParticleSystem->mParticleDef);
 	if (theContext.mReading)
 	{
+		if (theContext.mFailed || !theParticleSystem->mParticleDef)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		theParticleSystem->mParticleHolder = theBoard->mApp->mEffectSystem->mParticleHolder.get();
 	}
+	if (theContext.mFailed || !theParticleSystem->mParticleDef || !theParticleSystem->mParticleHolder)
+	{
+		theContext.mFailed = true;
+		return;
+	}
 
-	SyncDataIDListPortable((TodList<uint32_t>*)&theParticleSystem->mEmitterList, theContext, &theParticleSystem->mParticleHolder->mEmitterListNodeAllocator);
+	SyncDataIDListPortable((TodList<uint32_t>*)&theParticleSystem->mEmitterList, theContext,
+		&theParticleSystem->mParticleHolder->mEmitterListNodeAllocator,
+		theParticleSystem->mParticleHolder->mEmitters.mMaxSize,
+		[theParticleSystem](uint32_t theId)
+		{
+			return theParticleSystem->mParticleHolder->mEmitters.DataArrayTryToGet(theId) != nullptr;
+		});
+	if (theContext.mFailed)
+		return;
 	for (TodListNode<ParticleEmitterID>* aNode = theParticleSystem->mEmitterList.mHead; aNode != nullptr; aNode = aNode->mNext)
 	{
-		TodParticleEmitter* aEmitter = theParticleSystem->mParticleHolder->mEmitters.DataArrayGet(static_cast<uint32_t>(aNode->mValue));
+		TodParticleEmitter* aEmitter = theParticleSystem->mParticleHolder->mEmitters.DataArrayTryToGet(static_cast<uint32_t>(aNode->mValue));
+		if (!aEmitter)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		SyncParticleEmitterPortable(theParticleSystem, aEmitter, theContext);
 	}
 

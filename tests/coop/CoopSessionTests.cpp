@@ -65,6 +65,19 @@ namespace
 			&& !IsValidPortableSaveEnumValue(-1, 0, 4)
 			&& !IsValidPortableSaveEnumValue(4, 0, 4),
 			"portable save enum values stay within their declared range");
+		const std::vector<std::uint32_t> particleIds{0x00010000U, 0x00010002U};
+		Require(IsValidPortableSaveDataIdList(particleIds, 2,
+			[](std::uint32_t id) { return id == 0x00010000U || id == 0x00010002U; }),
+			"portable save linked IDs are accepted when they resolve within capacity");
+		Require(!IsValidPortableSaveDataIdList(particleIds, 1,
+			[](std::uint32_t) { return true; })
+			&& !IsValidPortableSaveDataIdList(particleIds, 2,
+				[](std::uint32_t id) { return id == 0x00010000U; }),
+			"portable save linked IDs reject oversized lists and unresolved targets");
+		const std::vector<std::uint32_t> duplicateParticleIds{0x00010000U, 0x00010000U};
+		Require(!IsValidPortableSaveDataIdList(duplicateParticleIds, 2,
+			[](std::uint32_t) { return true; }),
+			"portable save linked ID lists reject duplicate entries");
 		Require(IsValidPortableSavePayloadSize(0)
 			&& IsValidPortableSavePayloadSize(MAX_PORTABLE_SAVE_PAYLOAD_BYTES)
 			&& !IsValidPortableSavePayloadSize(static_cast<std::size_t>(MAX_PORTABLE_SAVE_PAYLOAD_BYTES) + 1),
