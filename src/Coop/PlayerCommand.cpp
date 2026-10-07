@@ -34,12 +34,8 @@ namespace Coop
 		if (garden->owner != command.senderId)
 			return CommandRejection::NOT_GARDEN_OWNER;
 
-		const auto previous = mLastSequenceByPlayer.find(command.senderId);
-		if (previous != mLastSequenceByPlayer.end() && command.sequence <= previous->second)
-			return CommandRejection::INVALID_SEQUENCE;
-
-		// Charge every fresh command attempt, including malformed intent fields, so an
-		// authenticated peer cannot evade the budget by sending invalid command bodies.
+		// Charge attempts after ownership checks, including malformed fields and replays,
+		// so an authenticated peer cannot evade the budget with invalid command bodies.
 		auto& rate = mRateByPlayer[command.senderId];
 		if (!rate.initialized)
 		{
@@ -56,6 +52,10 @@ namespace Coop
 		if (rate.tokens < 1.0)
 			return CommandRejection::INVALID_RATE;
 		rate.tokens -= 1.0;
+
+		const auto previous = mLastSequenceByPlayer.find(command.senderId);
+		if (previous != mLastSequenceByPlayer.end() && command.sequence <= previous->second)
+			return CommandRejection::INVALID_SEQUENCE;
 
 		const auto validCoordinates = [&command]()
 		{

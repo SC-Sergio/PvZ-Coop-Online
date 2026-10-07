@@ -1076,6 +1076,18 @@ namespace
 		validAfterMalformed.sequence = 1;
 		Require(malformedRateValidator.Validate(session, validAfterMalformed, rateStart) == Coop::CommandRejection::INVALID_RATE,
 			"malformed command bodies cannot bypass the per-player attempt limit");
+
+		Coop::PlayerCommandValidator replayRateValidator;
+		auto replayCommand = rateCommand;
+		replayCommand.sequence = 1;
+		Require(replayRateValidator.Validate(session, replayCommand, rateStart) == Coop::CommandRejection::NONE,
+			"initial command passes before replay-rate checks");
+		for (std::uint64_t attempt = 0; attempt < static_cast<std::uint64_t>(Coop::COMMAND_RATE_BURST) - 1; ++attempt)
+			Require(replayRateValidator.Validate(session, replayCommand, rateStart) == Coop::CommandRejection::INVALID_SEQUENCE,
+				"replayed sequence is rejected and consumes attempt budget");
+		replayCommand.sequence = 2;
+		Require(replayRateValidator.Validate(session, replayCommand, rateStart) == Coop::CommandRejection::INVALID_RATE,
+			"duplicate sequence floods cannot bypass the per-player attempt limit");
 	}
 
 	class RecordingExecutor final : public Coop::IPlayerCommandExecutor
