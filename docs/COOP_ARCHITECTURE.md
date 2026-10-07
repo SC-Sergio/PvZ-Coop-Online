@@ -66,6 +66,8 @@ Restored plant and zombie animation timing must have positive frame duration and
 
 Restored reanimations validate the definition-backed first-track frame window and base-pose sentinel/index, plus animation time/rate, loop count, loop type, reanimation type, and filter enum before track instances are used. The transform definitions come from locally loaded game resources, while the snapshot supplies only bounded indexes into them.
 
+After the attachment chunk is restored, every active reanimation track attachment ID must be null or resolve in the same garden's attachment holder. If the local allocator cannot rebuild the definition-sized track-instance array, loading fails so the snapshot rollback path runs; it never accepts a partially decoded track array.
+
 Board-level ice particle IDs and each row's fwoosh reanimation IDs are also nullable references and must resolve against the app's active particle/reanimation holders before the snapshot is accepted.
 
 Plant potted-plant indexes must be either `-1` or inside the fixed profile array capacity before any plant update or cursor rendering can use them. The check uses the array bound, not the receiving profile's populated count, so it does not assume peer profiles share garden inventory.

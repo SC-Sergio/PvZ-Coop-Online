@@ -133,6 +133,8 @@ Portable SAVE4 animation validation rejects zero plant frame lengths, invalid pl
 
 Reanimation SAVE4 helpers cover transform frame-range and base-pose bounds, including the engine's `-1` and `-2` sentinels. The reader additionally validates animation timing and enum domains against the locally loaded definition. CTest passes both Debug configurations; a real initialized-Board restore remains unverified.
 
+The post-load entity-reference pass also resolves each active reanimation track's attachment ID after the attachment chunk is available. Reanimation track-instance allocation failure now sets the reader failure state instead of dropping the decoded data. Both Debug configurations build and pass CTest; neither case has Board-backed fault injection yet.
+
 Garden-scoped profile, effect, pool, and RNG objects are shared-owned by both the manager and Board. This keeps them alive through `SafeDeleteWidget`'s deferred Board destructor after manager teardown. Both MSVC Debug builds and CTest suites pass with this ownership path; no engine test currently exercises deferred teardown with initialized garden resources.
 
 Cooperative determinism also disables the legacy Board typing-code path and per-Board speed button. Both standard and WebRTC MSVC Debug builds compile the guard and pass CTest (2/2 and 4/4). There is no initialized-Board input test in the current asset-free environment.
