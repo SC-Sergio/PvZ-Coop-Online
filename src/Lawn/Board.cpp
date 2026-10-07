@@ -933,7 +933,11 @@ void Board::PickZombieWaves()
 			aZombiePoints *= 2;
 		}
 		if (mGardenStateIsolated)
+		{
 			aZombiePoints = Coop::ScaleCoopZombiePoints(aZombiePoints, mCoopZombiePointScalePermille);
+			const int waveScale = Coop::GetCoopWaveZombiePointScalePermille(aWave, mNumWaves).value_or(1000);
+			aZombiePoints = Coop::ScaleCoopZombiePoints(aZombiePoints, waveScale);
+		}
 		
 		// ------------------------------------------------------------------------------------------------
 		// △ 向出怪列表中加入固定刷出的僵尸

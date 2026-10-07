@@ -1014,11 +1014,48 @@ namespace
 		Require(Coop::ScaleCoopZombiePoints(10, 1450) == 15, "insane difficulty scales up the zombie budget");
 		Require(Coop::ScaleCoopZombiePoints(0, 1450) == 0, "empty zombie budgets remain empty");
 		Require(Coop::ScaleCoopZombiePoints(10, 0) == 10, "invalid scale leaves the base budget unchanged");
+		Require(Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+			Coop::CoopMapId::DAY, 1, Coop::CoopMode::CLASSIC) == 855
+			&& Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+				Coop::CoopMapId::ROOF, 4, Coop::CoopMode::CLASSIC) == 1128,
+			"Classic zombie budget scale incorporates the selected map and active player count");
+		for (std::size_t mapIndex = 0; mapIndex < Coop::COOP_MAP_ZOMBIE_POINT_SCALES.size(); ++mapIndex)
+		{
+			int previousPlayersScale = 0;
+			for (std::size_t playerCount = 1; playerCount <= Coop::MAX_PLAYERS; ++playerCount)
+			{
+				const auto scale = Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+					Coop::COOP_MAP_ZOMBIE_POINT_SCALES[mapIndex].map, playerCount, Coop::CoopMode::CLASSIC);
+				Require(scale.has_value() && *scale >= previousPlayersScale,
+					"difficulty policy defines a nondecreasing zombie budget for each active player count");
+				previousPlayersScale = *scale;
+			}
+			if (mapIndex > 0)
+			{
+				const auto previousMapScale = Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+					Coop::COOP_MAP_ZOMBIE_POINT_SCALES[mapIndex - 1].map, 2, Coop::CoopMode::CLASSIC);
+				const auto currentMapScale = Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+					Coop::COOP_MAP_ZOMBIE_POINT_SCALES[mapIndex].map, 2, Coop::CoopMode::CLASSIC);
+				Require(previousMapScale && currentMapScale && *currentMapScale >= *previousMapScale,
+					"difficulty policy increases monotonically across the five map profiles");
+			}
+		}
+		Require(Coop::GetCoopWaveZombiePointScalePermille(0, 40) == 1000
+			&& Coop::GetCoopWaveZombiePointScalePermille(39, 40) == 1100
+			&& !Coop::GetCoopWaveZombiePointScalePermille(-1, 40)
+			&& !Coop::GetCoopWaveZombiePointScalePermille(40, 40)
+			&& !Coop::GetCoopWaveZombiePointScalePermille(0, 0),
+			"Classic wave modifier progresses to its cap and rejects invalid wave coordinates");
 		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 0), "zero-player difficulty configuration is rejected");
 		Require(!Coop::GetCoopStartingSun(Coop::CoopDifficulty::NORMAL, 5), "player counts above room capacity are rejected");
 		Require(!Coop::GetCoopStartingSun(static_cast<Coop::CoopDifficulty>(255), 1), "unknown difficulty values are rejected");
 		Require(!Coop::GetCoopZombiePointScalePermille(static_cast<Coop::CoopDifficulty>(255)),
 			"unknown difficulty has no zombie budget scale");
+		Require(!Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+			static_cast<Coop::CoopMapId>(255), 1, Coop::CoopMode::CLASSIC)
+			&& !Coop::GetCoopZombiePointScalePermille(Coop::CoopDifficulty::NORMAL,
+				Coop::CoopMapId::DAY, 1, static_cast<Coop::CoopMode>(255)),
+			"unknown map and mode values do not produce a Classic difficulty scale");
 	}
 
 	void TestAuthoritativeSimulationTickProtocol()

@@ -397,7 +397,8 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 		return false;
 	const std::optional<int> configuredStartingSun = Coop::GetCoopStartingSun(settings.difficulty,
 		lobby->GetSession().GetActivePlayerCount());
-	const std::optional<int> zombiePointScale = Coop::GetCoopZombiePointScalePermille(settings.difficulty);
+	const std::optional<int> zombiePointScale = Coop::GetCoopZombiePointScalePermille(
+		settings.difficulty, settings.map, lobby->GetSession().GetActivePlayerCount(), settings.mode);
 	if (!configuredStartingSun || !zombiePointScale)
 		return false;
 	const int startingSun = *configuredStartingSun;
