@@ -859,6 +859,15 @@ static void SyncChallengeTailPortable(PortableSaveContext& theContext, Challenge
 	theContext.SyncInt32(theChallenge.mScaryPotterPots);
 	theContext.SyncInt32(theChallenge.mRainCounter);
 	theContext.SyncInt32(theChallenge.mTreeOfWisdomTalkIndex);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theChallenge.mChallengeState),
+			STATECHALLENGE_NORMAL, STATECHALLENGE_TREE_BABBLING + 1)
+		|| !IsValidPortableSaveSeedType(static_cast<int32_t>(theChallenge.mLastConveyorSeedType),
+			SEED_NONE, NUM_SEED_TYPES, SEED_ZOMBIE_IMP + 1, true)
+		|| !((theChallenge.mChallengeGridX == -1 && theChallenge.mChallengeGridY == -1)
+			|| IsValidPortableSaveGridPosition(theChallenge.mChallengeGridX, theChallenge.mChallengeGridY,
+				MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y))))
+		theContext.mFailed = true;
 }
 
 static void SyncMusicTailPortable(PortableSaveContext& theContext, Music& theMusic)
@@ -905,6 +914,10 @@ static void SyncCustomSurvivalTailPortable(PortableSaveContext& theContext, Cust
     theContext.SyncBool(theOption.mBungee);
     theContext.SyncBool(theOption.mFog);
     theContext.SyncBool(theOption.mStorm);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theOption.mLevel),
+			BACKGROUND_1_DAY, BACKGROUND_TREEOFWISDOM + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZombie)
@@ -3034,6 +3047,16 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mCobCannonPlantID), true, aValidPlant)
 		|| !IsValidPortableSaveReference(static_cast<uint32_t>(aCursor->mReanimCursorID), true, aValidReanimation))
 		return false;
+	if (theBoard->mChallenge)
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(theBoard->mChallenge->mReanimChallenge), true, aValidReanimation))
+			return false;
+		for (ReanimationID aCloudID : theBoard->mChallenge->mReanimClouds)
+		{
+			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aCloudID), true, aValidReanimation))
+				return false;
+		}
+	}
 	return true;
 }
 
