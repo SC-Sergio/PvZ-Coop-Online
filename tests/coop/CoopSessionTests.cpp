@@ -1041,6 +1041,11 @@ namespace
 		Require(joinedSnapshot.size() == 1 && joinedSnapshot[0] == Coop::LobbyRequestRejection::NONE
 			&& clientSession.GetGardenCount() == 2 && clientSession.GetSlots()[2].state == Coop::PlayerState::EMPTY,
 			"joining client applies the authoritative roster while unused slots stay empty");
+		Require(Coop::SendLobbyRequest(*guest, 91, join)
+			&& Coop::DrainLobbyRequests(*host, hostSession)[0] == Coop::LobbyRequestRejection::NONE
+			&& hostSession.GetGardenCount() == 2
+			&& Coop::DrainLobbySnapshots(*guest, 91, clientSession)[0] == Coop::LobbyRequestRejection::NONE,
+			"a repeated join request is idempotent for an already admitted player");
 
 		Coop::LobbyRequest ready{Coop::LobbyRequestType::READY, 92, {}, true};
 		Require(Coop::SendLobbyRequest(*guest, 91, ready), "client can ready in the lobby");
@@ -1150,6 +1155,38 @@ namespace
 			"started authoritative session reaches every client with its garden roster");
 		Require(!host->SetLocalReady(false) && !host->Kick(202) && !host->SetLobbySettings(settings),
 			"lobby controls close when gameplay starts");
+
+		Coop::LocalTransportHub rejectedHub;
+		auto rejectedHostTransport = rejectedHub.CreateTransport(301);
+		std::vector<std::unique_ptr<Coop::LocalTransport>> occupiedGuestTransports;
+		for (Coop::PlayerId playerId = 302; playerId <= 304; ++playerId)
+			occupiedGuestTransports.push_back(rejectedHub.CreateTransport(playerId));
+		auto rejectedGuestTransport = rejectedHub.CreateTransport(305);
+		auto rejectedHost = Coop::CoopLobbyController::CreateHost(std::move(rejectedHostTransport), "Host");
+		for (Coop::PlayerId playerId = 302; playerId <= 304; ++playerId)
+			Require(rejectedHost->GetSession().Join(playerId, "Player").has_value(), "test fills all lobby slots");
+		auto rejectedGuest = Coop::CoopLobbyController::Join(std::move(rejectedGuestTransport), 301, "Late guest");
+		Require(rejectedGuest && rejectedHost->PumpLobby() == 1, "host processes the full-lobby join attempt");
+		Require(rejectedHost->GetSession().GetGardenCount() == 4,
+			"host keeps its four active gardens when a fifth player is rejected");
+		Require(rejectedHost->GetTransport()->GetConnectedPeerIds().size() == 3,
+			"host disconnects a rejected join when all dynamic player slots are occupied");
+		Require(rejectedGuest->PumpLobby() == 0 && rejectedGuest->IsClosed()
+			&& !rejectedGuest->GetConnectionError().empty(),
+			"rejected guest receives a visible closed-lobby state instead of remaining connected without a slot");
+
+		Coop::LocalTransportHub revokedHub;
+		auto revokedHostTransport = revokedHub.CreateTransport(401);
+		auto revokedGuestTransport = revokedHub.CreateTransport(402);
+		auto revokedHost = Coop::CoopLobbyController::CreateHost(std::move(revokedHostTransport), "Host");
+		auto revokedGuest = Coop::CoopLobbyController::Join(std::move(revokedGuestTransport), 401, "Guest");
+		Require(revokedHost->PumpLobby() == 1 && revokedGuest->PumpLobby() == 1,
+			"revocation test admits the guest and delivers its roster snapshot");
+		Require(revokedHost->GetSession().Leave(402)
+			&& Coop::BroadcastLobbySnapshot(*revokedHost->GetTransport(), revokedHost->GetSession()) == 1
+			&& revokedGuest->PumpLobby() == 1 && revokedGuest->IsClosed()
+			&& revokedGuest->GetConnectionError() == "The host rejected the lobby join.",
+			"a previously admitted guest detects roster removal and reports the rejection");
 	}
 
 	void TestAuthoritativeCommandValidation()

@@ -64,6 +64,7 @@ namespace Coop
 		CoopSession mSession;
 		bool mIsHost = false;
 		bool mClosed = false;
+	bool mJoinedLobby = false;
 		PlayerId mHostPlayerId = 0;
 		std::string mRoomCode;
 		std::string mSignalingUrl;

@@ -175,8 +175,19 @@ namespace Coop
 			switch (request->type)
 			{
 			case LobbyRequestType::JOIN:
-				if (request->senderId == transport.GetLocalPlayerId() || !session.Join(request->senderId, request->displayName))
+				if (request->senderId == transport.GetLocalPlayerId())
 					result = LobbyRequestRejection::SESSION_REJECTED;
+				else
+				{
+					const auto existing = std::find_if(session.GetSlots().begin(), session.GetSlots().end(),
+						[&request](const PlayerSlot& slot)
+						{ return slot.state != PlayerState::EMPTY && slot.playerId == request->senderId; });
+					if (existing == session.GetSlots().end() && !session.Join(request->senderId, request->displayName))
+					{
+						result = LobbyRequestRejection::SESSION_REJECTED;
+						transport.DisconnectPeer(request->senderId);
+					}
+				}
 				break;
 			case LobbyRequestType::READY:
 				if (!session.SetReady(request->senderId, request->ready))

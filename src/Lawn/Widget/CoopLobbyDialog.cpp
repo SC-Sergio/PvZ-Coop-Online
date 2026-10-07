@@ -250,6 +250,8 @@ void CoopLobbyDialog::Update()
 	{
 		mSelectedSettings = mLobby->GetSession().GetLobbySettings();
 		RefreshSettingLabels();
+		if (!mLobby->GetConnectionError().empty())
+			SetStatus(mLobby->GetConnectionError());
 	}
 	MarkDirty();
 }

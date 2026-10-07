@@ -18,6 +18,8 @@ The board and app share `mGameScene`, `mBoardResult`, `mGameMode`, `mEffectSyste
 
 The LAN lobby calls `TcpNetworkTransport::AcceptNextPeer(0)` from its update poll. That path now incrementally accepts and reads a fixed-size identity handshake with a one-second deadline, so a client that sends only part of its hello cannot block the game loop. The explicit timed expected-peer API remains for bounded process-test setup.
 
+Lobby JOIN requests are idempotent for a player already in the authoritative roster. A new JOIN rejected by capacity or session state is disconnected so it cannot occupy a transport peer without owning a slot. A guest tolerates roster snapshots that arrive before its own JOIN has been admitted; after it has appeared in the roster, a snapshot removing it closes the client lobby with a visible rejection reason. A missing host transport also closes the lobby with a connection error shown in the dialog.
+
 The lobby's Join button copies its validated address, room code, display name, and player ID into a detached connection task. TCP DNS/connect/handshake and WebRTC signaling/peer negotiation therefore do not run on the UI thread. The task returns only an owned controller and plain status data through a mutex-protected shared result; the dialog adopts it on its next update. Leaving or destroying the dialog drops its result handle without capturing or touching dialog/widget state. A pending operation cannot be canceled at the transport layer yet, so its underlying bounded connect/negotiation may finish in the background and then close when its result is discarded.
 
 ## Phase 1 slice in this revision

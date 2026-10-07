@@ -13,6 +13,7 @@
 #endif
 
 #include <algorithm>
+#include <vector>
 
 namespace Coop
 {
@@ -87,10 +88,29 @@ namespace Coop
 			return 0;
 		if (!mIsHost)
 		{
-			const std::size_t received = DrainLobbySnapshots(*mTransport, mHostPlayerId, mSession).size();
+			const std::vector<LobbyRequestRejection> snapshots = DrainLobbySnapshots(*mTransport, mHostPlayerId, mSession);
+			const std::size_t received = snapshots.size();
+			const PlayerId localPlayerId = mTransport->GetLocalPlayerId();
+			const bool wasJoined = mJoinedLobby;
+			const bool presentInRoster = std::any_of(mSession.GetSlots().begin(), mSession.GetSlots().end(),
+				[localPlayerId](const PlayerSlot& slot)
+				{ return slot.state != PlayerState::EMPTY && slot.playerId == localPlayerId; });
+			mJoinedLobby = mJoinedLobby || presentInRoster;
+			if (wasJoined && !presentInRoster
+				&& std::find(snapshots.begin(), snapshots.end(), LobbyRequestRejection::SESSION_REJECTED) != snapshots.end())
+			{
+				mConnectionError = "The host rejected the lobby join.";
+				mTransport->Close();
+				mClosed = true;
+				return received;
+			}
 			const auto peers = mTransport->GetConnectedPeerIds();
 			if (std::find(peers.begin(), peers.end(), mHostPlayerId) == peers.end())
+			{
+				mConnectionError = "The host closed the lobby connection before admission.";
+				mTransport->Close();
 				mClosed = true;
+			}
 			return received;
 		}
 
