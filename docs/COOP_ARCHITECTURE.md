@@ -62,6 +62,8 @@ Board presentation state is bounded before draw: fog cell looks stay in the init
 
 ## Engine extraction plan
 
+If a client cannot place an accepted command at its authoritative tick, the receiving client's simulation has diverged, regardless of command ownership. The client marks its own recovery status failed and closes the host link; the Internet controller then uses same-ID WebRTC rejoin and the complete garden snapshot batch. This avoids leaving that client connected in a known non-canonical state, but it is not rollback and still needs initialized-Board runtime evidence.
+
 - Inventory all `mBoard`, `gLawnApp`, render, update, effects, audio, save, random, and input dependencies.
 - Introduce an explicit garden context for per-board scene/result state and simulation services currently reached through `LawnApp` globals; keep single-player bound to a one-garden context first.
 - Finish separating simulation tick from `Widget::Update`/draw, gate input to the viewed board, and route effects, level completion, save, and random state to garden-owned or session-owned services.
