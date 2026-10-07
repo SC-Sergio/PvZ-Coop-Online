@@ -2085,6 +2085,14 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
 			theContext.mFailed = true;
 			return;
 		}
+		if (!IsValidPortableSaveEnumValue(static_cast<int32_t>(theBoard->mPrevBoardResult),
+			BOARDRESULT_NONE, BOARDRESULT_CHEAT + 1)
+			|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theBoard->mHelpIndex),
+				ADVICE_NONE, NUM_ADVICE_TYPES))
+		{
+			theContext.mFailed = true;
+			return;
+		}
 		for (int aX = 0; aX < MAX_GRID_SIZE_X; ++aX)
 		{
 			for (int aY = 0; aY < MAX_GRID_SIZE_Y; ++aY)
@@ -2095,6 +2103,40 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
 					theContext.mFailed = true;
 					return;
 				}
+				if (!IsValidPortableSaveGridLook(theBoard->mGridCelLook[aX][aY]))
+				{
+					theContext.mFailed = true;
+					return;
+				}
+				for (int aOffset = 0; aOffset < 2; ++aOffset)
+				{
+					if (!IsValidPortableSaveGridOffset(theBoard->mGridCelOffset[aX][aY][aOffset]))
+					{
+						theContext.mFailed = true;
+						return;
+					}
+				}
+			}
+		}
+		for (int aX = 0; aX < MAX_GRID_SIZE_X; ++aX)
+		{
+			for (int aY = 0; aY < MAX_GRID_SIZE_Y + 1; ++aY)
+			{
+				if (!IsValidPortableSaveFogOpacity(theBoard->mGridCelFog[aX][aY]))
+				{
+					theContext.mFailed = true;
+					return;
+				}
+			}
+		}
+		for (int aRow = 0; aRow < MAX_GRID_SIZE_Y; ++aRow)
+		{
+			const TodSmoothArray& aRowPick = theBoard->mRowPickingArray[aRow];
+			if (!IsValidPortableSaveRowPicker(aRowPick.mItem, aRow, aRowPick.mWeight,
+				aRowPick.mLastPicked, aRowPick.mSecondLastPicked))
+			{
+				theContext.mFailed = true;
+				return;
 			}
 		}
 		for (int aRow = 0; aRow < MAX_GRID_SIZE_Y; ++aRow)

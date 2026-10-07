@@ -61,6 +61,29 @@ inline bool IsValidPortableSaveGridPosition(std::int32_t x, std::int32_t y,
 		&& y >= 0 && static_cast<std::uint32_t>(y) < height;
 }
 
+inline bool IsValidPortableSaveGridLook(std::int32_t look) noexcept
+{
+	return look >= 0 && look < 20;
+}
+
+inline bool IsValidPortableSaveGridOffset(std::int32_t offset) noexcept
+{
+	return offset >= -5 && offset < 5;
+}
+
+inline bool IsValidPortableSaveFogOpacity(std::int32_t opacity) noexcept
+{
+	return opacity >= 0 && opacity <= 255;
+}
+
+inline bool IsValidPortableSaveRowPicker(std::int32_t item, std::int32_t expectedItem,
+	float weight, float lastPicked, float secondLastPicked) noexcept
+{
+	return item == expectedItem && std::isfinite(weight) && weight >= 0.0f && weight <= 1.0f
+		&& std::isfinite(lastPicked) && lastPicked >= 0.0f
+		&& std::isfinite(secondLastPicked) && secondLastPicked >= 0.0f;
+}
+
 template <typename ApplyFn, typename RestoreFn>
 inline bool ApplyPortableSaveWithRollback(ApplyFn apply, RestoreFn restore)
 {

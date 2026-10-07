@@ -121,6 +121,18 @@ namespace
 			&& !IsValidPortableSaveGridPosition(9, 5, 9, 6)
 			&& !IsValidPortableSaveGridPosition(8, 6, 9, 6),
 			"portable save grid coordinates stay inside fixed board dimensions");
+		Require(IsValidPortableSaveGridLook(0) && IsValidPortableSaveGridLook(19)
+			&& !IsValidPortableSaveGridLook(-1) && !IsValidPortableSaveGridLook(20)
+			&& IsValidPortableSaveGridOffset(-5) && IsValidPortableSaveGridOffset(4)
+			&& !IsValidPortableSaveGridOffset(-6) && !IsValidPortableSaveGridOffset(5)
+			&& IsValidPortableSaveFogOpacity(0) && IsValidPortableSaveFogOpacity(255)
+			&& !IsValidPortableSaveFogOpacity(-1) && !IsValidPortableSaveFogOpacity(256),
+			"portable board presentation arrays keep their sprite, offset, and opacity ranges bounded");
+		Require(IsValidPortableSaveRowPicker(2, 2, 0.5f, 4.0f, 7.0f)
+			&& !IsValidPortableSaveRowPicker(6, 2, 0.5f, 4.0f, 7.0f)
+			&& !IsValidPortableSaveRowPicker(2, 2, -0.1f, 4.0f, 7.0f)
+			&& !IsValidPortableSaveRowPicker(2, 2, 0.5f, std::numeric_limits<float>::infinity(), 7.0f),
+			"portable row pickers require the fixed row identity and finite bounded weights");
 		Require(IsValidPortableSaveWaveState(0, 0, 100)
 			&& IsValidPortableSaveWaveState(100, 100, 100)
 			&& IsValidPortableSaveWaveState(10, 9, 100)
