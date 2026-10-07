@@ -82,6 +82,10 @@ namespace
 			&& IsValidPortableSavePayloadSize(MAX_PORTABLE_SAVE_PAYLOAD_BYTES)
 			&& !IsValidPortableSavePayloadSize(static_cast<std::size_t>(MAX_PORTABLE_SAVE_PAYLOAD_BYTES) + 1),
 			"portable save payloads have a strict global size limit");
+		Require(IsPortableSaveFieldFullyConsumed(false, 0)
+			&& !IsPortableSaveFieldFullyConsumed(false, 1)
+			&& !IsPortableSaveFieldFullyConsumed(true, 0),
+			"portable save fields reject read errors and unconsumed trailing bytes");
 		Require(IsValidPortableSaveResourceId(0, 10, 10)
 			&& IsValidPortableSaveResourceId(9, 10, 10)
 			&& IsValidPortableSaveResourceId(10, 10, 10)

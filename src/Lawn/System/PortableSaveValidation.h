@@ -21,6 +21,12 @@ inline bool IsValidPortableSavePayloadSize(std::size_t payloadSize) noexcept
 	return payloadSize <= MAX_PORTABLE_SAVE_PAYLOAD_BYTES;
 }
 
+inline bool IsPortableSaveFieldFullyConsumed(bool readFailed,
+	std::uint32_t remainingBytes) noexcept
+{
+	return !readFailed && remainingBytes == 0;
+}
+
 inline bool IsValidPortableSaveArrayHeader(std::uint32_t freeListHead,
 	std::uint32_t maxUsedCount, std::uint32_t size, std::uint32_t nextKey,
 	std::uint32_t maxSize, std::uint32_t allocatedMaxSize) noexcept

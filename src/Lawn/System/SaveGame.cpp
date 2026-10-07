@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 static constexpr const char* FILE_COMPILE_TIME_STRING = "Jul  2 201011:47:03"; // The compile time of 1.2.0.1073 GOTY
@@ -1200,7 +1201,9 @@ static bool ApplyFieldWithSync(const unsigned char* theData, size_t theSize, TRe
 	aReader.OpenMemory(theData, static_cast<uint32_t>(theSize), false);
 	PortableSaveContext aContext(aReader);
 	theReaderFn(aContext);
-	return !aContext.mFailed;
+	if (!IsPortableSaveFieldFullyConsumed(aContext.mFailed, aReader.GetRemainingBytes()))
+		throw std::runtime_error("Invalid portable save field payload");
+	return true;
 }
 
 static void WriteGameObjectField(std::vector<unsigned char>& theOut, uint32_t theFieldId, GameObject& theObject)
@@ -1969,6 +1972,11 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
 			default: break;
 			}
 		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 	}
 	else
 	{
@@ -2320,6 +2328,11 @@ static void SyncCursorPortable(PortableSaveContext& theContext, Board* theBoard)
 			default: break;
 			}
 		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 	}
 	else
 	{
@@ -2355,6 +2368,11 @@ static void SyncCursorPreviewPortable(PortableSaveContext& theContext, Board* th
 			default: break;
 			}
 		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 	}
 	else
 	{
@@ -2388,6 +2406,11 @@ static void SyncAdvicePortable(PortableSaveContext& theContext, Board* theBoard)
 			case PORTABLE_FIELD_TAIL: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ SyncMessageWidgetTailPortable(c, *theBoard->mAdvice); }); break;
 			default: break;
 			}
+		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
 		}
 	}
 	else
@@ -2424,6 +2447,11 @@ static void SyncSeedBankPortable(PortableSaveContext& theContext, Board* theBoar
 			case PORTABLE_FIELD_TAIL: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ SyncSeedBankTailPortable(c, *theBoard->mSeedBank); }); break;
 			default: break;
 			}
+		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
 		}
 	}
 	else
@@ -2473,6 +2501,11 @@ static void SyncSeedPacketsPortable(PortableSaveContext& theContext, Board* theB
 				default: break;
 				}
 			}
+			if (!aReader.mOk || aReader.mPos != aReader.mSize)
+			{
+				theContext.mFailed = true;
+				return;
+			}
 		}
 		else
 		{
@@ -2511,6 +2544,11 @@ static void SyncChallengePortable(PortableSaveContext& theContext, Board* theBoa
 			default: break;
 			}
 		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 	}
 	else
 	{
@@ -2544,6 +2582,11 @@ static void SyncMusicPortable(PortableSaveContext& theContext, Board* theBoard)
 			default: break;
 			}
 		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
 	}
 	else
 	{
@@ -2575,6 +2618,11 @@ static void SyncCustomSurvivalPortable(PortableSaveContext& theContext, Board* t
 			case PORTABLE_FIELD_TAIL: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ SyncCustomSurvivalTailPortable(c, theBoard->mCustomSurvivalOption); }); break;
 			default: break;
 			}
+		}
+		if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		{
+			theContext.mFailed = true;
+			return;
 		}
 	}
 	else
@@ -2732,13 +2780,22 @@ static bool ReadChunkV4(uint32_t theChunkType, const unsigned char* theData, siz
 			DataReader aFieldReader;
 			aFieldReader.OpenMemory(aFieldData, static_cast<uint32_t>(aFieldSize), false);
 			PortableSaveContext aContext(aFieldReader);
-			aSyncFn(aContext, theBoard);
+			try
+			{
+				aSyncFn(aContext, theBoard);
+			}
+			catch (const std::exception&)
+			{
+				return false;
+			}
 			if (aContext.mFailed || aFieldReader.GetRemainingBytes() != 0)
 				return false;
 			aApplied = true;
 		}
 	}
 
+	if (!aReader.mOk || aReader.mPos != aReader.mSize)
+		return false;
 	return aApplied;
 }
 
