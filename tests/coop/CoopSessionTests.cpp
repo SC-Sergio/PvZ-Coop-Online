@@ -1877,6 +1877,34 @@ namespace
 			&& host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
 			"expired partial handshake is closed without disturbing an active peer");
 		CloseTestSocket(silentSocket);
+
+		std::vector<RawTestSocket> additionalSockets;
+		for (Coop::TransportPlayerId playerId : { 713U, 714U })
+		{
+			const RawTestSocket additionalSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+			Require(additionalSocket != INVALID_RAW_TEST_SOCKET
+				&& connect(additionalSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
+				"additional client connects after a partial-handshake timeout");
+			const std::array<std::uint8_t, 8> hello{ 'P', 'V', 'Z', 'H',
+				static_cast<std::uint8_t>(playerId), static_cast<std::uint8_t>(playerId >> 8),
+				static_cast<std::uint8_t>(playerId >> 16), static_cast<std::uint8_t>(playerId >> 24) };
+			Require(SendTestBytes(additionalSocket, hello.data(), hello.size()) == static_cast<int>(hello.size()),
+				"additional client sends a complete bounded identity hello");
+			std::optional<Coop::TransportPlayerId> additionalAccepted;
+			for (int attempt = 0; attempt < 1000 && !additionalAccepted; ++attempt)
+			{
+				additionalAccepted = host->AcceptNextPeer(0);
+				if (!additionalAccepted)
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			Require(additionalAccepted == playerId,
+				"a completed client is admitted after a different client's handshake expired");
+			additionalSockets.push_back(additionalSocket);
+		}
+		Require(host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712, 713, 714},
+			"expired pending handshakes do not consume one of the three guest slots");
+		for (RawTestSocket additionalSocket : additionalSockets)
+			CloseTestSocket(additionalSocket);
 		host->Close();
 	}
 

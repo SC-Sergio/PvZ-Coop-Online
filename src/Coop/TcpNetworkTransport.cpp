@@ -560,11 +560,10 @@ namespace Coop
 		const auto now = std::chrono::steady_clock::now();
 		for (auto pending = mState->pendingHandshakes.begin(); pending != mState->pendingHandshakes.end();)
 		{
-			auto closePending = [&pending]()
+			auto closePending = [this, &pending]()
 			{
 				CloseSocket(pending->socket);
-				pending->socket = INVALID_SOCKET_HANDLE;
-				pending++;
+				pending = mState->pendingHandshakes.erase(pending);
 			};
 			if (now >= pending->deadline)
 			{
