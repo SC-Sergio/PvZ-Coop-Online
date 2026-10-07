@@ -391,6 +391,36 @@ namespace
 		Require(!IsValidPortableSaveArrayEntries(2, 1, 2,
 			[&validIds](std::uint32_t index) { return validIds[index]; }),
 			"an unreachable free entry is rejected");
+		struct ListNode
+		{
+			ListNode* mNext = nullptr;
+			ListNode* mPrev = nullptr;
+		};
+		std::array<ListNode, 3> listNodes{};
+		auto isOwnedNode = [&listNodes](ListNode* node)
+		{
+			return node >= listNodes.data() && node < listNodes.data() + listNodes.size();
+		};
+		auto isNotFreeNode = [](ListNode*) { return false; };
+		listNodes[0].mNext = &listNodes[1];
+		listNodes[1].mPrev = &listNodes[0];
+		Require(IsValidPortableSaveListForRelease<ListNode>(nullptr, nullptr, 0, isOwnedNode, isNotFreeNode),
+			"an empty allocator-backed list is valid to release");
+		Require(IsValidPortableSaveListForRelease(&listNodes[0], &listNodes[1], 2, isOwnedNode, isNotFreeNode),
+			"a linked allocator-backed list with the recorded size is valid to release");
+		Require(!IsValidPortableSaveListForRelease(&listNodes[0], &listNodes[1], 1, isOwnedNode, isNotFreeNode),
+			"a linked list whose node count differs from its recorded size is rejected");
+		listNodes[1].mPrev = nullptr;
+		Require(!IsValidPortableSaveListForRelease(&listNodes[0], &listNodes[1], 2, isOwnedNode, isNotFreeNode),
+			"a linked list with a mismatched previous pointer is rejected");
+		listNodes[1].mPrev = &listNodes[0];
+		listNodes[1].mNext = &listNodes[0];
+		Require(!IsValidPortableSaveListForRelease(&listNodes[0], &listNodes[1], 2, isOwnedNode, isNotFreeNode),
+			"a cyclic list is rejected before its nodes are released");
+		listNodes[1].mNext = nullptr;
+		auto hasFreeNode = [&listNodes](ListNode* node) { return node == &listNodes[1]; };
+		Require(!IsValidPortableSaveListForRelease(&listNodes[0], &listNodes[1], 2, isOwnedNode, hasFreeNode),
+			"a list containing a node already on its allocator free list is rejected");
 		Require(IsValidPortableSaveBlobSize(64, 64), "a blob fitting the remaining input is accepted");
 		Require(!IsValidPortableSaveBlobSize(65, 64), "a blob extending beyond remaining input is rejected");
 		Require(!IsValidPortableSaveBlobSize(MAX_PORTABLE_SAVE_BLOB_BYTES + 1, MAX_PORTABLE_SAVE_BLOB_BYTES + 1),

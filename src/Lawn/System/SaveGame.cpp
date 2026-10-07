@@ -653,23 +653,16 @@ static constexpr const uint32_t PORTABLE_FIELD_TAIL = 100U;
 template <typename T>
 static bool ClearValidatedListForRead(TodList<T>& theList)
 {
-	if (theList.mHead == nullptr)
-		return theList.mTail == nullptr && theList.mSize == 0;
-
 	TodAllocator* allocator = theList.mpAllocator;
-	if (allocator == nullptr || theList.mTail == nullptr || theList.mSize <= 0)
-		return false;
-
-	int nodeCount = 0;
-	TodListNode<T>* previous = nullptr;
-	for (TodListNode<T>* node = theList.mHead; node != nullptr; node = node->mNext)
-	{
-		if (node->mPrev != previous || !allocator->IsPointerFromAllocator(node)
-			|| allocator->IsPointerOnFreeList(node) || ++nodeCount > theList.mSize)
-			return false;
-		previous = node;
-	}
-	if (previous != theList.mTail || nodeCount != theList.mSize)
+	if (!IsValidPortableSaveListForRelease(theList.mHead, theList.mTail, theList.mSize,
+		[allocator](TodListNode<T>* node)
+		{
+			return allocator != nullptr && allocator->IsPointerFromAllocator(node);
+		},
+		[allocator](TodListNode<T>* node)
+		{
+			return allocator == nullptr || allocator->IsPointerOnFreeList(node);
+		}))
 		return false;
 
 	theList.RemoveAll();

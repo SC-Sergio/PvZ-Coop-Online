@@ -236,6 +236,27 @@ inline bool IsValidPortableSaveDataIdList(const std::vector<std::uint32_t>& ids,
 	return true;
 }
 
+template <typename Node, typename IsOwned, typename IsFree>
+inline bool IsValidPortableSaveListForRelease(Node* head, Node* tail,
+	std::int32_t recordedSize, IsOwned isOwned, IsFree isFree)
+{
+	if (head == nullptr)
+		return tail == nullptr && recordedSize == 0;
+	if (tail == nullptr || recordedSize <= 0)
+		return false;
+
+	std::int32_t nodeCount = 0;
+	Node* previous = nullptr;
+	for (Node* node = head; node != nullptr; node = node->mNext)
+	{
+		if (!isOwned(node) || isFree(node) || ++nodeCount > recordedSize
+			|| node->mPrev != previous)
+			return false;
+		previous = node;
+	}
+	return previous == tail && nodeCount == recordedSize;
+}
+
 template <typename GetEntryId>
 inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)
