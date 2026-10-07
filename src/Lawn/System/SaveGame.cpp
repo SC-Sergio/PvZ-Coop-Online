@@ -3333,24 +3333,9 @@ static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 static bool IsStructurallyValidV4Bytes(std::span<const unsigned char> theBytes,
 	bool theRequireExactSize)
 {
-	if (theBytes.size() < sizeof(SaveFileHeaderV4))
-		return false;
-	SaveFileHeaderV4 aHeader;
-	memcpy(&aHeader, theBytes.data(), sizeof(aHeader));
-	aHeader.mVersion = FromLE32(aHeader.mVersion);
-	aHeader.mPayloadSize = FromLE32(aHeader.mPayloadSize);
-	aHeader.mPayloadCrc = FromLE32(aHeader.mPayloadCrc);
-	if (memcmp(aHeader.mMagic, SAVE_FILE_MAGIC_V4, sizeof(aHeader.mMagic)) != 0
-		|| aHeader.mVersion != SAVE_FILE_V4_VERSION)
-		return false;
-	const size_t aAvailablePayloadSize = theBytes.size() - sizeof(SaveFileHeaderV4);
-	if (!IsValidPortableSavePayloadSize(aHeader.mPayloadSize)
-		|| aHeader.mPayloadSize > aAvailablePayloadSize
-		|| (theRequireExactSize && aHeader.mPayloadSize != aAvailablePayloadSize))
-		return false;
-	const unsigned char* aPayload = theBytes.data() + sizeof(SaveFileHeaderV4);
-	return crc32(0, reinterpret_cast<const Bytef*>(aPayload), aHeader.mPayloadSize) == aHeader.mPayloadCrc
-		&& ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize);
+	return IsStructurallyValidPortableSaveV4Bytes(theBytes.data(), theBytes.size(),
+		SAVE4_CHUNK_CUSTOMSURVIVALOPTION, SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_VERSION,
+		theRequireExactSize);
 }
 
 static bool LawnLoadGameV4FromBytes(Board* theBoard,
@@ -3376,6 +3361,11 @@ static bool LawnLoadGameV4FromBytes(Board* theBoard,
 bool LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes)
 {
 	return LawnLoadGameV4FromBytes(theBoard, theBytes, true);
+}
+
+bool LawnValidateGameV4Memory(std::span<const unsigned char> theBytes)
+{
+	return IsStructurallyValidV4Bytes(theBytes, true);
 }
 
 static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)

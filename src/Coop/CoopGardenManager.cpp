@@ -364,7 +364,10 @@ namespace Coop
 
 	std::optional<GardenSnapshot> CoopGardenManager::TakeCompletedSnapshotRecovery()
 	{
-		return mSnapshotReceiver.TakeCompletedSnapshot();
+		std::optional<GardenSnapshot> snapshot = mSnapshotReceiver.TakeCompletedSnapshot();
+		if (!snapshot || !LawnValidateGameV4Memory(snapshot->bytes))
+			return std::nullopt;
+		return snapshot;
 	}
 
 	void CoopGardenManager::PumpHeartbeat()

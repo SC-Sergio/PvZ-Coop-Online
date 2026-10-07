@@ -269,6 +269,42 @@ namespace
 		trailing.push_back(0xFF);
 		Require(!ValidatePortableSavePayload(trailing.data(), trailing.size(), 21, 1, 1),
 			"trailing incomplete chunk headers are rejected");
+
+		const std::uint8_t crcInput[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+		Require(CalculatePortableSaveCrc32(crcInput, sizeof(crcInput)) == 0xCBF43926U,
+			"portable SAVE4 preflight uses the standard CRC-32 checksum");
+		auto makeSaveV4 = [&](const std::vector<std::uint8_t>& payload)
+		{
+			std::vector<std::uint8_t> bytes{'P', 'V', 'Z', 'P', '_', 'S', 'A', 'V', 'E', '4', 0, 0};
+			appendU32(bytes, 1);
+			appendU32(bytes, static_cast<std::uint32_t>(payload.size()));
+			appendU32(bytes, CalculatePortableSaveCrc32(payload.data(), payload.size()));
+			bytes.insert(bytes.end(), payload.begin(), payload.end());
+			return bytes;
+		};
+		const std::vector<std::uint8_t> validSave = makeSaveV4(validPayload);
+		Require(IsStructurallyValidPortableSaveV4Bytes(validSave.data(), validSave.size(), 21, 1, 1),
+			"SAVE4 preflight accepts exact framing, CRC and canonical nested chunks without a Board");
+		std::vector<std::uint8_t> saveWithTrailingFileData = validSave;
+		saveWithTrailingFileData.insert(saveWithTrailingFileData.end(), {0xA5, 0x5A});
+		Require(IsStructurallyValidPortableSaveV4Bytes(saveWithTrailingFileData.data(),
+			saveWithTrailingFileData.size(), 21, 1, 1, false)
+			&& !IsStructurallyValidPortableSaveV4Bytes(saveWithTrailingFileData.data(),
+				saveWithTrailingFileData.size(), 21, 1, 1, true),
+			"SAVE4 preflight preserves legacy file-prefix reads while memory snapshots require exact length");
+		std::vector<std::uint8_t> corruptSave = validSave;
+		corruptSave.back() ^= 0x80;
+		Require(!IsStructurallyValidPortableSaveV4Bytes(corruptSave.data(), corruptSave.size(), 21, 1, 1),
+			"SAVE4 preflight rejects a payload whose checksum no longer matches");
+		std::vector<std::uint8_t> trailingSavePayload = validPayload;
+		trailingSavePayload.push_back(0xFF);
+		const std::vector<std::uint8_t> trailingSave = makeSaveV4(trailingSavePayload);
+		Require(!IsStructurallyValidPortableSaveV4Bytes(trailingSave.data(), trailingSave.size(), 21, 1, 1),
+			"SAVE4 preflight rejects validly checksummed but structurally incomplete chunks");
+		std::vector<std::uint8_t> wrongSaveVersion = validSave;
+		wrongSaveVersion[12] = 2;
+		Require(!IsStructurallyValidPortableSaveV4Bytes(wrongSaveVersion.data(), wrongSaveVersion.size(), 21, 1, 1),
+			"SAVE4 preflight rejects unsupported outer schema versions");
 	}
 
 	void TestGardenSnapshotProtocol()

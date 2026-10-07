@@ -7,9 +7,11 @@
 #define PVZ_PORTABLE_SAVE_VALIDATION_H
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
+#include <iterator>
 #include <vector>
 
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_ARRAY_CAPACITY = 65536;
@@ -247,6 +249,55 @@ inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t
 			requiredChunkSeen = true;
 	}
 	return requiredChunkSeen;
+}
+
+inline constexpr auto PORTABLE_SAVE_CRC32_TABLE = []
+{
+	std::array<std::uint32_t, 256> table{};
+	for (std::uint32_t index = 0; index < table.size(); ++index)
+	{
+		std::uint32_t value = index;
+		for (unsigned int bit = 0; bit < 8; ++bit)
+			value = (value >> 1) ^ (0xEDB88320U & (0U - (value & 1U)));
+		table[index] = value;
+	}
+	return table;
+}();
+
+inline std::uint32_t CalculatePortableSaveCrc32(const std::uint8_t* bytes,
+	std::size_t size) noexcept
+{
+	std::uint32_t crc = 0xFFFFFFFFU;
+	for (std::size_t index = 0; index < size; ++index)
+		crc = (crc >> 8) ^ PORTABLE_SAVE_CRC32_TABLE[(crc ^ bytes[index]) & 0xFFU];
+	return ~crc;
+}
+
+inline bool IsStructurallyValidPortableSaveV4Bytes(const std::uint8_t* bytes,
+	std::size_t size, std::uint32_t highestKnownChunk, std::uint32_t requiredChunk,
+	std::uint32_t expectedChunkVersion, bool requireExactSize = true) noexcept
+{
+	constexpr std::size_t headerSize = 24;
+	constexpr std::uint8_t magic[12] = {'P', 'V', 'Z', 'P', '_', 'S', 'A', 'V', 'E', '4', 0, 0};
+	if (!bytes || size < headerSize || size - headerSize > MAX_PORTABLE_SAVE_PAYLOAD_BYTES
+		|| !std::equal(std::begin(magic), std::end(magic), bytes))
+		return false;
+	auto readU32 = [bytes](std::size_t offset) noexcept
+	{
+		return static_cast<std::uint32_t>(bytes[offset])
+			| (static_cast<std::uint32_t>(bytes[offset + 1]) << 8)
+			| (static_cast<std::uint32_t>(bytes[offset + 2]) << 16)
+			| (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+	};
+	const std::uint32_t payloadSize = readU32(16);
+	if (readU32(12) != 1 || payloadSize > size - headerSize
+		|| (requireExactSize && payloadSize != size - headerSize)
+		|| !IsValidPortableSavePayloadSize(payloadSize))
+		return false;
+	const std::uint8_t* payload = bytes + headerSize;
+	return CalculatePortableSaveCrc32(payload, payloadSize) == readU32(20)
+		&& ValidatePortableSavePayload(payload, payloadSize, highestKnownChunk,
+			requiredChunk, expectedChunkVersion);
 }
 
 #endif
