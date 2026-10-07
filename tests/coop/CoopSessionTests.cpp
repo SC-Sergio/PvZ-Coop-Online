@@ -91,6 +91,15 @@ namespace
 			&& IsValidPortableSaveReference(7, false, [](std::uint32_t id) { return id == 7; })
 			&& !IsValidPortableSaveReference(8, false, [](std::uint32_t id) { return id == 7; }),
 			"portable save references enforce nullability and resolver membership");
+		int aTransactionalValue = 3;
+		Require(!ApplyPortableSaveWithRollback([&]() { aTransactionalValue = 9; return false; },
+			[&]() { aTransactionalValue = 3; })
+			&& aTransactionalValue == 3,
+			"portable save rollback runs after a rejected apply");
+		Require(ApplyPortableSaveWithRollback([&]() { aTransactionalValue = 7; return true; },
+			[&]() { aTransactionalValue = 3; })
+			&& aTransactionalValue == 7,
+			"portable save rollback is skipped after a successful apply");
 		Require(IsValidPortableSaveResourceId(0, 10, 10)
 			&& IsValidPortableSaveResourceId(9, 10, 10)
 			&& IsValidPortableSaveResourceId(10, 10, 10)

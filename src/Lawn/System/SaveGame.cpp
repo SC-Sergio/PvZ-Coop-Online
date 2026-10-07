@@ -3088,15 +3088,18 @@ static bool LawnLoadGameV4FromBytes(Board* theBoard,
 	if (!IsStructurallyValidV4Bytes(theBytes, theRequireExactSize))
 		return false;
 
+	const GameScenes anOriginalScene = theBoard->mApp->mGameScene;
 	std::vector<unsigned char> aOriginalBoard;
 	if (!LawnSerializeGameV4(theBoard, aOriginalBoard))
 		return false;
-	if (LawnLoadGameV4FromBytesImpl(theBoard, theBytes, theRequireExactSize))
-		return true;
-
-	// Restore the known-good state after any semantic or cross-reference failure.
-	LawnLoadGameV4FromBytesImpl(theBoard, aOriginalBoard, true);
-	return false;
+	return ApplyPortableSaveWithRollback(
+		[&]() { return LawnLoadGameV4FromBytesImpl(theBoard, theBytes, theRequireExactSize); },
+		[&]()
+		{
+			// Restore the known-good state after any semantic or cross-reference failure.
+			LawnLoadGameV4FromBytesImpl(theBoard, aOriginalBoard, true);
+			theBoard->mApp->mGameScene = anOriginalScene;
+		});
 }
 
 bool LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes)

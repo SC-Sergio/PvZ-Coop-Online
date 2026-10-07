@@ -34,6 +34,15 @@ inline bool IsValidPortableSaveReference(std::uint32_t id, bool allowNull,
 	return id == 0 ? allowNull : isValidId(id);
 }
 
+template <typename ApplyFn, typename RestoreFn>
+inline bool ApplyPortableSaveWithRollback(ApplyFn apply, RestoreFn restore)
+{
+	if (apply())
+		return true;
+	restore();
+	return false;
+}
+
 inline bool IsValidPortableSaveArrayHeader(std::uint32_t freeListHead,
 	std::uint32_t maxUsedCount, std::uint32_t size, std::uint32_t nextKey,
 	std::uint32_t maxSize, std::uint32_t allocatedMaxSize) noexcept
