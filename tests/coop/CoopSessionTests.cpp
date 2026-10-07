@@ -599,6 +599,35 @@ namespace
 		Require(sessionReceiver.HandlePacket(*receiverClient, {81, unknownGardenFrame}) == Coop::SnapshotReceiveResult::REJECTED,
 			"session receiver still rejects gardens outside the replicated roster");
 		Require(receiverHost->Receive().has_value(), "session receiver acknowledges the authorized teammate snapshot frame");
+		Coop::LocalTransportHub batchHub;
+		auto batchHost = batchHub.CreateTransport(91);
+		auto batchClient = batchHub.CreateTransport(92);
+		Coop::GardenSnapshotReceiver batchReceiver;
+		Require(batchHost && batchClient && batchReceiver.Configure(91, 92, expectedGardens),
+			"multi-garden receiver configures for ordered batch delivery");
+		for (std::size_t gardenIndex = 0; gardenIndex < expectedGardens.size(); ++gardenIndex)
+		{
+			const auto gardenFrames = Coop::BuildGardenSnapshotFrames(100 + gardenIndex,
+				expectedGardens[gardenIndex], 987654, source);
+			Require(gardenFrames.has_value(), "each garden produces a bounded snapshot transfer");
+			for (std::size_t frameIndex = 0; frameIndex < gardenFrames->size(); ++frameIndex)
+			{
+				Require(batchHost->SendTo(92, (*gardenFrames)[frameIndex]), "host sends next garden snapshot frame");
+				auto packet = batchClient->Receive();
+				Require(packet.has_value(), "rejoining peer receives ordered garden snapshot frame");
+				const auto receive = batchReceiver.HandlePacket(*batchClient, *packet);
+				const auto ack = batchHost->Receive();
+				Require(receive != Coop::SnapshotReceiveResult::REJECTED && ack.has_value(),
+					"multi-garden receiver assembles and acknowledges every bounded frame");
+				if (frameIndex + 1 == gardenFrames->size())
+				{
+					const auto restored = batchReceiver.TakeCompletedSnapshot();
+					Require(receive == Coop::SnapshotReceiveResult::COMPLETE && restored
+						&& restored->gardenId == expectedGardens[gardenIndex] && restored->bytes == source,
+						"each ordered transfer completes independently for its garden");
+				}
+			}
+		}
 		for (std::size_t index = 0; index + 1 < frames->size(); ++index)
 		{
 			Require(receiverHost->SendTo(82, (*frames)[index]), "test delivers each non-final snapshot frame");
