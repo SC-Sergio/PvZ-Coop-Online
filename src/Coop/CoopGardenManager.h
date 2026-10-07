@@ -81,10 +81,10 @@ namespace Coop
 			GardenId id;
 			PlayerId owner;
 			Board* board;
-			std::unique_ptr<EffectSystem> effectSystem;
-			std::unique_ptr<PoolEffect> poolEffect;
-			std::unique_ptr<Sexy::MTRand> randomGenerator;
-			std::unique_ptr<PlayerInfo> playerInfo;
+			std::shared_ptr<EffectSystem> effectSystem;
+			std::shared_ptr<PoolEffect> poolEffect;
+			std::shared_ptr<Sexy::MTRand> randomGenerator;
+			std::shared_ptr<PlayerInfo> playerInfo;
 		};
 
 		LawnApp* mApp;

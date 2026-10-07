@@ -23,6 +23,7 @@
 #define __BOARD_H__
 
 #include <cstdint>
+#include <memory>
 #include <span>
 
 #include "../ConstEnums.h"
@@ -171,11 +172,15 @@ public:
 	BoardResult						mGardenBoardResult;
 	bool							mGardenSawYeti;
 	PlayerInfo*						mGardenPlayerInfo;
+	std::shared_ptr<PlayerInfo>		mGardenPlayerInfoOwner;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;
+	std::shared_ptr<EffectSystem>		mGardenEffectSystemOwner;
 	PoolEffect*					mGardenPoolEffect;
+	std::shared_ptr<PoolEffect>		mGardenPoolEffectOwner;
 	Sexy::MTRand*					mGardenRandomGenerator;
+	std::shared_ptr<Sexy::MTRand>	mGardenRandomGeneratorOwner;
 	DataArray<Zombie>				mZombies;
 	DataArray<Plant>				mPlants;
 	DataArray<Projectile>			mProjectiles;

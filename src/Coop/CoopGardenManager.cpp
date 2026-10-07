@@ -62,11 +62,11 @@ namespace Coop
 		{
 			const std::uint32_t gardenSeed = session.GetRandomSeed()
 				^ (garden.id * 0x9e3779b9U) ^ (garden.owner * 0x85ebca6bU);
-			std::unique_ptr<Sexy::MTRand> randomGenerator = std::make_unique<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
-			std::unique_ptr<PoolEffect> poolEffect = std::make_unique<PoolEffect>();
+			std::shared_ptr<Sexy::MTRand> randomGenerator = std::make_shared<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
+			std::shared_ptr<PoolEffect> poolEffect = std::make_shared<PoolEffect>();
 			poolEffect->PoolEffectInitialize();
-			std::unique_ptr<PlayerInfo> playerInfo = std::make_unique<PlayerInfo>(*mApp->mPlayerInfo);
-			std::unique_ptr<EffectSystem> effectSystem = std::make_unique<EffectSystem>();
+			std::shared_ptr<PlayerInfo> playerInfo = std::make_shared<PlayerInfo>(*mApp->mPlayerInfo);
+			std::shared_ptr<EffectSystem> effectSystem = std::make_shared<EffectSystem>();
 			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
 			gEffectSystem = nullptr;
 			effectSystem->EffectSystemInitialize();
@@ -87,9 +87,13 @@ namespace Coop
 			mApp->mPlayerInfo = previousPlayerInfo;
 			gEffectSystem = previousGlobalEffectSystem;
 			board->mGardenEffectSystem = effectSystem.get();
+			board->mGardenEffectSystemOwner = effectSystem;
 			board->mGardenPoolEffect = poolEffect.get();
+			board->mGardenPoolEffectOwner = poolEffect;
 			board->mGardenRandomGenerator = randomGenerator.get();
+			board->mGardenRandomGeneratorOwner = randomGenerator;
 			board->mGardenPlayerInfo = playerInfo.get();
+			board->mGardenPlayerInfoOwner = playerInfo;
 			board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
 			board->EnableGardenStateIsolation(true);
 			board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
