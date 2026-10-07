@@ -1844,6 +1844,20 @@ namespace
 		Require(accepted == 712 && host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
 			"lobby admits the peer after its fragmented identity handshake completes");
 		closesocket(socket);
+
+		const SOCKET silentSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		Require(silentSocket != INVALID_SOCKET
+			&& connect(silentSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
+			"silent-handshake client connects to the lobby listener");
+		Require(send(silentSocket, reinterpret_cast<const char*>(partialHello.data()),
+			static_cast<int>(partialHello.size()), 0) == static_cast<int>(partialHello.size()),
+			"silent-handshake client sends a bounded partial hello");
+		Require(!host->AcceptNextPeer(0), "incomplete reconnecting handshake stays unadmitted");
+		std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+		Require(!host->AcceptNextPeer(0)
+			&& host->GetConnectedPeerIds() == std::vector<Coop::TransportPlayerId>{712},
+			"expired partial handshake is closed without disturbing an active peer");
+		closesocket(silentSocket);
 		host->Close();
 	}
 #endif
