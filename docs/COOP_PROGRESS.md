@@ -313,3 +313,10 @@
 - **Verification:** MSVC Debug application and test builds succeeded with WebRTC and without it. CTest passed 2/2 without WebRTC and 4/4 with WebRTC; the 2/3/4-player signaling process test passed five consecutive repetitions; signaling Node tests passed 8/8; `git diff --check` passed.
 - **Limit:** validation is local and does not prove malicious-service resistance beyond these bounds, public WSS/TURN deployment, cross-network ICE traversal, or initialized-Board matches.
 - **Next:** continue closing reconnect/synchronization failures, then validate restore behavior with legal assets and pursue distinct-network Internet evidence.
+
+### Checkpoint: resynchronize clients that fall behind the host clock
+
+- **Change:** `INetworkTransport` now reports whether it can resume an authenticated session; the WebRTC signaling transport advertises that capability only for guests holding room and resume credentials. Clients disconnect on stale host ticks. A resumable WebRTC client more than 300 host ticks behind closes its host peer link and enters the established same-ID snapshot recovery flow; transports without resume support continue catching up without a forced disconnect.
+- **Verification:** both MSVC Debug application/test configurations built; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. The signaling integration also passed five consecutive repetitions with host capability absent and authenticated guest resume capability present. The unit clock test covers equality at 300 ticks and recovery at 301; `git diff --check` passed.
+- **Limit:** the lag threshold and capability routing are protocol/unit-level; no initialized Board was stalled for 300 frames, and reconnect/restore still lacks asset-backed runtime evidence.
+- **Next:** build and run both configurations, test the threshold and signaling reconnect path, then pursue initialized-Board and distinct-network validation.

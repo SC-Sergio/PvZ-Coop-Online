@@ -44,6 +44,7 @@ namespace Coop
 		bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) override;
 		std::optional<TransportPacket> Receive() override;
 		bool DisconnectPeer(TransportPlayerId peerId) noexcept override;
+		bool CanResumeSession() const noexcept override;
 		void Close() noexcept override;
 
 		std::string GetRoomCode() const;

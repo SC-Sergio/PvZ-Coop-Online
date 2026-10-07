@@ -557,7 +557,8 @@ namespace Coop
 				mTransport->DisconnectPeer(packet.senderId);
 				return true;
 			}
-			mAuthoritativeSimulationClock.Observe(tick->tick);
+			if (!mAuthoritativeSimulationClock.Observe(tick->tick))
+				mTransport->DisconnectPeer(packet.senderId);
 			return true;
 		}
 		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZS", 4) == 0)
@@ -877,8 +878,17 @@ namespace Coop
 		}
 		if (!isHost)
 		{
-			if (mSession->GetGardens().empty()
-				|| !mAuthoritativeSimulationClock.CanAdvance(mSession->GetGardens().front().simulationTicks))
+			if (mSession->GetGardens().empty())
+				return false;
+			const std::uint64_t localTick = mSession->GetGardens().front().simulationTicks;
+			if (mTransport && mTransport->CanResumeSession()
+				&& mAuthoritativeSimulationClock.NeedsResynchronization(localTick))
+			{
+				SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+				mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
+				return false;
+			}
+			if (!mAuthoritativeSimulationClock.CanAdvance(localTick))
 				return false;
 		}
 		if (!mSession->AdvanceSimulationTick())

@@ -139,6 +139,8 @@ namespace
 			auto hostTransport = Coop::WebRtcSignalingTransport::CreateHost(hostId, signalingUrl, configuration, roomCode, &error);
 			if (!hostTransport)
 				throw std::runtime_error("host room creation failed: " + error);
+			if (hostTransport->CanResumeSession())
+				throw std::runtime_error("host transport must not claim guest same-session resume capability");
 			auto host = Coop::CoopLobbyController::CreateHost(std::move(hostTransport), "Host");
 			if (!host)
 				throw std::runtime_error("could not create the host lobby controller");
@@ -152,6 +154,8 @@ namespace
 					configuration, &error, 20s, &resumeToken);
 				if (!transport)
 					throw std::runtime_error("guest room join failed: " + error);
+				if (!transport->CanResumeSession())
+					throw std::runtime_error("guest transport did not expose its authenticated resume capability");
 				if (resumeToken.empty() || resumeToken != transport->GetResumeToken())
 					throw std::runtime_error("guest did not receive its resume token");
 				resumeTokens.push_back(std::move(resumeToken));

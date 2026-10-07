@@ -40,6 +40,8 @@ namespace Coop
 		virtual bool SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) = 0;
 		virtual std::optional<TransportPacket> Receive() = 0;
 		virtual bool DisconnectPeer(TransportPlayerId peerId) noexcept = 0;
+		// True only when this adapter retains authenticated credentials for same-session recovery.
+		virtual bool CanResumeSession() const noexcept { return false; }
 		virtual void Close() noexcept = 0;
 	};
 

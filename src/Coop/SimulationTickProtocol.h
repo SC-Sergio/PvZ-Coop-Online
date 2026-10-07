@@ -16,6 +16,7 @@ namespace Coop
 {
 	constexpr std::size_t SIMULATION_TICK_FRAME_BYTES = 16;
 	constexpr std::uint8_t SIMULATION_TICK_PROTOCOL_VERSION = 1;
+	constexpr std::uint64_t AUTHORITATIVE_TICK_RESYNC_LAG = 300;
 
 	struct SimulationTickFrame
 	{
@@ -62,6 +63,10 @@ namespace Coop
 		}
 
 		bool CanAdvance(std::uint64_t localTick) const noexcept { return localTick < mLatestTick; }
+		bool NeedsResynchronization(std::uint64_t localTick) const noexcept
+		{
+			return localTick < mLatestTick && mLatestTick - localTick > AUTHORITATIVE_TICK_RESYNC_LAG;
+		}
 		std::uint64_t GetLatestTick() const noexcept { return mLatestTick; }
 		void Reset() noexcept { mLatestTick = 0; }
 

@@ -845,6 +845,11 @@ namespace
 			"client advances only up to the latest host-authorized tick");
 		Require(clock.Observe(12) && !clock.Observe(11) && clock.GetLatestTick() == 12,
 			"duplicate host ticks are harmless and stale ticks cannot rewind the clock");
+		Require(clock.Observe(312)
+			&& !clock.NeedsResynchronization(312)
+			&& !clock.NeedsResynchronization(12)
+			&& clock.NeedsResynchronization(11),
+			"only clients more than the bounded recovery lag behind require snapshot resynchronization");
 	}
 
 	void TestCoopClassicLoadouts()

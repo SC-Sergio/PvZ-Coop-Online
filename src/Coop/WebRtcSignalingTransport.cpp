@@ -606,6 +606,12 @@ namespace Coop
 	bool WebRtcSignalingTransport::SendTo(TransportPlayerId recipientId, std::span<const std::uint8_t> bytes) { return mState->packets.SendTo(recipientId, bytes); }
 	std::optional<TransportPacket> WebRtcSignalingTransport::Receive() { return mState->packets.Receive(); }
 	bool WebRtcSignalingTransport::DisconnectPeer(TransportPlayerId peerId) noexcept { return mState->packets.DisconnectPeer(peerId); }
+	bool WebRtcSignalingTransport::CanResumeSession() const noexcept
+	{
+		std::lock_guard lock(mState->mutex);
+		return !mState->isHost && !mState->roomCode.empty() && !mState->resumeToken.empty()
+			&& !mState->signalingUrl.empty();
+	}
 	std::string WebRtcSignalingTransport::GetRoomCode() const { std::lock_guard lock(mState->mutex); return mState->roomCode; }
 	std::string WebRtcSignalingTransport::GetResumeToken() const { std::lock_guard lock(mState->mutex); return mState->resumeToken; }
 	std::string WebRtcSignalingTransport::GetSignalingUrl() const { std::lock_guard lock(mState->mutex); return mState->signalingUrl; }
