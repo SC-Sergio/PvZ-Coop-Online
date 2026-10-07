@@ -187,7 +187,7 @@ namespace Coop
 		{
 			return candidate.owner == ownerId;
 		});
-		if (!mStarted || garden == mGardens.end() || garden->completed)
+		if (!mStarted || garden == mGardens.end() || garden->completed || garden->defeated)
 			return false;
 		garden->defeated = true;
 		return true;
@@ -199,7 +199,7 @@ namespace Coop
 		{
 			return candidate.owner == ownerId;
 		});
-		if (!mStarted || garden == mGardens.end() || garden->defeated)
+		if (!mStarted || garden == mGardens.end() || garden->defeated || garden->completed)
 			return false;
 		garden->completed = true;
 		return true;

@@ -113,6 +113,7 @@ namespace
 		Require(victory.GetTeamResult() == Coop::TeamResult::PLAYING, "team begins in progress");
 		Require(!victory.MarkGardenCompleted(99), "foreign player cannot complete another garden");
 		Require(victory.MarkGardenCompleted(31), "owner can complete their garden");
+		Require(!victory.MarkGardenCompleted(31), "repeated completion does not create another state transition");
 		Require(victory.GetTeamResult() == Coop::TeamResult::PLAYING, "team continues while any active garden is incomplete");
 		Require(victory.MarkGardenCompleted(32), "last garden can complete");
 		Require(victory.GetTeamResult() == Coop::TeamResult::TEAM_VICTORY, "team wins after every active garden completes");
@@ -124,6 +125,7 @@ namespace
 		Require(defeat.SetReady(41, true) && defeat.SetReady(42, true), "defeat team readies");
 		Require(defeat.StartGame(41), "defeat match starts");
 		Require(defeat.MarkGardenDefeated(42), "owner defeat is recorded");
+		Require(!defeat.MarkGardenDefeated(42), "repeated defeat does not create another state transition");
 		Require(defeat.GetTeamResult() == Coop::TeamResult::TEAM_DEFEAT, "one defeated garden defeats the active team");
 		Require(!defeat.MarkGardenCompleted(42), "defeated garden cannot later complete");
 	}
@@ -493,6 +495,12 @@ namespace
 			&& mirror.GetSlots()[1].state == Coop::PlayerState::DISCONNECTED
 			&& mirror.GetSlots()[1].gardenId == session.GetSlots()[1].gardenId,
 			"client applies authoritative disconnect snapshot without deleting the garden");
+		Require(session.MarkGardenCompleted(82), "host records canonical garden completion");
+		Require(Coop::BroadcastSessionSnapshot(*host, session) == 2, "host sends canonical garden result to clients");
+		auto resultApplied = Coop::DrainReplicatedCommands(*guest, mirror, mirrorProcessor, mirrorExecutor);
+		Require(resultApplied.size() == 1 && resultApplied[0] == Coop::CommandRejection::NONE
+			&& mirror.GetGardens()[1].completed,
+			"client applies host-authoritative garden result snapshot");
 	}
 
 	void TestAuthoritativeCommandProcessor()

@@ -280,23 +280,27 @@ namespace Coop
 
 	void CoopGardenManager::SyncTeamResults()
 	{
-		if (!mSession)
+		if (!mSession || !mLocalPlayerId || !mSession->GetHostPlayerId()
+			|| *mLocalPlayerId != *mSession->GetHostPlayerId())
 			return;
 
+		bool changed = false;
 		for (const ManagedGarden& garden : mGardens)
 		{
 			switch (garden.board->GetGardenBoardResult())
 			{
 			case BoardResult::BOARDRESULT_WON:
-				mSession->MarkGardenCompleted(garden.owner);
+				changed = mSession->MarkGardenCompleted(garden.owner) || changed;
 				break;
 			case BoardResult::BOARDRESULT_LOST:
-				mSession->MarkGardenDefeated(garden.owner);
+				changed = mSession->MarkGardenDefeated(garden.owner) || changed;
 				break;
 			default:
 				break;
 			}
 		}
+		if (changed && mTransport)
+			BroadcastSessionSnapshot(*mTransport, *mSession);
 	}
 
 	void CoopGardenManager::ProcessDeleteQueues()
