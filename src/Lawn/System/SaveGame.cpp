@@ -2719,16 +2719,15 @@ static void FixBoardAfterLoad(Board* theBoard)
 	theBoard->mApp->mMusic->mMusicInterface = theBoard->mApp->mMusicInterface;
 }
 
-static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)
+static bool LawnLoadGameV4FromBytes(Board* theBoard,
+	std::span<const unsigned char> theBytes, bool theRequireExactSize)
 {
-	Buffer aBuffer;
-	if (!gSexyAppBase->ReadBufferFromFile(theFilePath, &aBuffer, false))
-		return false;
-	if (static_cast<uint32_t>(aBuffer.GetDataLen()) < sizeof(SaveFileHeaderV4))
+	if (theBytes.size() < sizeof(SaveFileHeaderV4)
+		|| theBytes.size() - sizeof(SaveFileHeaderV4) > std::numeric_limits<uint32_t>::max())
 		return false;
 
 	SaveFileHeaderV4 aHeader;
-	memcpy(&aHeader, aBuffer.GetDataPtr(), sizeof(aHeader));
+	memcpy(&aHeader, theBytes.data(), sizeof(aHeader));
 	aHeader.mVersion = FromLE32(aHeader.mVersion);
 	aHeader.mPayloadSize = FromLE32(aHeader.mPayloadSize);
 	aHeader.mPayloadCrc = FromLE32(aHeader.mPayloadCrc);
@@ -2736,11 +2735,13 @@ static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)
 		return false;
 	if (aHeader.mVersion != SAVE_FILE_V4_VERSION)
 		return false;
-	if (aHeader.mPayloadSize > static_cast<uint32_t>(aBuffer.GetDataLen()) - sizeof(SaveFileHeaderV4))
+	const size_t aAvailablePayloadSize = theBytes.size() - sizeof(SaveFileHeaderV4);
+	if (aHeader.mPayloadSize > aAvailablePayloadSize
+		|| (theRequireExactSize && aHeader.mPayloadSize != aAvailablePayloadSize))
 		return false;
 
-	unsigned char* aPayload = (unsigned char*)aBuffer.GetDataPtr() + sizeof(SaveFileHeaderV4);
-	uint32_t aCrc = crc32(0, (Bytef*)aPayload, aHeader.mPayloadSize);
+	const unsigned char* aPayload = theBytes.data() + sizeof(SaveFileHeaderV4);
+	uint32_t aCrc = crc32(0, reinterpret_cast<const Bytef*>(aPayload), aHeader.mPayloadSize);
 	if (aCrc != aHeader.mPayloadCrc)
 		return false;
 	if (!ValidateV4PayloadStructure(aPayload, aHeader.mPayloadSize))
@@ -2770,6 +2771,22 @@ static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)
 	FixBoardAfterLoad(theBoard);
 	theBoard->mApp->mGameScene = GameScenes::SCENE_PLAYING;
 	return true;
+}
+
+bool LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes)
+{
+	return LawnLoadGameV4FromBytes(theBoard, theBytes, true);
+}
+
+static bool LawnLoadGameV4(Board* theBoard, const std::string& theFilePath)
+{
+	Buffer aBuffer;
+	if (!gSexyAppBase->ReadBufferFromFile(theFilePath, &aBuffer, false)
+		|| aBuffer.GetDataLen() < 0)
+		return false;
+	return LawnLoadGameV4FromBytes(theBoard,
+		std::span<const unsigned char>(reinterpret_cast<const unsigned char*>(aBuffer.GetDataPtr()),
+			static_cast<size_t>(aBuffer.GetDataLen())), false);
 }
 
 // Legacy mid-level save support
@@ -3224,7 +3241,7 @@ bool LawnLoadGame(Board* theBoard, const std::string& theFilePath)
 	return true;
 }
 
-bool LawnSaveGame(Board* theBoard, const std::string& theFilePath)
+bool LawnSerializeGameV4(Board* theBoard, std::vector<unsigned char>& theBytes)
 {
 	std::vector<unsigned char> aPayload;
 	if (!WriteChunkV4(aPayload, SAVE4_CHUNK_BOARD_BASE, theBoard)) return false;
@@ -3248,6 +3265,9 @@ bool LawnSaveGame(Board* theBoard, const std::string& theFilePath)
 	if (!WriteChunkV4(aPayload, SAVE4_CHUNK_CHALLENGE, theBoard)) return false;
 	if (!WriteChunkV4(aPayload, SAVE4_CHUNK_MUSIC, theBoard)) return false;
 	if (!WriteChunkV4(aPayload, SAVE4_CHUNK_CUSTOMSURVIVALOPTION, theBoard)) return false;
+	if (aPayload.size() > std::numeric_limits<uint32_t>::max()
+		|| aPayload.size() > std::numeric_limits<size_t>::max() - sizeof(SaveFileHeaderV4))
+		return false;
 
 	SaveFileHeaderV4 aHeader{};
 	memcpy(aHeader.mMagic, SAVE_FILE_MAGIC_V4, sizeof(aHeader.mMagic));
@@ -3259,6 +3279,15 @@ bool LawnSaveGame(Board* theBoard, const std::string& theFilePath)
 	aOutBuffer.resize(sizeof(aHeader) + aPayload.size());
 	memcpy(aOutBuffer.data(), &aHeader, sizeof(aHeader));
 	memcpy(aOutBuffer.data() + sizeof(aHeader), aPayload.data(), aPayload.size());
+	theBytes.swap(aOutBuffer);
+	return true;
+}
 
-	return gSexyAppBase->WriteBytesToFile(theFilePath, aOutBuffer.data(), static_cast<int>(aOutBuffer.size()));
+bool LawnSaveGame(Board* theBoard, const std::string& theFilePath)
+{
+	std::vector<unsigned char> aSaveBytes;
+	if (!LawnSerializeGameV4(theBoard, aSaveBytes)
+		|| aSaveBytes.size() > static_cast<size_t>(std::numeric_limits<int>::max()))
+		return false;
+	return gSexyAppBase->WriteBytesToFile(theFilePath, aSaveBytes.data(), static_cast<int>(aSaveBytes.size()));
 }

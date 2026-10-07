@@ -22,11 +22,17 @@
 #ifndef __SAVEGAMECONTEXT_H__
 #define __SAVEGAMECONTEXT_H__
 
+#include <span>
 #include <string>
+#include <vector>
 
 class Board;
 
 bool				LawnLoadGame(Board* theBoard, const std::string& theFilePath);
 bool				LawnSaveGame(Board* theBoard, const std::string& theFilePath);
+bool				LawnSerializeGameV4(Board* theBoard, std::vector<unsigned char>& theBytes);
+// Structural validation is bounded, but a decode failure may still partially mutate the Board.
+// Do not use this entry point for untrusted network payloads until decode/apply is transactional.
+bool				LawnLoadGameV4FromMemory(Board* theBoard, std::span<const unsigned char> theBytes);
 
 #endif
