@@ -38,6 +38,25 @@ namespace Coop
 		if (previous != mLastSequenceByPlayer.end() && command.sequence <= previous->second)
 			return CommandRejection::INVALID_SEQUENCE;
 
+		// Charge every fresh command attempt, including malformed intent fields, so an
+		// authenticated peer cannot evade the budget by sending invalid command bodies.
+		auto& rate = mRateByPlayer[command.senderId];
+		if (!rate.initialized)
+		{
+			rate.updatedAt = now;
+			rate.initialized = true;
+		}
+		else if (now > rate.updatedAt)
+		{
+			const double elapsed = std::chrono::duration<double>(now - rate.updatedAt).count();
+			rate.tokens = std::min(COMMAND_RATE_BURST,
+				rate.tokens + elapsed * COMMAND_RATE_LIMIT_PER_SECOND);
+			rate.updatedAt = now;
+		}
+		if (rate.tokens < 1.0)
+			return CommandRejection::INVALID_RATE;
+		rate.tokens -= 1.0;
+
 		const auto validCoordinates = [&command]()
 		{
 			return command.x >= 0 && command.x < BOARD_COLUMNS && command.y >= 0 && command.y < BOARD_ROWS;
@@ -89,23 +108,6 @@ namespace Coop
 		default:
 			return CommandRejection::INVALID_COMMAND;
 		}
-
-		auto& rate = mRateByPlayer[command.senderId];
-		if (!rate.initialized)
-		{
-			rate.updatedAt = now;
-			rate.initialized = true;
-		}
-		else if (now > rate.updatedAt)
-		{
-			const double elapsed = std::chrono::duration<double>(now - rate.updatedAt).count();
-			rate.tokens = std::min(COMMAND_RATE_BURST,
-				rate.tokens + elapsed * COMMAND_RATE_LIMIT_PER_SECOND);
-			rate.updatedAt = now;
-		}
-		if (rate.tokens < 1.0)
-			return CommandRejection::INVALID_RATE;
-		rate.tokens -= 1.0;
 
 		mLastSequenceByPlayer[command.senderId] = command.sequence;
 		return CommandRejection::NONE;

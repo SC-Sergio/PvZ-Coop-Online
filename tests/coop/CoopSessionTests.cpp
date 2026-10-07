@@ -1062,6 +1062,20 @@ namespace
 		const auto refill = rateStart + std::chrono::milliseconds(50);
 		Require(rateValidator.Validate(session, rateCommand, refill) == Coop::CommandRejection::NONE,
 			"command rate limiter refills deterministically and does not consume rejected sequence");
+
+		Coop::PlayerCommandValidator malformedRateValidator;
+		auto malformedCommand = rateCommand;
+		malformedCommand.type = static_cast<Coop::CommandType>(255);
+		for (std::uint64_t sequence = 1; sequence <= static_cast<std::uint64_t>(Coop::COMMAND_RATE_BURST); ++sequence)
+		{
+			malformedCommand.sequence = sequence;
+			Require(malformedRateValidator.Validate(session, malformedCommand, rateStart) == Coop::CommandRejection::INVALID_COMMAND,
+				"malformed command body is rejected while consuming its attempt budget");
+		}
+		auto validAfterMalformed = rateCommand;
+		validAfterMalformed.sequence = 1;
+		Require(malformedRateValidator.Validate(session, validAfterMalformed, rateStart) == Coop::CommandRejection::INVALID_RATE,
+			"malformed command bodies cannot bypass the per-player attempt limit");
 	}
 
 	class RecordingExecutor final : public Coop::IPlayerCommandExecutor
