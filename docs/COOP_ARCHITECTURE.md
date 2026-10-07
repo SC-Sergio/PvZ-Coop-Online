@@ -62,7 +62,7 @@ Each SAVE4 attachment is limited to `MAX_EFFECTS_PER_ATTACHMENT` active entries,
 
 After all SAVE4 chunks are applied, optional plant, zombie, projectile, coin, GridItem, and cursor entity/effect references must be null or resolve in the loaded Board/effect holders. Projectile target resolution follows its plant/zombie discriminator. This guards strict engine getters and keeps corrupt cross-entity IDs from surviving post-load repair.
 
-Restored plant and zombie animation timing must have positive frame duration and count; projectile timing may be disabled only with a zero tick interval. Each product is bounded to one million ticks, preventing division by zero and signed frame-duration overflow in the next simulation update.
+Restored plant and zombie animation timing must have positive frame duration and count; projectile timing may be disabled only with a zero tick interval. Frame indexes must remain inside the entity's declared cycle, and counters must remain nonnegative and before its cycle end. Each product is bounded to one million ticks, preventing division by zero, out-of-range frame drawing, and signed frame-duration overflow in the next simulation update.
 
 Board-level ice particle IDs and each row's fwoosh reanimation IDs are also nullable references and must resolve against the app's active particle/reanimation holders before the snapshot is accepted.
 
