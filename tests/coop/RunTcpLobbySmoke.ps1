@@ -20,7 +20,7 @@ function Start-LobbyProcess([string]$Mode, [int]$Port, [int]$PlayerId, [int]$Pla
 	return $process
 }
 
-foreach ($guestCount in @(2, 3)) {
+foreach ($guestCount in @(1, 2, 3)) {
 	$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
 	$listener.Start()
 	$port = $listener.LocalEndpoint.Port
@@ -47,7 +47,9 @@ foreach ($guestCount in @(2, 3)) {
 
 		$hostOut = $hostProcess.StandardOutput.ReadToEnd()
 		$hostErr = $hostProcess.StandardError.ReadToEnd()
-		if ($hostProcess.ExitCode -ne 0 -or -not $hostOut.Contains('host-match-started')) {
+		$hostStarted = $hostOut.Contains('host-match-started')
+		$hostSynchronized = $hostOut.Contains("host-synced-commands=$guestCount")
+		if ($hostProcess.ExitCode -ne 0 -or -not $hostStarted -or -not $hostSynchronized) {
 			$guestDetails = @()
 			foreach ($guestProcess in $guestProcesses) {
 				$guestDetails += $guestProcess.StandardOutput.ReadToEnd()
@@ -58,11 +60,14 @@ foreach ($guestCount in @(2, 3)) {
 		foreach ($guestProcess in $guestProcesses) {
 			$guestOut = $guestProcess.StandardOutput.ReadToEnd()
 			$guestErr = $guestProcess.StandardError.ReadToEnd()
-			if ($guestProcess.ExitCode -ne 0 -or -not $guestOut.Contains('guest-match-started')) {
+			$guestStarted = $guestOut.Contains('guest-match-started')
+			$guestSynchronized = $guestOut.Contains("guest-synced-commands=$guestCount")
+			if ($guestProcess.ExitCode -ne 0 -or -not $guestStarted -or -not $guestSynchronized) {
 				throw "TCP lobby guest failed for $playerCount active players (exit=$($guestProcess.ExitCode)).`n$guestOut$guestErr"
 			}
 		}
 		Write-Output "TCP lobby passed with $playerCount separate player processes."
+		Write-Output "TCP authoritative command replication passed for $guestCount guest intents."
 	}
 	finally {
 		foreach ($process in @($guestProcesses) + @($hostProcess)) {

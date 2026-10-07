@@ -33,6 +33,13 @@
 - **Limit:** no remote workflow execution is available from the observed API state; no repository settings or upstream state were changed.
 - **Next:** keep local build/CTest as current verification while continuing the V1 implementation; revisit remote CI after GitHub registers the workflow.
 
+### Checkpoint: exercise authoritative commands across TCP processes
+
+- **Change:** expanded the Windows process harness beyond lobby start. Each of 1–3 guest processes sends a garden-owned PING intent; the host validates it through the production endpoint, sends the accepted 25-tick receipt and broadcasts the canonical command to other guests. Each guest validates all guest-origin commands, ownership bindings, sequence numbers, and execution ticks. The smoke script requires explicit host/client synchronization markers.
+- **Verification:** both MSVC Debug builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. Verbose TCP process tests passed for 2-, 3-, and 4-player rooms, carrying 1, 2, and 3 guest intents respectively; the complete process matrix then passed five consecutive repetitions in both build configurations.
+- **Limit:** loopback TCP and a recording executor only; no Board-backed action application, separate-machine LAN, or Internet evidence.
+- **Next:** retain this process coverage while continuing to address the runtime-only V1 gates and canonical-state recovery.
+
 ### Checkpoint: nonblocking TCP lobby handshake
 
 - **Change:** the lobby's `AcceptNextPeer(0)` path now accepts sockets and incrementally reads a bounded eight-byte identity handshake. Partial or silent handshakes expire after one second without blocking the game update loop; expired and invalid attempts release their pending-slot capacity. Completed peer IDs remain unique and capped at the three guest slots. The explicit timeout-based expected-peer API remains available for process tests.

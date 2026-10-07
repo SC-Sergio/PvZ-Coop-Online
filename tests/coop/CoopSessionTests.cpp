@@ -25,6 +25,7 @@
 #include <limits>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -2125,6 +2126,45 @@ int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playe
 			if (allGuestsReady && host->StartGame())
 			{
 				std::cout << "host-match-started" << std::endl;
+				Coop::AuthoritativeCommandProcessor processor;
+				RecordingExecutor executor;
+				std::size_t acceptedCommandCount = 0;
+				while (std::chrono::steady_clock::now() < deadline
+					&& acceptedCommandCount < playerCount - 1)
+				{
+					const auto results = Coop::DrainAuthoritativeCommands(*host->GetTransport(),
+						host->GetSession(), processor, executor,
+						[&](const Coop::PlayerCommand& command)
+						{
+							const auto garden = std::find_if(host->GetSession().GetGardens().begin(),
+								host->GetSession().GetGardens().end(), [&command](const Coop::GardenInstance& entry)
+								{ return entry.id == command.gardenId; });
+							if (garden == host->GetSession().GetGardens().end())
+								Require(false, "process host resolves each accepted command garden");
+							const std::uint64_t executeTick = garden->simulationTicks + Coop::COMMAND_EXECUTION_LEAD_TICKS;
+							const std::size_t expectedRecipients = playerCount - 2;
+							Require(Coop::BroadcastScheduledCommandToPeers(*host->GetTransport(), command,
+								executeTick, command.senderId) == expectedRecipients,
+								"process host broadcasts canonical commands to other guests");
+							++acceptedCommandCount;
+						},
+						[&](Coop::TransportPlayerId recipient, const Coop::CommandAuthorityResponse& response)
+						{
+							Coop::CommandAuthorityResponse scheduled = response;
+							if (scheduled.acceptedCommand)
+								scheduled.serverTick = Coop::COMMAND_EXECUTION_LEAD_TICKS;
+							const auto bytes = Coop::SerializeAuthorityResponse(scheduled);
+							Require(bytes && host->GetTransport()->SendTo(recipient, *bytes),
+								"process host returns an authoritative result to each command sender");
+						});
+					if (std::any_of(results.begin(), results.end(), [](Coop::CommandRejection result)
+						{ return result != Coop::CommandRejection::NONE; }))
+						return EXIT_FAILURE;
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				if (acceptedCommandCount != playerCount - 1 || executor.executions != static_cast<int>(playerCount - 1))
+					return EXIT_FAILURE;
+				std::cout << "host-synced-commands=" << acceptedCommandCount << std::endl;
 				std::this_thread::sleep_for(std::chrono::milliseconds(300));
 				return EXIT_SUCCESS;
 			}
@@ -2157,9 +2197,52 @@ int RunTcpLobbyProcess(const char* mode, const char* portText, const char* playe
 				const auto& slots = guest->GetSession().GetSlots();
 				const bool emptyRemainder = std::all_of(slots.begin() + playerCount, slots.end(),
 					[](const Coop::PlayerSlot& slot) { return slot.state == Coop::PlayerState::EMPTY; });
-				return guest->GetSession().GetGardenCount() == playerCount && emptyRemainder
-					&& settings.map == Coop::CoopMapId::POOL && settings.difficulty == Coop::CoopDifficulty::HARD
-					? EXIT_SUCCESS : EXIT_FAILURE;
+				if (guest->GetSession().GetGardenCount() != playerCount || !emptyRemainder
+					|| settings.map != Coop::CoopMapId::POOL || settings.difficulty != Coop::CoopDifficulty::HARD)
+					return EXIT_FAILURE;
+				const Coop::PlayerId localPlayerId = guest->GetLocalPlayerId();
+				const auto localSlot = std::find_if(slots.begin(), slots.end(), [localPlayerId](const Coop::PlayerSlot& slot)
+					{ return slot.playerId == localPlayerId && slot.gardenId.has_value(); });
+				if (localSlot == slots.end())
+					return EXIT_FAILURE;
+				Coop::PlayerCommand command;
+				command.senderId = localPlayerId;
+				command.gardenId = *localSlot->gardenId;
+				command.sequence = 1;
+				command.type = Coop::CommandType::PING;
+				command.value = static_cast<std::int32_t>(Coop::PingType::ALL_GOOD);
+				if (!Coop::SendCommandToHost(*guest->GetTransport(), 301, command))
+					return EXIT_FAILURE;
+				Coop::AuthoritativeCommandProcessor processor;
+				RecordingExecutor executor;
+				std::vector<Coop::PlayerCommand> canonicalCommands;
+				std::unordered_set<Coop::PlayerId> commandSenders;
+				while (std::chrono::steady_clock::now() < deadline
+					&& canonicalCommands.size() < playerCount - 1)
+				{
+					const auto results = Coop::DrainReplicatedCommands(*guest->GetTransport(),
+						guest->GetSession(), processor, executor, {},
+						[&](const Coop::PlayerCommand& acceptedCommand, std::uint64_t executeTick)
+						{
+							const auto owner = std::find_if(slots.begin(), slots.end(), [&acceptedCommand](const Coop::PlayerSlot& slot)
+								{ return slot.playerId == acceptedCommand.senderId && slot.gardenId == acceptedCommand.gardenId; });
+							Require(owner != slots.end() && acceptedCommand.type == Coop::CommandType::PING
+								&& acceptedCommand.sequence == 1 && executeTick == Coop::COMMAND_EXECUTION_LEAD_TICKS,
+								"process guest validates canonical command ownership, sequence, and execution tick");
+							commandSenders.insert(acceptedCommand.senderId);
+							canonicalCommands.push_back(acceptedCommand);
+						});
+					if (std::any_of(results.begin(), results.end(), [](Coop::CommandRejection result)
+						{ return result != Coop::CommandRejection::NONE; }))
+						return EXIT_FAILURE;
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				if (canonicalCommands.size() != playerCount - 1
+					|| commandSenders.size() != playerCount - 1
+					|| commandSenders.contains(301) || executor.executions != 0)
+					return EXIT_FAILURE;
+				std::cout << "guest-synced-commands=" << canonicalCommands.size() << std::endl;
+				return EXIT_SUCCESS;
 			}
 			if (guest->IsClosed())
 				return EXIT_FAILURE;
