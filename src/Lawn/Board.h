@@ -328,6 +328,7 @@ public:
 	void							StartLevel();
 	// Advances this garden's gameplay simulation without requiring it to be the viewed widget.
 	void							UpdateSimulation();
+	bool							CanApplyCooperativeCommand(const Coop::PlayerCommand& command);
 	bool							ApplyCooperativeCommand(const Coop::PlayerCommand& command);
 	void							EnableGardenStateIsolation(bool enabled);
 	bool							SetCoopZombiePointScalePermille(int scalePermille) noexcept;

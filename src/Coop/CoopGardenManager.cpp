@@ -757,6 +757,33 @@ namespace Coop
 			return false;
 		if (mQueueCommandExecution && !IsLocalOnlyCommand(command.type))
 		{
+			switch (command.type)
+			{
+			case CommandType::PLACE_PLANT:
+			case CommandType::REMOVE_PLANT:
+			case CommandType::COLLECT_SUN:
+			case CommandType::COLLECT_COIN:
+			case CommandType::SELECT_PLANT:
+			case CommandType::FIRE_COB_CANNON:
+				if (!source->board->CanApplyCooperativeCommand(command))
+					return false;
+				break;
+			case CommandType::SEND_RESOURCE:
+			{
+				const auto targetSlot = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(), [&command](const PlayerSlot& slot)
+					{ return slot.state == PlayerState::PLAYING && slot.playerId == command.targetPlayerId && slot.gardenId.has_value(); });
+				if (targetSlot == mSession->GetSlots().end())
+					return false;
+				const auto target = std::find_if(mGardens.begin(), mGardens.end(), [&targetSlot](const ManagedGarden& garden)
+					{ return garden.id == *targetSlot->gardenId; });
+				if (target == mGardens.end() || source->board->mSunMoney < static_cast<int>(command.amount)
+					|| target->board->mSunMoney > 90000 - static_cast<int>(command.amount))
+					return false;
+				break;
+			}
+			default:
+				break;
+			}
 			const auto executeTick = GetCommandExecutionTick(command.gardenId);
 			return executeTick && QueueAcceptedCommand(command, *executeTick);
 		}
@@ -786,6 +813,7 @@ namespace Coop
 		case CommandType::COLLECT_SUN:
 		case CommandType::COLLECT_COIN:
 		case CommandType::SELECT_PLANT:
+		case CommandType::FIRE_COB_CANNON:
 			return source->board->ApplyCooperativeCommand(command);
 		case CommandType::PING:
 		{

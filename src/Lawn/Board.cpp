@@ -6390,6 +6390,77 @@ void Board::UpdateSimulation()
 	}
 }
 
+bool Board::CanApplyCooperativeCommand(const Coop::PlayerCommand& command)
+{
+	ScopedGardenSimulationState aGardenState(this);
+	if (!mGardenStateIsolated || command.gardenId == 0 || mPaused
+		|| GetGardenGameScene() != GameScenes::SCENE_PLAYING || mSeedBank == nullptr
+		|| (!mApp->IsAdventureMode() && !mApp->IsSurvivalMode()))
+		return false;
+
+	switch (command.type)
+	{
+	case Coop::CommandType::PLACE_PLANT:
+	{
+		if (command.x < 0 || command.x >= MAX_GRID_SIZE_X || command.y < 0 || command.y >= MAX_GRID_SIZE_Y
+			|| command.value < 0 || command.value >= static_cast<std::int32_t>(SeedType::NUM_SEED_TYPES))
+			return false;
+		const SeedType seedType = static_cast<SeedType>(command.value);
+		SeedPacket* packet = nullptr;
+		const int packetCount = ClampInt(mSeedBank->mNumPackets, 0, SEEDBANK_MAX);
+		for (int i = 0; i < packetCount; ++i)
+		{
+			if (mSeedBank->mSeedPackets[i].mPacketType == seedType
+				|| (mSeedBank->mSeedPackets[i].mPacketType == SeedType::SEED_IMITATER
+					&& mSeedBank->mSeedPackets[i].mImitaterType == seedType))
+			{
+				packet = &mSeedBank->mSeedPackets[i];
+				break;
+			}
+		}
+		if (packet == nullptr || !packet->CanPickUp() || !PlantingRequirementsMet(seedType)
+			|| CanPlantAt(command.x, command.y, seedType) != PlantingReason::PLANTING_OK)
+			return false;
+		const int pixelX = GridToPixelX(command.x, command.y) + 40;
+		const int pixelY = GridToPixelY(command.x, command.y) + (StageHasPool() || StageHasRoof() ? 42 : 50);
+		if (PlantingPixelToGridX(pixelX, pixelY, seedType) != command.x
+			|| PlantingPixelToGridY(pixelX, pixelY, seedType) != command.y)
+			return false;
+		return mApp->mEasyPlantingCheat || HasConveyorBeltSeedBank() || mApp->IsSlotMachineLevel()
+			|| CanTakeSunMoney(GetCurrentPlantCost(packet->mPacketType, packet->mImitaterType));
+	}
+	case Coop::CommandType::REMOVE_PLANT:
+	{
+		if (command.x < 0 || command.x >= MAX_GRID_SIZE_X || command.y < 0 || command.y >= MAX_GRID_SIZE_Y)
+			return false;
+		const int pixelX = GridToPixelX(command.x, command.y) + 40;
+		const int pixelY = GridToPixelY(command.x, command.y) + (StageHasPool() || StageHasRoof() ? 42 : 50);
+		Plant* plant = ToolHitTest(pixelX, pixelY);
+		return plant != nullptr && !plant->mMindControlled;
+	}
+	case Coop::CommandType::COLLECT_SUN:
+	case Coop::CommandType::COLLECT_COIN:
+	{
+		Coin* coin = mCoins.DataArrayTryToGet(static_cast<CoinID>(command.entityId));
+		const bool isSunCommand = command.type == Coop::CommandType::COLLECT_SUN;
+		return coin != nullptr && coin->IsSun() == isSunCommand && !coin->mDead && !coin->mIsBeingCollected;
+	}
+	case Coop::CommandType::FIRE_COB_CANNON:
+	{
+		Plant* cannon = mPlants.DataArrayTryToGet(static_cast<PlantID>(command.entityId));
+		return cannon != nullptr && cannon->mSeedType == SeedType::SEED_COBCANNON
+			&& !cannon->mMindControlled && cannon->mState == PlantState::STATE_COBCANNON_READY
+			&& command.x >= 0 && command.x <= Coop::MAX_COMMAND_PIXEL_COORDINATE
+			&& command.y >= 80 && command.y <= Coop::MAX_COMMAND_PIXEL_COORDINATE;
+	}
+	case Coop::CommandType::SELECT_PLANT:
+		return command.value >= 0 && command.value < mSeedBank->mNumPackets && command.value < SEEDBANK_MAX
+			&& mSeedBank->mSeedPackets[command.value].CanPickUp();
+	default:
+		return false;
+	}
+}
+
 bool Board::ApplyCooperativeCommand(const Coop::PlayerCommand& command)
 {
 	ScopedGardenSimulationState aGardenState(this);
