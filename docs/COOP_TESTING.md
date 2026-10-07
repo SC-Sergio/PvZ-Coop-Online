@@ -104,3 +104,5 @@ Portable-save world-coordinate helpers accept ±10,000 pixels, reject non-finite
 Garden-scoped profile, effect, pool, and RNG objects are shared-owned by both the manager and Board. This keeps them alive through `SafeDeleteWidget`'s deferred Board destructor after manager teardown. Both MSVC Debug builds and CTest suites pass with this ownership path; no engine test currently exercises deferred teardown with initialized garden resources.
 
 Cooperative determinism also disables the legacy Board typing-code path and per-Board speed button. Both standard and WebRTC MSVC Debug builds compile the guard and pass CTest (2/2 and 4/4). There is no initialized-Board input test in the current asset-free environment.
+
+App-level pause hooks now remain inert during co-op, since per-client modal pause would freeze only one local Board while the host continued. Standard and WebRTC Debug builds and suites pass (2/2 and 4/4); interactive focus/modal behavior remains unverified without game assets.

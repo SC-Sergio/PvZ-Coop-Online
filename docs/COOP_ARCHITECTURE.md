@@ -90,3 +90,5 @@ Before SAVE4 reads variable arrays or allocates each seed-packet field blob, it 
 Each isolated Board retains shared ownership of its temporary profile, effect system, pool effect, and RNG until its destructor completes. `SafeDeleteWidget` defers Board destruction, so clearing the garden manager's collection must not invalidate pointers consumed by the Board's scoped destructor.
 
 Cooperative Boards ignore the legacy typing-code path, which can toggle gameplay cheats, alter application-wide slow/fast motion, or locally skip a wave. Their per-board speed control is hidden and disabled because independent local time scaling would diverge garden simulation. Ordinary keyboard input still follows the regular Board input path.
+
+Pause state is not synchronized in the current protocol. While a cooperative manager is active, `CanPauseNow`, `DoPauseDialog`, `ModalOpen`, and `ModalClose` therefore do not pause or resume only the locally viewed Board. This keeps the other clients' authoritative simulation from advancing against a locally frozen garden. Non-pause modal screens can still open while the simulation continues.
