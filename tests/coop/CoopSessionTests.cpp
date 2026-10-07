@@ -1448,6 +1448,46 @@ namespace
 				&& response->acceptedCommand && response->acceptedCommand->senderId == 72,
 				"scheduled replication binds host, recipient, original sender, command, and authoritative tick");
 		}
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(player2->SendTo(71, *bytes), "fill the receiver queue before reliable-send retry test");
+		Coop::ReliableTransportSendQueue reliableQueue;
+		const std::array<std::uint8_t, 1> reliableA{0xA1};
+		const std::array<std::uint8_t, 1> reliableB{0xB2};
+		const std::array<std::uint8_t, 1> reliableC{0xC3};
+		Require(reliableQueue.SendOrQueue(*player2, 71, reliableA)
+			&& reliableQueue.SendOrQueue(*player2, 71, reliableB)
+			&& reliableQueue.SendOrQueue(*player2, 71, reliableC)
+			&& reliableQueue.GetPendingCount(71) == 3,
+			"reliable queue retains ordered messages under transport backpressure");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(host->Receive().has_value(), "drain filler packets to release local transport backpressure");
+		reliableQueue.Pump(*player2);
+		for (std::uint8_t expected : {std::uint8_t{0xA1}, std::uint8_t{0xB2}, std::uint8_t{0xC3}})
+		{
+			const auto packet = host->Receive();
+			Require(packet && packet->senderId == 72 && packet->bytes == std::vector<std::uint8_t>{expected},
+				"reliable queue retries in FIFO order after backpressure clears");
+		}
+		Require(reliableQueue.GetPendingCount(71) == 0, "reliable queue clears after successful retry");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(player2->SendTo(71, *bytes), "refill receiver queue before reliable queue cap assertion");
+		const std::vector<std::uint8_t> largeReliable(Coop::MAX_TRANSPORT_MESSAGE_BYTES, 0x5A);
+		for (std::size_t i = 0; i < Coop::MAX_RELIABLE_QUEUE_BYTES_PER_PEER / largeReliable.size(); ++i)
+			Require(reliableQueue.SendOrQueue(*player2, 71, largeReliable),
+				"reliable queue accepts packets up to its per-peer byte cap");
+		Require(!reliableQueue.SendOrQueue(*player2, 71, largeReliable)
+			&& reliableQueue.GetPendingCount(71) == 8,
+			"reliable queue rejects overflow instead of growing beyond its per-peer byte cap");
+		for (std::size_t i = 0; i < Coop::MAX_TRANSPORT_QUEUE_PACKETS; ++i)
+			Require(host->Receive().has_value(), "drain refill packets before retrying byte-capped queue");
+		reliableQueue.Pump(*player2);
+		for (std::size_t i = 0; i < 8; ++i)
+		{
+			const auto packet = host->Receive();
+			Require(packet && packet->bytes == largeReliable,
+				"byte-capped reliable queue retries each retained packet");
+		}
+		Require(reliableQueue.GetPendingCount(71) == 0, "byte-capped queue drains to empty");
 		Require(player4->SendTo(71, *bytes), "peer has an unprocessed packet before disconnection");
 		Require(host->DisconnectPeer(74), "host can disconnect a specific local peer");
 		const auto player4Peers = player4->GetConnectedPeerIds();

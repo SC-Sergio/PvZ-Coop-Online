@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <atomic>
+#include <algorithm>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -21,6 +23,7 @@ namespace Coop
 	using TransportPlayerId = std::uint32_t;
 	constexpr std::size_t MAX_TRANSPORT_MESSAGE_BYTES = 64 * 1024;
 	constexpr std::size_t MAX_TRANSPORT_QUEUE_PACKETS = 256;
+	constexpr std::size_t MAX_RELIABLE_QUEUE_BYTES_PER_PEER = 512 * 1024;
 
 	struct TransportPacket
 	{
@@ -38,6 +41,75 @@ namespace Coop
 		virtual std::optional<TransportPacket> Receive() = 0;
 		virtual bool DisconnectPeer(TransportPlayerId peerId) noexcept = 0;
 		virtual void Close() noexcept = 0;
+	};
+
+	// Preserves per-peer order when a transport applies local queue backpressure.
+	// Call Pump regularly; disconnected peers have their pending messages discarded.
+	class ReliableTransportSendQueue
+	{
+	public:
+		bool SendOrQueue(INetworkTransport& transport, TransportPlayerId recipientId,
+			std::span<const std::uint8_t> bytes)
+		{
+			if (recipientId == 0 || recipientId == transport.GetLocalPlayerId()
+				|| bytes.empty() || bytes.size() > MAX_TRANSPORT_MESSAGE_BYTES)
+				return false;
+			const std::vector<TransportPlayerId> connected = transport.GetConnectedPeerIds();
+			if (std::find(connected.begin(), connected.end(), recipientId) == connected.end())
+				return false;
+			auto pending = mPendingByPeer.find(recipientId);
+			if (pending == mPendingByPeer.end() && transport.SendTo(recipientId, bytes))
+				return true;
+			if (pending == mPendingByPeer.end())
+				pending = mPendingByPeer.try_emplace(recipientId).first;
+			if (pending->second.packets.size() >= MAX_TRANSPORT_QUEUE_PACKETS
+				|| bytes.size() > MAX_RELIABLE_QUEUE_BYTES_PER_PEER - pending->second.pendingBytes)
+				return false;
+			pending->second.packets.emplace_back(bytes.begin(), bytes.end());
+			pending->second.pendingBytes += bytes.size();
+			return true;
+		}
+
+		void Pump(INetworkTransport& transport)
+		{
+			const std::vector<TransportPlayerId> connected = transport.GetConnectedPeerIds();
+			for (auto iterator = mPendingByPeer.begin(); iterator != mPendingByPeer.end();)
+			{
+				if (std::find(connected.begin(), connected.end(), iterator->first) == connected.end())
+				{
+					iterator = mPendingByPeer.erase(iterator);
+					continue;
+				}
+				while (!iterator->second.packets.empty())
+				{
+					const std::vector<std::uint8_t>& bytes = iterator->second.packets.front();
+					if (!transport.SendTo(iterator->first, bytes))
+						break;
+					iterator->second.pendingBytes -= bytes.size();
+					iterator->second.packets.pop_front();
+				}
+				if (iterator->second.packets.empty())
+					iterator = mPendingByPeer.erase(iterator);
+				else
+					++iterator;
+			}
+		}
+
+		std::size_t GetPendingCount(TransportPlayerId peerId) const noexcept
+		{
+			const auto pending = mPendingByPeer.find(peerId);
+			return pending == mPendingByPeer.end() ? 0 : pending->second.packets.size();
+		}
+
+		void Clear() noexcept { mPendingByPeer.clear(); }
+
+	private:
+		struct PendingPeer
+		{
+			std::deque<std::vector<std::uint8_t>> packets;
+			std::size_t pendingBytes = 0;
+		};
+		std::unordered_map<TransportPlayerId, PendingPeer> mPendingByPeer;
 	};
 
 	class LocalTransportHub;

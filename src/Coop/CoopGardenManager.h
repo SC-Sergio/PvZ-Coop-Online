@@ -30,6 +30,8 @@ namespace Sexy { class MTRand; }
 
 namespace Coop
 {
+	struct CommandAuthorityResponse;
+
 	enum class GardenRecoveryStatus
 	{
 		NONE,
@@ -93,6 +95,10 @@ namespace Coop
 		};
 		std::optional<std::uint64_t> GetCommandExecutionTick(GardenId gardenId) const noexcept;
 		bool QueueAcceptedCommand(const PlayerCommand& command, std::uint64_t executeTick);
+		void QueueScheduledCommandToPeers(INetworkTransport& transport, const PlayerCommand& command,
+			std::uint64_t executeTick, TransportPlayerId excludedPeerId = 0);
+		bool QueueAuthorityResponse(INetworkTransport& transport, TransportPlayerId peerId,
+			const CommandAuthorityResponse& response);
 
 		LawnApp* mApp;
 		CoopSession* mSession = nullptr;
@@ -100,6 +106,7 @@ namespace Coop
 		std::vector<ScheduledCommand> mScheduledCommands;
 		std::optional<GardenId> mViewedGarden;
 		AuthoritativeCommandProcessor mCommandProcessor;
+		ReliableTransportSendQueue mReliableSendQueue;
 		std::optional<PlayerId> mLocalPlayerId;
 		INetworkTransport* mTransport = nullptr;
 	HeartbeatMonitor mHeartbeatMonitor;

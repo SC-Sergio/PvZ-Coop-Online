@@ -65,6 +65,7 @@ namespace Coop
 		mScheduledCommands.clear();
 		mQueueCommandExecution = false;
 		mExecutingScheduledCommand = false;
+		mReliableSendQueue.Clear();
 		mLocalPlayerId = session.GetHostPlayerId();
 		mNextLocalCommandSequence = 1;
 		for (const GardenInstance& garden : session.GetGardens())
@@ -157,6 +158,7 @@ namespace Coop
 		mScheduledCommands.clear();
 		mQueueCommandExecution = false;
 		mExecutingScheduledCommand = false;
+		mReliableSendQueue.Clear();
 		mPendingRestoreConfirmation.reset();
 		if (mHasAppStateSnapshot)
 		{
@@ -212,6 +214,8 @@ namespace Coop
 			return false;
 		const bool replacingTransport = mTransport != nullptr;
 		mTransport = &transport;
+		if (replacingTransport)
+			mReliableSendQueue.Clear();
 		mHeartbeatMonitor.Reset();
 		mSnapshotReceiver.Reset();
 		mSnapshotSenders.clear();
@@ -255,7 +259,14 @@ namespace Coop
 			return false;
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 			return ProcessCommand(command) == CommandRejection::NONE;
-		return mTransport && SendCommandToHost(*mTransport, *mSession->GetHostPlayerId(), command);
+		if (!mTransport)
+			return false;
+		const auto bytes = SerializeCommand(command);
+		if (bytes && mReliableSendQueue.SendOrQueue(*mTransport, *mSession->GetHostPlayerId(), *bytes))
+			return true;
+		mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
+		SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+		return false;
 	}
 
 	CommandRejection CoopGardenManager::ProcessCommand(const PlayerCommand& command)
@@ -271,7 +282,7 @@ namespace Coop
 		{
 			const auto executeTick = GetCommandExecutionTick(command.gardenId);
 			if (executeTick)
-				BroadcastScheduledCommandToPeers(*mTransport, command, *executeTick);
+				QueueScheduledCommandToPeers(*mTransport, command, *executeTick);
 		}
 		return result;
 	}
@@ -312,7 +323,7 @@ namespace Coop
 			[this, &transport](const PlayerCommand& command)
 			{
 				if (const auto executeTick = GetCommandExecutionTick(command.gardenId))
-					BroadcastScheduledCommandToPeers(transport, command, *executeTick, command.senderId);
+					QueueScheduledCommandToPeers(transport, command, *executeTick, command.senderId);
 			},
 			[this, &transport](TransportPlayerId peerId, const CommandAuthorityResponse& response)
 			{
@@ -324,11 +335,36 @@ namespace Coop
 						return;
 					scheduled.serverTick = *executeTick;
 				}
-				if (const auto bytes = SerializeAuthorityResponse(scheduled))
-					transport.SendTo(peerId, *bytes);
+				if (!QueueAuthorityResponse(transport, peerId, scheduled))
+					transport.DisconnectPeer(peerId);
 			}, [this](const TransportPacket& packet) { return HandleControlPacket(packet); });
 		mQueueCommandExecution = wasQueueing;
 		return results;
+	}
+
+	void CoopGardenManager::QueueScheduledCommandToPeers(INetworkTransport& transport,
+		const PlayerCommand& command, std::uint64_t executeTick, TransportPlayerId excludedPeerId)
+	{
+		for (TransportPlayerId peerId : transport.GetConnectedPeerIds())
+		{
+			if (peerId == excludedPeerId)
+				continue;
+			CommandAuthorityResponse response;
+			response.recipientPlayerId = peerId;
+			response.sequence = command.sequence;
+			response.serverTick = executeTick;
+			response.rejection = CommandRejection::NONE;
+			response.acceptedCommand = command;
+			if (!QueueAuthorityResponse(transport, peerId, response))
+				transport.DisconnectPeer(peerId);
+		}
+	}
+
+	bool CoopGardenManager::QueueAuthorityResponse(INetworkTransport& transport,
+		TransportPlayerId peerId, const CommandAuthorityResponse& response)
+	{
+		const auto bytes = SerializeAuthorityResponse(response);
+		return bytes && mReliableSendQueue.SendOrQueue(transport, peerId, *bytes);
 	}
 
 	void CoopGardenManager::PumpNetwork()
@@ -339,6 +375,7 @@ namespace Coop
 			AttachTransport(*mApp->mCoopLobbyController->GetTransport());
 		if (!mTransport || !mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
 			return;
+		mReliableSendQueue.Pump(*mTransport);
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 		{
 			const auto peersBeforePump = mTransport->GetConnectedPeerIds();
