@@ -97,6 +97,10 @@ namespace Coop
 		bool SetRandomSeed(std::uint32_t seed) noexcept;
 		bool SetLobbySettings(PlayerId requestingPlayerId, const CoopLobbySettings& settings) noexcept;
 		bool ApplySnapshot(const CoopSessionSnapshot& snapshot);
+		bool MarkDisconnected(PlayerId playerId) noexcept;
+		bool MarkTemporaryAI(PlayerId playerId) noexcept;
+		bool BeginReconnect(PlayerId playerId) noexcept;
+		bool CompleteReconnect(PlayerId playerId) noexcept;
 		bool MarkGardenDefeated(PlayerId ownerId);
 		bool MarkGardenCompleted(PlayerId ownerId);
 		bool AdvanceSimulationTick();

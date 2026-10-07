@@ -140,6 +140,33 @@ namespace
 			&& session.GetGardens()[1].simulationTicks == 2, "tick update advances every garden together");
 	}
 
+	void TestDisconnectAndReconnectStateTransitions()
+	{
+		Coop::CoopSession session;
+		Require(session.Join(61, "host").has_value() && session.Join(62, "guest").has_value(), "reconnect roster created");
+		Require(session.SetReady(61, true) && session.SetReady(62, true) && session.StartGame(61), "reconnect session starts");
+		const Coop::GardenId guestGarden = session.GetSlots()[1].gardenId.value();
+		Require(!session.BeginReconnect(62), "connected player cannot begin reconnect");
+		Require(session.MarkDisconnected(62), "playing player can transition to disconnected");
+		Require(session.GetGardenCount() == 2 && session.GetSlots()[1].gardenId == guestGarden,
+			"disconnect preserves the player's garden and slot");
+		Require(!session.MarkDisconnected(62), "duplicate disconnect transition is rejected");
+		Require(session.MarkTemporaryAI(62), "disconnected player can enter temporary AI state");
+		Require(!session.MarkTemporaryAI(62), "temporary AI transition cannot be repeated");
+		Require(session.BeginReconnect(62), "temporary AI can enter reconnecting state");
+		const auto encoded = Coop::SerializeSessionSnapshot(session);
+		Require(encoded.has_value(), "reconnecting session snapshot serializes");
+		Coop::CoopSession restored;
+		const auto decoded = Coop::DeserializeSessionSnapshot(*encoded);
+		Require(decoded.has_value() && restored.ApplySnapshot(*decoded), "reconnecting session snapshot applies");
+		Require(restored.GetSlots()[1].state == Coop::PlayerState::RECONNECTING
+			&& restored.GetSlots()[1].gardenId == guestGarden && restored.GetGardenCount() == 2,
+			"snapshot retains reconnect state and garden ownership");
+		Require(restored.CompleteReconnect(62) && restored.GetSlots()[1].state == Coop::PlayerState::PLAYING,
+			"reconnected player regains control of the same slot");
+		Require(!restored.CompleteReconnect(62), "connected player cannot complete reconnect twice");
+	}
+
 	void TestLobbyProtocol()
 	{
 		Coop::LobbyRequest wireJoin{Coop::LobbyRequestType::JOIN, 92, "Psycker", false};
@@ -930,6 +957,7 @@ int main(int argc, char** argv)
 	TestHostPromotionAndEmptySlotStart();
 	TestCooperativeTeamResults();
 	TestSessionSimulationTicks();
+	TestDisconnectAndReconnectStateTransitions();
 	TestLobbyProtocol();
 	TestLobbyController();
 	TestAuthoritativeCommandValidation();

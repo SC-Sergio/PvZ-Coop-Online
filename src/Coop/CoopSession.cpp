@@ -138,6 +138,49 @@ namespace Coop
 		return true;
 	}
 
+	bool CoopSession::MarkDisconnected(PlayerId playerId) noexcept
+	{
+		if (!mStarted)
+			return false;
+		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
+			{ return candidate.playerId == playerId && candidate.state == PlayerState::PLAYING; });
+		if (slot == mSlots.end())
+			return false;
+		slot->state = PlayerState::DISCONNECTED;
+		return true;
+	}
+
+	bool CoopSession::MarkTemporaryAI(PlayerId playerId) noexcept
+	{
+		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
+			{ return candidate.playerId == playerId && candidate.state == PlayerState::DISCONNECTED; });
+		if (!mStarted || slot == mSlots.end())
+			return false;
+		slot->state = PlayerState::AI_TEMPORARY;
+		return true;
+	}
+
+	bool CoopSession::BeginReconnect(PlayerId playerId) noexcept
+	{
+		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
+			{ return candidate.playerId == playerId
+				&& (candidate.state == PlayerState::DISCONNECTED || candidate.state == PlayerState::AI_TEMPORARY); });
+		if (!mStarted || slot == mSlots.end())
+			return false;
+		slot->state = PlayerState::RECONNECTING;
+		return true;
+	}
+
+	bool CoopSession::CompleteReconnect(PlayerId playerId) noexcept
+	{
+		const auto slot = std::find_if(mSlots.begin(), mSlots.end(), [playerId](const PlayerSlot& candidate)
+			{ return candidate.playerId == playerId && candidate.state == PlayerState::RECONNECTING; });
+		if (!mStarted || slot == mSlots.end())
+			return false;
+		slot->state = PlayerState::PLAYING;
+		return true;
+	}
+
 	bool CoopSession::MarkGardenDefeated(PlayerId ownerId)
 	{
 		const auto garden = std::find_if(mGardens.begin(), mGardens.end(), [ownerId](const GardenInstance& candidate)
