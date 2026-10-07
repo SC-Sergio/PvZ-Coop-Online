@@ -106,3 +106,5 @@ Garden-scoped profile, effect, pool, and RNG objects are shared-owned by both th
 Cooperative determinism also disables the legacy Board typing-code path and per-Board speed button. Both standard and WebRTC MSVC Debug builds compile the guard and pass CTest (2/2 and 4/4). There is no initialized-Board input test in the current asset-free environment.
 
 App-level pause hooks now remain inert during co-op, since per-client modal pause would freeze only one local Board while the host continued. Standard and WebRTC Debug builds and suites pass (2/2 and 4/4); interactive focus/modal behavior remains unverified without game assets.
+
+Isolated Boards now reject both legacy typing codes and debug character cheats before those handlers run. Both Debug build variants compile the guard and CTest remains green (2/2 and 4/4); no in-engine input test is available.
