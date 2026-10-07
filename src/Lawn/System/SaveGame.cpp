@@ -650,29 +650,29 @@ static void SyncGameObjectPortable(PortableSaveContext& theContext, GameObject& 
 
 static constexpr const uint32_t PORTABLE_FIELD_TAIL = 100U;
 
-static bool ClearParticleSystemEmitterListForRead(TodParticleSystem& theParticleSystem)
+template <typename T>
+static bool ClearValidatedListForRead(TodList<T>& theList)
 {
-	TodList<ParticleEmitterID>& emitterList = theParticleSystem.mEmitterList;
-	if (emitterList.mHead == nullptr)
-		return emitterList.mTail == nullptr && emitterList.mSize == 0;
+	if (theList.mHead == nullptr)
+		return theList.mTail == nullptr && theList.mSize == 0;
 
-	TodAllocator* allocator = emitterList.mpAllocator;
-	if (allocator == nullptr || emitterList.mTail == nullptr || emitterList.mSize <= 0)
+	TodAllocator* allocator = theList.mpAllocator;
+	if (allocator == nullptr || theList.mTail == nullptr || theList.mSize <= 0)
 		return false;
 
 	int nodeCount = 0;
-	TodListNode<ParticleEmitterID>* previous = nullptr;
-	for (TodListNode<ParticleEmitterID>* node = emitterList.mHead; node != nullptr; node = node->mNext)
+	TodListNode<T>* previous = nullptr;
+	for (TodListNode<T>* node = theList.mHead; node != nullptr; node = node->mNext)
 	{
 		if (node->mPrev != previous || !allocator->IsPointerFromAllocator(node)
-			|| allocator->IsPointerOnFreeList(node) || ++nodeCount > emitterList.mSize)
+			|| allocator->IsPointerOnFreeList(node) || ++nodeCount > theList.mSize)
 			return false;
 		previous = node;
 	}
-	if (previous != emitterList.mTail || nodeCount != emitterList.mSize)
+	if (previous != theList.mTail || nodeCount != theList.mSize)
 		return false;
 
-	emitterList.RemoveAll();
+	theList.RemoveAll();
 	return true;
 }
 
@@ -681,7 +681,7 @@ static bool ResetItemForRead(T& theItem)
 {
 	if constexpr (std::is_same_v<T, TodParticleSystem>)
 	{
-		if (!ClearParticleSystemEmitterListForRead(theItem))
+		if (!ClearValidatedListForRead(theItem.mEmitterList))
 			return false;
 	}
 	if constexpr (std::is_same_v<T, Reanimation>)
@@ -1908,6 +1908,28 @@ static void SyncDataArrayPortable(PortableSaveContext& theContext, DataArray<T>&
 template <typename T>
 static void SyncDataArrayIdsOnlyPortable(PortableSaveContext& theContext, DataArray<T>& theDataArray)
 {
+	if (theContext.mReading)
+	{
+		if (theDataArray.mBlock == nullptr || theDataArray.mMaxUsedCount > theDataArray.mMaxSize)
+		{
+			theContext.mFailed = true;
+			return;
+		}
+		if constexpr (std::is_same_v<T, TodParticleEmitter>)
+		{
+			// Emitter entries are ID-only in SAVE4. Clear their old particle lists before
+			// the incoming IDs make emitters omitted by the snapshot unreachable.
+			for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
+			{
+				if ((theDataArray.mBlock[i].mID & DATA_ARRAY_KEY_MASK) != 0
+					&& !ClearValidatedListForRead(theDataArray.mBlock[i].mItem.mParticleList))
+				{
+					theContext.mFailed = true;
+					return;
+				}
+			}
+		}
+	}
 	if (!SyncDataArrayHeaderPortable(theContext, theDataArray))
 		return;
 
