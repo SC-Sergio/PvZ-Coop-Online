@@ -46,6 +46,7 @@
 #include <iterator>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 static constexpr const char* FILE_COMPILE_TIME_STRING = "Jul  2 201011:47:03"; // The compile time of 1.2.0.1073 GOTY
@@ -650,9 +651,28 @@ static void SyncGameObjectPortable(PortableSaveContext& theContext, GameObject& 
 static constexpr const uint32_t PORTABLE_FIELD_TAIL = 100U;
 
 template <typename T>
-static void ResetItemForRead(T& theItem)
+static bool ResetItemForRead(T& theItem)
 {
+	if constexpr (std::is_same_v<T, Reanimation>)
+	{
+		if (theItem.mTrackInstances != nullptr)
+		{
+			if (theItem.mDefinition == nullptr || theItem.mDefinition->mTracks.count <= 0
+				|| theItem.mDefinition->mTracks.count > std::numeric_limits<int>::max()
+				/ static_cast<int>(sizeof(ReanimatorTrackInstance)))
+				return false;
+			const int allocationSize = theItem.mDefinition->mTracks.count
+				* static_cast<int>(sizeof(ReanimatorTrackInstance));
+			TodAllocator* allocator = FindGlobalAllocator(allocationSize);
+			if (allocator == nullptr || !allocator->IsPointerFromAllocator(theItem.mTrackInstances)
+				|| allocator->IsPointerOnFreeList(theItem.mTrackInstances))
+				return false;
+			allocator->Free(theItem.mTrackInstances, allocationSize);
+			theItem.mTrackInstances = nullptr;
+		}
+	}
 	std::fill_n(reinterpret_cast<unsigned char*>(&theItem), sizeof(T), 0);
+	return true;
 }
 
 template <typename TEnum>
@@ -1890,7 +1910,11 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 				theContext.mFailed = true;
 				return;
 			}
-			ResetItemForRead(theDataArray.mBlock[i].mItem);
+			if (!ResetItemForRead(theDataArray.mBlock[i].mItem))
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			std::vector<unsigned char> aItemData;
 			aItemData.resize(aItemSize);
 			if (aItemSize > 0)
