@@ -10,6 +10,7 @@
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/Coop/CoopSnapshotProtocol.h"
+#include "../../src/Coop/PendingSunLedger.h"
 #include "../../src/ConstEnums.h"
 #include "../../src/Lawn/LevelStats.h"
 #include "../../src/Lawn/System/DataSync.h"
@@ -57,6 +58,29 @@ namespace
 			&& Coop::GetNextViewedGardenId(gardens, 44) == 11
 			&& Coop::GetNextViewedGardenId(gardens, 99) == 11,
 			"multi-garden view cycling advances, wraps, and recovers an unknown selection");
+	}
+
+	void TestPendingSunLedger()
+	{
+		Coop::PendingSunLedger ledger;
+		Require(ledger.AddGarden(11, 1000) && ledger.AddGarden(12, 89000) && ledger.AddGarden(13, 0),
+			"sun ledger registers bounded garden balances");
+		Require(!ledger.AddGarden(11, 1000) && !ledger.AddGarden(14, -1) && !ledger.AddGarden(15, 90001),
+			"sun ledger rejects duplicate IDs and invalid balances");
+		Require(ledger.ReservePlant(11, 200), "sun ledger reserves a plant cost");
+		Require(ledger.ReserveTransfer(11, 12, 600), "sun ledger reserves transfer from remaining balance");
+		Require(!ledger.ReserveTransfer(11, 12, 250), "sun ledger prevents queued transfers from overdrawing a garden");
+		Require(!ledger.ReserveTransfer(13, 12, 1000), "sun ledger enforces receiver capacity");
+		Require(ledger.GetAvailableSun(11) == 200 && ledger.GetAvailableSun(12) == 89600,
+			"rejected sun reservations do not change either garden balance");
+		Require(ledger.ReservePlant(12, 500), "a scheduled incoming donation can fund a later plant");
+		Require(ledger.ReserveTransfer(12, 13, 1000), "receiver can donate after its earlier incoming transfer and plant cost");
+		Require(ledger.GetAvailableSun(12) == 88100 && ledger.GetAvailableSun(13) == 1000,
+			"sun ledger applies accepted operations in schedule order");
+		Require(!ledger.ReservePlant(99, 0) && !ledger.ReservePlant(13, -1)
+			&& !ledger.ReserveTransfer(11, 11, 1)
+			&& !ledger.ReserveTransfer(11, 12, std::numeric_limits<std::int64_t>::max()),
+			"sun ledger rejects unknown gardens, invalid costs, self-transfers, and oversized amounts");
 	}
 
 	void TestGardenLevelStatsRecords()
@@ -1825,6 +1849,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestPendingSunLedger();
 	TestGardenLevelStatsRecords();
 	TestPortableSaveBounds();
 	TestGardenSnapshotProtocol();

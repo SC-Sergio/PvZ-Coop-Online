@@ -8,6 +8,7 @@
 #include "CommandSerialization.h"
 #include "CoopLobbyController.h"
 #include "CoopSnapshotProtocol.h"
+#include "PendingSunLedger.h"
 
 #include "../Lawn/Board.h"
 #include "../Lawn/MessageWidget.h"
@@ -757,13 +758,34 @@ namespace Coop
 			return false;
 		if (mQueueCommandExecution && !IsLocalOnlyCommand(command.type))
 		{
-			std::int64_t availableSun = source->board->mSunMoney;
+			PendingSunLedger sunLedger;
+			for (const ManagedGarden& garden : mGardens)
+				if (!sunLedger.AddGarden(garden.id, garden.board->mSunMoney))
+					return false;
+			for (const ScheduledCommand& scheduled : mScheduledCommands)
+			{
+				if (scheduled.command.type == CommandType::PLACE_PLANT)
+				{
+					const auto scheduledGarden = std::find_if(mGardens.begin(), mGardens.end(), [&scheduled](const ManagedGarden& garden)
+						{ return garden.id == scheduled.command.gardenId; });
+					if (scheduledGarden == mGardens.end())
+						return false;
+					const int cost = scheduledGarden->board->GetCooperativePlantCost(scheduled.command);
+					if (cost < 0 || !sunLedger.ReservePlant(scheduled.command.gardenId, cost))
+						return false;
+				}
+				else if (scheduled.command.type == CommandType::SEND_RESOURCE
+					&& !sunLedger.ReserveTransfer(scheduled.command.gardenId,
+						scheduled.command.targetGardenId, scheduled.command.amount))
+					return false;
+			}
+
 			switch (command.type)
 			{
 			case CommandType::PLACE_PLANT:
 			{
 				const int plantCost = source->board->GetCooperativePlantCost(command);
-				if (plantCost < 0)
+				if (plantCost < 0 || !sunLedger.ReservePlant(source->id, plantCost))
 					return false;
 				for (const ScheduledCommand& scheduled : mScheduledCommands)
 				{
@@ -774,18 +796,9 @@ namespace Coop
 						if (scheduled.command.value == command.value
 							|| (scheduled.command.x == command.x && scheduled.command.y == command.y))
 							return false;
-						const int reservedCost = source->board->GetCooperativePlantCost(scheduled.command);
-						if (reservedCost < 0)
-							return false;
-						availableSun -= reservedCost;
 					}
-					else if (scheduled.command.type == CommandType::SEND_RESOURCE)
-						availableSun -= scheduled.command.amount;
 				}
-				for (const ScheduledCommand& scheduled : mScheduledCommands)
-					if (scheduled.command.type == CommandType::SEND_RESOURCE && scheduled.command.targetGardenId == source->id)
-						availableSun += scheduled.command.amount;
-				if (plantCost > availableSun || !source->board->CanApplyCooperativeCommand(command))
+				if (!source->board->CanApplyCooperativeCommand(command))
 					return false;
 				break;
 			}
@@ -818,43 +831,8 @@ namespace Coop
 					return false;
 				const auto target = std::find_if(mGardens.begin(), mGardens.end(), [&targetSlot](const ManagedGarden& garden)
 					{ return garden.id == *targetSlot->gardenId; });
-				if (target == mGardens.end())
-					return false;
-				std::int64_t targetAvailableSun = target->board->mSunMoney;
-				for (const ScheduledCommand& scheduled : mScheduledCommands)
-				{
-					if (scheduled.command.gardenId == source->id)
-					{
-						if (scheduled.command.type == CommandType::SEND_RESOURCE)
-							availableSun -= scheduled.command.amount;
-						else if (scheduled.command.type == CommandType::PLACE_PLANT)
-						{
-							const int reservedCost = source->board->GetCooperativePlantCost(scheduled.command);
-							if (reservedCost < 0)
-								return false;
-							availableSun -= reservedCost;
-						}
-					}
-					if (scheduled.command.targetGardenId == source->id
-						&& scheduled.command.type == CommandType::SEND_RESOURCE)
-						availableSun += scheduled.command.amount;
-					if (scheduled.command.gardenId == target->id)
-					{
-						if (scheduled.command.type == CommandType::SEND_RESOURCE)
-							targetAvailableSun -= scheduled.command.amount;
-						else if (scheduled.command.type == CommandType::PLACE_PLANT)
-						{
-							const int reservedCost = target->board->GetCooperativePlantCost(scheduled.command);
-							if (reservedCost < 0)
-								return false;
-							targetAvailableSun -= reservedCost;
-						}
-					}
-					if (scheduled.command.type == CommandType::SEND_RESOURCE && scheduled.command.targetGardenId == target->id)
-						targetAvailableSun += scheduled.command.amount;
-				}
-				if (availableSun < static_cast<std::int64_t>(command.amount)
-					|| targetAvailableSun > 90000 - static_cast<std::int64_t>(command.amount))
+				if (target == mGardens.end()
+					|| !sunLedger.ReserveTransfer(source->id, target->id, command.amount))
 					return false;
 				break;
 			}
