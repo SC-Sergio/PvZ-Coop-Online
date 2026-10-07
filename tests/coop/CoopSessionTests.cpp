@@ -19,6 +19,7 @@
 #include "../../src/Lawn/LevelStats.h"
 #include "../../src/Lawn/System/DataSync.h"
 #include "../../src/Lawn/System/PortableSaveValidation.h"
+#include "../../src/Sexy.TodLib/TodList.h"
 
 #include <algorithm>
 #include <atomic>
@@ -540,6 +541,41 @@ namespace
 		wrongSaveVersion[12] = 2;
 		Require(!IsStructurallyValidPortableSaveV4Bytes(wrongSaveVersion.data(), wrongSaveVersion.size(), 21, 1, 1),
 			"SAVE4 preflight rejects unsupported outer schema versions");
+	}
+
+	void TestAllocatorBackedSaveListRelease()
+	{
+		using Node = TodListNode<std::uint32_t>;
+		TodAllocator allocator;
+		allocator.Initialize(4, sizeof(Node));
+		TodList<std::uint32_t> list;
+		list.SetAllocator(&allocator);
+		list.AddTail(11);
+		list.AddTail(22);
+		auto isOwned = [&allocator](Node* node) { return allocator.IsPointerFromAllocator(node); };
+		auto isFree = [&allocator](Node* node) { return allocator.IsPointerOnFreeList(node); };
+
+		Require(allocator.mTotalItems == 2
+			&& IsValidPortableSaveListForRelease(list.mHead, list.mTail, list.mSize, isOwned, isFree),
+			"a real TodAllocator list passes SAVE4 list-release validation");
+		list.RemoveAll();
+		Require(list.mHead == nullptr && list.mTail == nullptr && list.mSize == 0
+			&& allocator.mTotalItems == 0,
+			"clearing the validated list returns every node to its TodAllocator");
+
+		list.AddTail(33);
+		list.AddTail(44);
+		Node* freeNode = list.mTail;
+		allocator.Free(freeNode, sizeof(Node));
+		Require(!IsValidPortableSaveListForRelease(list.mHead, list.mTail, list.mSize, isOwned, isFree),
+			"SAVE4 list-release validation rejects an allocator node already freed");
+		list.mHead->mNext = nullptr;
+		list.mTail = list.mHead;
+		list.mSize = 1;
+		list.RemoveAll();
+		Require(allocator.mTotalItems == 0,
+			"the allocator-backed rejection case can release the remaining live node safely");
+		allocator.Dispose();
 	}
 
 	void TestGardenSnapshotProtocol()
@@ -2386,6 +2422,7 @@ int main(int argc, char** argv)
 	TestPendingSunLedger();
 	TestGardenLevelStatsRecords();
 	TestPortableSaveBounds();
+	TestAllocatorBackedSaveListRelease();
 	TestGardenSnapshotProtocol();
 	TestHeartbeatTimeout();
 	TestCoopDifficultyProfiles();
