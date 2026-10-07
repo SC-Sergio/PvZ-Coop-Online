@@ -94,3 +94,5 @@ Cooperative Boards ignore the legacy typing-code path, which can toggle gameplay
 Pause state is not synchronized in the current protocol. While a cooperative manager is active, `CanPauseNow`, `DoPauseDialog`, `ModalOpen`, and `ModalClose` therefore do not pause or resume only the locally viewed Board. This keeps the other clients' authoritative simulation from advancing against a locally frozen garden. Non-pause modal screens can still open while the simulation continues.
 
 The debug `KeyChar` path is also rejected for isolated Boards, including debug builds where those hidden development cheats are otherwise enabled. This closes a local state-mutation path outside the player-command processor.
+
+The alternate `mTodCheatKeys` mouse shortcut that advances a survival wave is also suppressed for isolated Boards; it mutates local wave timers outside the command protocol.
