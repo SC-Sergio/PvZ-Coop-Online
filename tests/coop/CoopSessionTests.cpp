@@ -1,5 +1,6 @@
 #include "../../src/Coop/CoopSession.h"
 #include "../../src/Coop/CoopDifficulty.h"
+#include "../../src/Coop/CoopLoadout.h"
 #include "../../src/Coop/PlayerCommand.h"
 #include "../../src/Coop/CommandSerialization.h"
 #include "../../src/Coop/NetworkTransport.h"
@@ -696,6 +697,18 @@ namespace
 		Require(!Coop::GetCoopStartingSun(static_cast<Coop::CoopDifficulty>(255), 1), "unknown difficulty values are rejected");
 		Require(!Coop::GetCoopZombiePointScalePermille(static_cast<Coop::CoopDifficulty>(255)),
 			"unknown difficulty has no zombie budget scale");
+	}
+
+	void TestCoopClassicLoadouts()
+	{
+		for (const Coop::ClassicMapLoadout& expected : Coop::COOP_CLASSIC_LOADOUTS)
+		{
+			const auto loadout = Coop::GetCoopClassicLoadout(expected.map);
+			Require(loadout && *loadout == expected.seeds,
+				"each cooperative map resolves to its deterministic six-seed loadout");
+		}
+		Require(!Coop::GetCoopClassicLoadout(static_cast<Coop::CoopMapId>(255)),
+			"unknown map IDs cannot silently select a different seed deck");
 	}
 
 	void TestCapacityIdentityAndLeave()
@@ -1793,6 +1806,7 @@ int main(int argc, char** argv)
 	TestGardenSnapshotProtocol();
 	TestHeartbeatTimeout();
 	TestCoopDifficultyProfiles();
+	TestCoopClassicLoadouts();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();
 	TestHostPromotionAndEmptySlotStart();

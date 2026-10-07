@@ -24,6 +24,7 @@
 #include "LawnApp.h"
 #include "Coop/CoopGardenManager.h"
 #include "Coop/CoopDifficulty.h"
+#include "Coop/CoopLoadout.h"
 #include "Coop/CoopLobbyController.h"
 #include "Lawn/Board.h"
 #include "Lawn/Plant.h"
@@ -420,25 +421,9 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mBoardResult = BoardResult::BOARDRESULT_NONE;
 	mCoopLobbyController = std::move(lobby);
 
-	const std::array<SeedType, 6> dayDeck{SeedType::SEED_SUNFLOWER, SeedType::SEED_PEASHOOTER,
-		SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE, SeedType::SEED_SNOWPEA};
-	const std::array<SeedType, 6> nightDeck{SeedType::SEED_PUFFSHROOM, SeedType::SEED_SUNSHROOM,
-		SeedType::SEED_FUMESHROOM, SeedType::SEED_GRAVEBUSTER, SeedType::SEED_POTATOMINE, SeedType::SEED_SUNFLOWER};
-	const std::array<SeedType, 6> poolDeck{SeedType::SEED_LILYPAD, SeedType::SEED_SUNFLOWER,
-		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE};
-	const std::array<SeedType, 6> fogDeck{SeedType::SEED_PLANTERN, SeedType::SEED_SUNFLOWER,
-		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_PUFFSHROOM};
-	const std::array<SeedType, 6> roofDeck{SeedType::SEED_FLOWERPOT, SeedType::SEED_SUNFLOWER,
-		SeedType::SEED_PEASHOOTER, SeedType::SEED_CHERRYBOMB, SeedType::SEED_WALLNUT, SeedType::SEED_POTATOMINE};
-	const std::array<SeedType, 6>* deck = &dayDeck;
-	switch (settings.map)
-	{
-	case Coop::CoopMapId::NIGHT: deck = &nightDeck; break;
-	case Coop::CoopMapId::POOL: deck = &poolDeck; break;
-	case Coop::CoopMapId::FOG: deck = &fogDeck; break;
-	case Coop::CoopMapId::ROOF: deck = &roofDeck; break;
-	default: break;
-	}
+	const std::optional<Coop::ClassicSeedLoadout> deck = Coop::GetCoopClassicLoadout(settings.map);
+	if (!deck)
+		return false;
 
 	const bool gardensStarted = mCoopGardenManager->Start(mCoopLobbyController->GetSession(),
 		[deck, startingSun, zombiePointScale](Board& board, const Coop::GardenInstance&)
