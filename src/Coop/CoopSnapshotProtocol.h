@@ -10,6 +10,7 @@
 #include "NetworkTransport.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -231,17 +232,61 @@ namespace Coop
 		std::vector<bool> mReceivedChunks;
 	};
 
+	constexpr std::size_t COOP_SNAPSHOT_ACK_BYTES = 24;
+	constexpr std::size_t COOP_SNAPSHOT_MAX_IN_FLIGHT = 4;
+	constexpr std::chrono::milliseconds COOP_SNAPSHOT_RETRY_INTERVAL(750);
+	constexpr std::uint8_t COOP_SNAPSHOT_MAX_ATTEMPTS = 5;
+
+	struct GardenSnapshotAck
+	{
+		std::uint64_t transferId = 0;
+		GardenId gardenId = 0;
+		std::uint16_t chunkIndex = 0;
+	};
+
+	inline std::vector<std::uint8_t> SerializeGardenSnapshotAck(const GardenSnapshotAck& ack)
+	{
+		if (ack.transferId == 0 || ack.gardenId == 0)
+			return {};
+		std::vector<std::uint8_t> bytes;
+		bytes.reserve(COOP_SNAPSHOT_ACK_BYTES);
+		bytes.insert(bytes.end(), {'P', 'V', 'Z', 'A'});
+		WriteSnapshotU16(bytes, COOP_SNAPSHOT_PROTOCOL_VERSION);
+		WriteSnapshotU16(bytes, static_cast<std::uint16_t>(COOP_SNAPSHOT_ACK_BYTES));
+		WriteSnapshotU64(bytes, ack.transferId);
+		WriteSnapshotU32(bytes, ack.gardenId);
+		WriteSnapshotU16(bytes, ack.chunkIndex);
+		WriteSnapshotU16(bytes, 0);
+		return bytes;
+	}
+
+	inline std::optional<GardenSnapshotAck> DeserializeGardenSnapshotAck(std::span<const std::uint8_t> bytes)
+	{
+		if (bytes.size() != COOP_SNAPSHOT_ACK_BYTES || std::memcmp(bytes.data(), "PVZA", 4) != 0
+			|| ReadSnapshotU16(bytes, 4) != COOP_SNAPSHOT_PROTOCOL_VERSION
+			|| ReadSnapshotU16(bytes, 6) != COOP_SNAPSHOT_ACK_BYTES
+			|| ReadSnapshotU16(bytes, 22) != 0)
+			return std::nullopt;
+		GardenSnapshotAck ack{ReadSnapshotU64(bytes, 8), ReadSnapshotU32(bytes, 16), ReadSnapshotU16(bytes, 20)};
+		if (ack.transferId == 0 || ack.gardenId == 0)
+			return std::nullopt;
+		return ack;
+	}
+
 	enum class SnapshotSendStatus
 	{
 		IDLE,
 		IN_PROGRESS,
 		COMPLETE,
 		PEER_DISCONNECTED,
-		TRANSPORT_CHANGED
+		TRANSPORT_CHANGED,
+		RETRY_EXHAUSTED
 	};
 
 	class GardenSnapshotSender
 	{
+		using Clock = std::chrono::steady_clock;
+
 	public:
 		bool Begin(INetworkTransport& transport, TransportPlayerId recipientId,
 			std::uint64_t transferId, GardenId gardenId, std::uint64_t serverTick,
@@ -257,12 +302,18 @@ namespace Coop
 				return false;
 			mRecipientId = recipientId;
 			mSenderId = transport.GetLocalPlayerId();
+			mTransferId = transferId;
+			mGardenId = gardenId;
 			mFrames = std::move(*frames);
 			mNextFrame = 0;
+			mAcked.assign(mFrames.size(), false);
+			mAttempts.assign(mFrames.size(), 0);
+			mLastSent.assign(mFrames.size(), Clock::time_point{});
 			return true;
 		}
 
-		SnapshotSendStatus Pump(INetworkTransport& transport, std::size_t maxFramesPerPump = 4)
+		SnapshotSendStatus Pump(INetworkTransport& transport, Clock::time_point now = Clock::now(),
+			std::size_t maxTransmissionsPerPump = COOP_SNAPSHOT_MAX_IN_FLIGHT)
 		{
 			if (!IsActive())
 				return SnapshotSendStatus::IDLE;
@@ -278,36 +329,93 @@ namespace Coop
 				Reset();
 				return SnapshotSendStatus::PEER_DISCONNECTED;
 			}
-			if (maxFramesPerPump == 0)
+			if (maxTransmissionsPerPump == 0)
 				return SnapshotSendStatus::IN_PROGRESS;
-			for (std::size_t sent = 0; sent < maxFramesPerPump && mNextFrame < mFrames.size(); ++sent)
+			std::size_t transmissions = 0;
+			std::size_t inFlight = GetInFlightFrameCount();
+			for (std::size_t index = 0; index < mNextFrame && transmissions < maxTransmissionsPerPump; ++index)
 			{
-				if (!transport.SendTo(mRecipientId, mFrames[mNextFrame]))
+				if (mAcked[index] || mAttempts[index] == 0
+					|| now - mLastSent[index] < COOP_SNAPSHOT_RETRY_INTERVAL)
+					continue;
+				if (mAttempts[index] >= COOP_SNAPSHOT_MAX_ATTEMPTS)
+				{
+					Reset();
+					return SnapshotSendStatus::RETRY_EXHAUSTED;
+				}
+				if (!transport.SendTo(mRecipientId, mFrames[index]))
 					return SnapshotSendStatus::IN_PROGRESS;
-				++mNextFrame;
+				++mAttempts[index];
+				mLastSent[index] = now;
+				++transmissions;
 			}
-			if (mNextFrame != mFrames.size())
+		while (transmissions < maxTransmissionsPerPump && mNextFrame < mFrames.size()
+			&& inFlight < COOP_SNAPSHOT_MAX_IN_FLIGHT)
+		{
+			if (!transport.SendTo(mRecipientId, mFrames[mNextFrame]))
+				return SnapshotSendStatus::IN_PROGRESS;
+			mAttempts[mNextFrame] = 1;
+			mLastSent[mNextFrame] = now;
+			++mNextFrame;
+			++inFlight;
+			++transmissions;
+		}
+			if (GetAcknowledgedFrameCount() != mFrames.size())
 				return SnapshotSendStatus::IN_PROGRESS;
 			Reset();
 			return SnapshotSendStatus::COMPLETE;
+		}
+
+		bool HandleAck(const TransportPacket& packet)
+		{
+			if (!IsActive() || packet.senderId != mRecipientId)
+				return false;
+			const auto ack = DeserializeGardenSnapshotAck(packet.bytes);
+			if (!ack || ack->transferId != mTransferId || ack->gardenId != mGardenId
+				|| ack->chunkIndex >= mFrames.size() || mAttempts[ack->chunkIndex] == 0)
+				return false;
+			mAcked[ack->chunkIndex] = true;
+			return true;
 		}
 
 		void Reset() noexcept
 		{
 			mRecipientId = 0;
 			mSenderId = 0;
+			mTransferId = 0;
+			mGardenId = 0;
 			mNextFrame = 0;
 			std::vector<std::vector<std::uint8_t>>().swap(mFrames);
+			std::vector<bool>().swap(mAcked);
+			std::vector<std::uint8_t>().swap(mAttempts);
+			std::vector<Clock::time_point>().swap(mLastSent);
 		}
 
 		bool IsActive() const noexcept { return mRecipientId != 0 && !mFrames.empty(); }
-		std::size_t GetRemainingFrameCount() const noexcept { return mFrames.size() - mNextFrame; }
+		std::size_t GetRemainingFrameCount() const noexcept { return mFrames.size() - GetAcknowledgedFrameCount(); }
+		std::size_t GetInFlightFrameCount() const noexcept
+		{
+			std::size_t count = 0;
+			for (std::size_t index = 0; index < mNextFrame; ++index)
+				count += mAcked[index] ? 0 : 1;
+			return count;
+		}
 
 	private:
+		std::size_t GetAcknowledgedFrameCount() const noexcept
+		{
+			return static_cast<std::size_t>(std::count(mAcked.begin(), mAcked.end(), true));
+		}
+
 		TransportPlayerId mRecipientId = 0;
 		TransportPlayerId mSenderId = 0;
+		std::uint64_t mTransferId = 0;
+		GardenId mGardenId = 0;
 		std::size_t mNextFrame = 0;
 		std::vector<std::vector<std::uint8_t>> mFrames;
+		std::vector<bool> mAcked;
+		std::vector<std::uint8_t> mAttempts;
+		std::vector<Clock::time_point> mLastSent;
 	};
 }
 

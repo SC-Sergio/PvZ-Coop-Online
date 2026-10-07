@@ -347,7 +347,8 @@ namespace
 		Require(sender.Begin(*host, 72, 9, 77, 1234, source),
 			"snapshot sender accepts a connected recipient and bounded payload");
 		const std::size_t queuedFrames = sender.GetRemainingFrameCount();
-		Require(sender.Pump(*host, 2) == Coop::SnapshotSendStatus::IN_PROGRESS
+		const auto transferStart = Coop::HeartbeatMonitor::Clock::time_point{};
+		Require(sender.Pump(*host, transferStart, 2) == Coop::SnapshotSendStatus::IN_PROGRESS
 			&& sender.GetRemainingFrameCount() == queuedFrames,
 			"transport backpressure leaves the current snapshot frame queued for retry");
 		while (auto packet = guest->Receive())
@@ -355,25 +356,69 @@ namespace
 				"test drains only the packets used to fill the bounded queue");
 		Coop::GardenSnapshotAssembler transferAssembler;
 		Coop::GardenSnapshot transferred;
+		bool droppedFirstChunk = false;
 		std::size_t pumpCount = 0;
-		while (sender.IsActive() && pumpCount++ < 16)
+		auto now = transferStart;
+		while (sender.IsActive() && pumpCount++ < 64)
 		{
-			const Coop::SnapshotSendStatus status = sender.Pump(*host, 2);
+			const Coop::SnapshotSendStatus status = sender.Pump(*host, now, 2);
 			Require(status == Coop::SnapshotSendStatus::IN_PROGRESS || status == Coop::SnapshotSendStatus::COMPLETE,
-				"snapshot sender stays active until its bounded frames are queued");
+				"snapshot sender stays active until every fragment receives a remote acknowledgement");
 			while (auto packet = guest->Receive())
 			{
 				Require(packet->senderId == 71, "snapshot transfer preserves transport-authenticated sender identity");
+				const std::uint16_t chunkIndex = Coop::ReadSnapshotU16(packet->bytes, 34);
+				if (chunkIndex == 0 && !droppedFirstChunk)
+				{
+					droppedFirstChunk = true;
+					continue;
+				}
 				const auto receive = transferAssembler.Accept(packet->bytes, transferred);
 				Require(receive != Coop::SnapshotReceiveResult::REJECTED,
 					"pumped snapshot frame is accepted by the bounded assembler");
+				const auto ack = Coop::SerializeGardenSnapshotAck({9, 77, chunkIndex});
+				Require(!ack.empty() && guest->SendTo(71, ack), "receiver sends a bounded fragment acknowledgement");
+			}
+			while (auto ack = host->Receive())
+				Require(sender.HandleAck(*ack), "sender accepts acknowledgements only from its bound recipient");
+			if (sender.GetInFlightFrameCount() != 0 && pumpCount % 2 == 0)
+				now += Coop::COOP_SNAPSHOT_RETRY_INTERVAL;
+		}
+		Require(droppedFirstChunk && !sender.IsActive() && transferred.bytes == source && transferred.serverTick == 1234,
+			"sender retries a dropped fragment and completes acknowledged multi-peer reassembly");
+		Require(sender.Begin(*host, 72, 10, 77, 1235, source)
+			&& sender.Pump(*host, now) == Coop::SnapshotSendStatus::IN_PROGRESS,
+			"sender begins a second transfer for acknowledgement validation");
+		auto firstSent = guest->Receive();
+		Require(firstSent.has_value(), "second snapshot transfer queues its first frame");
+		const auto forgedAckBytes = Coop::SerializeGardenSnapshotAck({10, 77,
+			Coop::ReadSnapshotU16(firstSent->bytes, 34)});
+		Require(!forgedAckBytes.empty()
+			&& !sender.HandleAck({73, forgedAckBytes})
+			&& !sender.HandleAck({72, Coop::SerializeGardenSnapshotAck({10, 77, 65535})}),
+			"sender rejects acknowledgements from the wrong peer and for unsent fragments");
+		bool retryExhausted = false;
+		for (std::uint8_t attempt = 1; attempt < Coop::COOP_SNAPSHOT_MAX_ATTEMPTS; ++attempt)
+		{
+			now += Coop::COOP_SNAPSHOT_RETRY_INTERVAL;
+			const Coop::SnapshotSendStatus retryStatus = sender.Pump(*host, now);
+			while (auto packet = guest->Receive()) { }
+			if (retryStatus == Coop::SnapshotSendStatus::RETRY_EXHAUSTED)
+			{
+				retryExhausted = true;
+				break;
 			}
 		}
-		Require(!sender.IsActive() && transferred.bytes == source && transferred.serverTick == 1234,
-			"paced sender completes a real multi-peer snapshot transfer");
-		Require(sender.Begin(*host, 72, 10, 77, 1235, source)
+		if (!retryExhausted)
+		{
+			now += Coop::COOP_SNAPSHOT_RETRY_INTERVAL;
+			retryExhausted = sender.Pump(*host, now) == Coop::SnapshotSendStatus::RETRY_EXHAUSTED;
+		}
+		Require(retryExhausted && !sender.IsActive(),
+			"sender releases a transfer after its bounded acknowledgement retry budget");
+		Require(sender.Begin(*host, 72, 11, 77, 1236, source)
 			&& host->DisconnectPeer(72)
-			&& sender.Pump(*host) == Coop::SnapshotSendStatus::PEER_DISCONNECTED
+			&& sender.Pump(*host, now) == Coop::SnapshotSendStatus::PEER_DISCONNECTED
 			&& !sender.IsActive(),
 			"snapshot sender releases pending frames when its recipient disconnects");
 	}
