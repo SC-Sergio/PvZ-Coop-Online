@@ -162,6 +162,29 @@ test("creates private rooms and routes bounded signaling only through the host",
     "host leave closes peer sockets so abandoned clients do not consume server capacity");
 });
 
+test("closes guest sockets when the host connection is lost", async (t) => {
+  const host = await connect();
+  const guest = await connect();
+  t.after(() => {
+    host.terminate();
+    guest.terminate();
+  });
+
+  send(host, { type: "create", playerId: "11" });
+  const created = await waitForType(host, "created");
+  send(guest, { type: "join", playerId: "12", roomCode: created.roomCode });
+  await waitForType(guest, "joined");
+  await waitForType(host, "peer-joined");
+
+  const guestClosed = new Promise((resolve) => guest.once("close", (code, reason) => resolve({
+    code,
+    reason: reason.toString(),
+  })));
+  host.terminate();
+  assert.deepEqual(await waitForType(guest, "room-closed"), { type: "room-closed" });
+  assert.deepEqual(await guestClosed, { code: 1000, reason: "room closed" });
+});
+
 test("reserves a disconnected player slot and permits only token-authenticated rejoin", async (t) => {
   const host = await connect();
   const guest = await connect();
