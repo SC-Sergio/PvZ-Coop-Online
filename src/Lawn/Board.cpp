@@ -86,12 +86,14 @@ namespace
 			mPreviousPoolEffect = mApp->mPoolEffect;
 			mPreviousSawYeti = mApp->mSawYeti;
 			mPreviousPlayerInfo = mApp->mPlayerInfo;
+			mPreviousLastLevelStats = mApp->mLastLevelStats;
 			mApp->mBoard = board;
 			mApp->mGameScene = board->mGardenGameScene;
 			mApp->mBoardResult = board->mGardenBoardResult;
 			mApp->mSawYeti = board->mGardenSawYeti;
 			if (board->mGardenPlayerInfo)
 				mApp->mPlayerInfo = board->mGardenPlayerInfo;
+			mApp->mLastLevelStats = &board->mGardenLastLevelStats;
 			if (gardenEffectSystem)
 			{
 				mApp->mEffectSystem = gardenEffectSystem;
@@ -113,6 +115,7 @@ namespace
 			mApp->mBoardResult = mPreviousResult;
 			mApp->mSawYeti = mPreviousSawYeti;
 			mApp->mPlayerInfo = mPreviousPlayerInfo;
+			mApp->mLastLevelStats = mPreviousLastLevelStats;
 			mApp->mEffectSystem = mPreviousEffectSystem;
 			gEffectSystem = mPreviousGlobalEffectSystem;
 			mApp->mPoolEffect = mPreviousPoolEffect;
@@ -126,6 +129,7 @@ namespace
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
 		bool mPreviousSawYeti = false;
 		PlayerInfo* mPreviousPlayerInfo = nullptr;
+		LevelStats* mPreviousLastLevelStats = nullptr;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 		PoolEffect* mPreviousPoolEffect = nullptr;

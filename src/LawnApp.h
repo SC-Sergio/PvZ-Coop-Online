@@ -23,6 +23,7 @@
 #define __LAWNAPP_H__
 
 #include "ConstEnums.h"
+#include "Lawn/LevelStats.h"
 #include "SexyAppFramework/SexyApp.h"
 #include "Sexy.TodLib/TodFoley.h"
 
@@ -64,16 +65,6 @@ using namespace Sexy;
 
 typedef std::list<ButtonWidget*> ButtonList;
 typedef std::list<Image*> ImageList;
-
-class LevelStats
-{
-public:
-	int								mUnusedLawnMowers;
-
-public:
-	LevelStats() { Reset(); }
-	inline void						Reset() { mUnusedLawnMowers = 0; }
-};
 
 class LawnApp : public SexyApp
 {

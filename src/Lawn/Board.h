@@ -32,6 +32,7 @@
 #include "widget/ButtonListener.h"
 
 #include "Plant.h"
+#include "LevelStats.h"
 #include "Zombie.h"
 #include "Projectile.h"
 #include "Coin.h"
@@ -173,6 +174,7 @@ public:
 	bool							mGardenSawYeti;
 	PlayerInfo*						mGardenPlayerInfo;
 	std::shared_ptr<PlayerInfo>		mGardenPlayerInfoOwner;
+	LevelStats						mGardenLastLevelStats;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;
