@@ -57,6 +57,15 @@ namespace
 			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::infinity())
 			&& !IsValidPortableSaveFloat(std::numeric_limits<float>::quiet_NaN()),
 			"portable save floats reject infinities and NaNs");
+		Require(IsValidPortableSaveCount(0, 256) && IsValidPortableSaveCount(256, 256)
+			&& !IsValidPortableSaveCount(-1, 256) && !IsValidPortableSaveCount(257, 256),
+			"portable save counts stay within their declared array capacity");
+		Require(IsValidPortableSaveResourceId(0, 10, 10)
+			&& IsValidPortableSaveResourceId(9, 10, 10)
+			&& IsValidPortableSaveResourceId(10, 10, 10)
+			&& !IsValidPortableSaveResourceId(-1, 10, 10)
+			&& !IsValidPortableSaveResourceId(11, 10, 10),
+			"portable save resource references allow valid IDs and the explicit null sentinel only");
 		const std::uint8_t falseByte = 0;
 		const std::uint8_t trueByte = 1;
 		const std::uint8_t invalidBoolByte = 2;

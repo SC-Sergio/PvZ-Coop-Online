@@ -42,6 +42,7 @@
 #include "misc/Buffer.h"
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <vector>
 
@@ -498,15 +499,25 @@ static void SyncImagePortable(PortableSaveContext& theContext, Image*& theImage)
 {
 	if (theContext.mReading)
 	{
-		ResourceId aResID;
-		theContext.SyncInt32(reinterpret_cast<int32_t&>(aResID));
-		if (aResID == Sexy::ResourceId::RESOURCE_ID_MAX)
+		int32_t aResourceId = 0;
+		theContext.SyncInt32(aResourceId);
+		if (IsValidPortableSaveResourceId(aResourceId,
+			static_cast<uint32_t>(Sexy::ResourceId::RESOURCE_ID_MAX),
+			static_cast<int32_t>(Sexy::ResourceId::RESOURCE_ID_MAX))
+			&& aResourceId == static_cast<int32_t>(Sexy::ResourceId::RESOURCE_ID_MAX))
 		{
 			theImage = nullptr;
 		}
+		else if (IsValidPortableSaveResourceId(aResourceId,
+			static_cast<uint32_t>(Sexy::ResourceId::RESOURCE_ID_MAX),
+			static_cast<int32_t>(Sexy::ResourceId::RESOURCE_ID_MAX)))
+		{
+			theImage = GetImageById(static_cast<Sexy::ResourceId>(aResourceId));
+		}
 		else
 		{
-			theImage = GetImageById(aResID);
+			theContext.mFailed = true;
+			theImage = nullptr;
 		}
 	}
 	else
@@ -540,6 +551,13 @@ static void SyncDataIDListPortable(TodList<uint32_t>* theDataIDList, PortableSav
 
 			int aCount = 0;
 			theContext.SyncInt32(aCount);
+			if (theContext.mFailed || !theDataIDList
+				|| !IsValidPortableSaveCount(aCount, MAX_PORTABLE_SAVE_ARRAY_CAPACITY)
+				|| static_cast<uint32_t>(aCount) > theContext.GetRemainingBytes() / sizeof(uint32_t))
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			for (int i = 0; i < aCount; i++)
 			{
 				uint32_t aDataID = 0;
@@ -967,6 +985,13 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 	theContext.SyncBool(thePlant.mHighlighted);
 	theContext.SyncFloat(thePlant.mParameterF0);
 	theContext.SyncInt32(thePlant.mRelatedZombieCount);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveCount(thePlant.mRelatedZombieCount,
+			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))))
+	{
+		theContext.mFailed = true;
+		return;
+	}
 	for (int i = 0; i < thePlant.mRelatedZombieCount; i++)
 		SyncEnumU32(theContext, thePlant.mRelatedZombieID[i]);
 }
@@ -1077,6 +1102,9 @@ static void SyncGridItemTailPortable(PortableSaveContext& theContext, GridItem& 
 	for (int i = 0; i < NUM_MOTION_TRAIL_FRAMES; i++)
 		SyncMotionTrailFramePortable(theContext, theItem.mMotionTrailFrames[i]);
 	theContext.SyncInt32(theItem.mMotionTrailCount);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveCount(theItem.mMotionTrailCount, NUM_MOTION_TRAIL_FRAMES)))
+		theContext.mFailed = true;
 }
 
 template <typename TWriterFn>
@@ -1405,6 +1433,13 @@ static void SyncTrailPortable(Board* theBoard, Trail* theTrail, PortableSaveCont
 	for (int i = 0; i < 20; i++)
 		SyncVector2Portable(theContext, theTrail->mTrailPoints[i].aPos);
 	theContext.SyncInt32(theTrail->mNumTrailPoints);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveCount(theTrail->mNumTrailPoints,
+			static_cast<uint32_t>(std::size(theTrail->mTrailPoints)))))
+	{
+		theContext.mFailed = true;
+		return;
+	}
 	theContext.SyncBool(theTrail->mDead);
 	theContext.SyncInt32(theTrail->mRenderOrder);
 	theContext.SyncInt32(theTrail->mTrailAge);
@@ -2269,6 +2304,12 @@ static void SyncSeedPacketsPortable(PortableSaveContext& theContext, Board* theB
 		{
 			uint32_t aItemSize = 0;
 			theContext.SyncUInt32(aItemSize);
+			if (theContext.mFailed || !IsValidPortableSaveBlobSize(aItemSize,
+				theContext.GetRemainingBytes()))
+			{
+				theContext.mFailed = true;
+				return;
+			}
 			std::vector<unsigned char> aItemData;
 			aItemData.resize(aItemSize);
 			if (aItemSize > 0)
@@ -2979,15 +3020,25 @@ void SaveGameContext::SyncImage(Image*& theImage)
 {
 	if (mReading)
 	{
-		ResourceId aResID;
-		SyncInt((int&)aResID);
-		if (aResID == Sexy::ResourceId::RESOURCE_ID_MAX)
+		int aResourceId = 0;
+		SyncInt(aResourceId);
+		if (IsValidPortableSaveResourceId(aResourceId,
+			static_cast<uint32_t>(Sexy::ResourceId::RESOURCE_ID_MAX),
+			static_cast<int>(Sexy::ResourceId::RESOURCE_ID_MAX))
+			&& aResourceId == static_cast<int>(Sexy::ResourceId::RESOURCE_ID_MAX))
 		{
 			theImage = nullptr;
 		}
+		else if (IsValidPortableSaveResourceId(aResourceId,
+			static_cast<uint32_t>(Sexy::ResourceId::RESOURCE_ID_MAX),
+			static_cast<int>(Sexy::ResourceId::RESOURCE_ID_MAX)))
+		{
+			theImage = GetImageById(static_cast<ResourceId>(aResourceId));
+		}
 		else
 		{
-			theImage = GetImageById(aResID);
+			mFailed = true;
+			theImage = nullptr;
 		}
 	}
 	else

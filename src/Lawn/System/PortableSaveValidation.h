@@ -43,6 +43,18 @@ inline bool IsValidPortableSaveFloat(float value) noexcept
 	return std::isfinite(value);
 }
 
+inline bool IsValidPortableSaveCount(std::int32_t count, std::uint32_t capacity) noexcept
+{
+	return count >= 0 && static_cast<std::uint32_t>(count) <= capacity;
+}
+
+inline bool IsValidPortableSaveResourceId(std::int32_t resourceId,
+	std::uint32_t resourceCount, std::int32_t nullResourceId) noexcept
+{
+	return resourceId == nullResourceId
+		|| (resourceId >= 0 && static_cast<std::uint32_t>(resourceId) < resourceCount);
+}
+
 template <typename GetEntryId>
 inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
 	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)
