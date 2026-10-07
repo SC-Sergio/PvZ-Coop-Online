@@ -333,6 +333,7 @@ This project is licensed under the terms of the [**GNU Lesser General Public Lic
 * The repository includes complete license texts at the root:
   * `LICENSE` — LGPL-3.0 text
   * `COPYING` — GPL-3.0 text, referenced by LGPL-3.0
+* Optional third-party dependencies and their upstream license terms are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Packaged builds must retain applicable third-party notices and license texts.
 * The code is provided "as is", **WITHOUT WARRANTY** of any kind.
 * The **original game IP (Plants vs. Zombies) belongs to PopCap/EA**. This license applies **only to the code implementation** in this repository.
 * This project does **NOT** include any copyrighted assets from the original game.
