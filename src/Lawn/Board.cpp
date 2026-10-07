@@ -6349,6 +6349,9 @@ void Board::UpdateAll(ModalFlags* theFlags)
 
 void Board::UpdateSimulation()
 {
+	if (mGardenStateIsolated && mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive()
+		&& !mApp->mCoopGardenManager->ShouldSimulateGarden(*this))
+		return;
 	ScopedGardenSimulationState aGardenState(this);
 	if (mGardenStateIsolated && mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
 	{

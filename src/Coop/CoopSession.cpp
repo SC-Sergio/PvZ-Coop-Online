@@ -123,13 +123,26 @@ namespace Coop
 	{
 		if (!IsValidSessionSnapshot(snapshot))
 			return false;
+		std::vector<GardenInstance> gardens = snapshot.gardens;
+		if (mStarted && snapshot.started)
+		{
+			// Roster/result snapshots do not rewind or fast-forward a running local
+			// simulation. Tick changes during recovery use the explicit restore path.
+			for (GardenInstance& garden : gardens)
+			{
+				const auto current = std::find_if(mGardens.begin(), mGardens.end(), [&garden](const GardenInstance& candidate)
+					{ return candidate.id == garden.id && candidate.owner == garden.owner; });
+				if (current != mGardens.end())
+					garden.simulationTicks = current->simulationTicks;
+			}
+		}
 		GardenId maxGardenId = 0;
-		for (const GardenInstance& garden : snapshot.gardens)
+		for (const GardenInstance& garden : gardens)
 			maxGardenId = std::max(maxGardenId, garden.id);
 		if (maxGardenId == std::numeric_limits<GardenId>::max() || snapshot.nextGardenId <= maxGardenId)
 			return false;
 		mSlots = snapshot.slots;
-		mGardens = snapshot.gardens;
+		mGardens = std::move(gardens);
 		mHostPlayerId = snapshot.hostPlayerId;
 		mRandomSeed = snapshot.randomSeed;
 		mLobbySettings = snapshot.settings;

@@ -112,6 +112,8 @@ namespace Coop
 		mLastConnectedPeerIds.clear();
 		mCommandProcessor.Reset();
 		mScheduledCommands.clear();
+		mAuthoritativeSimulationClock.Reset();
+		mSimulationTickGranted = false;
 		mQueueCommandExecution = false;
 		mExecutingScheduledCommand = false;
 		mReliableSendQueue.Clear();
@@ -500,6 +502,19 @@ namespace Coop
 	{
 		if (!mTransport)
 			return false;
+		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZT", 4) == 0)
+		{
+			const auto tick = DeserializeSimulationTickFrame(packet.bytes);
+			if (!tick || !mSession || !mSession->GetHostPlayerId()
+				|| packet.senderId != *mSession->GetHostPlayerId()
+				|| (mLocalPlayerId && *mLocalPlayerId == *mSession->GetHostPlayerId()))
+			{
+				mTransport->DisconnectPeer(packet.senderId);
+				return true;
+			}
+			mAuthoritativeSimulationClock.Observe(tick->tick);
+			return true;
+		}
 		if (packet.bytes.size() >= 4 && std::memcmp(packet.bytes.data(), "PVZS", 4) == 0)
 		{
 			const SnapshotReceiveResult result = mSnapshotReceiver.HandlePacket(*mTransport, packet,
@@ -719,8 +734,26 @@ namespace Coop
 
 	bool CoopGardenManager::AdvanceSimulationTick()
 	{
-		if (!mSession || !mSession->AdvanceSimulationTick())
+		mSimulationTickGranted = false;
+		if (!mSession || !mLocalPlayerId || !mSession->GetHostPlayerId())
 			return false;
+		const bool isHost = *mLocalPlayerId == *mSession->GetHostPlayerId();
+		if (!isHost)
+		{
+			if (mSession->GetGardens().empty()
+				|| !mAuthoritativeSimulationClock.CanAdvance(mSession->GetGardens().front().simulationTicks))
+				return false;
+		}
+		if (!mSession->AdvanceSimulationTick())
+			return false;
+		mSimulationTickGranted = true;
+		if (isHost && mTransport && !mSession->GetGardens().empty())
+		{
+			const auto bytes = SerializeSimulationTickFrame({mSession->GetGardens().front().simulationTicks});
+			for (TransportPlayerId peerId : mTransport->GetConnectedPeerIds())
+				if (!mReliableSendQueue.SendOrQueue(*mTransport, peerId, bytes))
+					mTransport->DisconnectPeer(peerId);
+		}
 		// Execute accepted intents immediately before the Board update for their canonical tick.
 		for (auto iterator = mScheduledCommands.begin(); iterator != mScheduledCommands.end();)
 		{
@@ -742,6 +775,13 @@ namespace Coop
 				SetGardenRecoveryStatus(owner, GardenRecoveryStatus::FAILED);
 		}
 		return true;
+	}
+
+	bool CoopGardenManager::ShouldSimulateGarden(const Board& board) const noexcept
+	{
+		return mSession != nullptr && mSimulationTickGranted
+			&& std::any_of(mGardens.begin(), mGardens.end(), [&board](const ManagedGarden& garden)
+				{ return garden.board == &board; });
 	}
 
 	bool CoopGardenManager::Execute(const PlayerCommand& command)

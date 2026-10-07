@@ -1,5 +1,6 @@
 #include "../../src/Coop/CoopSession.h"
 #include "../../src/Coop/CoopDifficulty.h"
+#include "../../src/Coop/SimulationTickProtocol.h"
 #include "../../src/Coop/CoopLoadout.h"
 #include "../../src/Coop/PlayerCommand.h"
 #include "../../src/Coop/CommandSerialization.h"
@@ -723,6 +724,29 @@ namespace
 			"unknown difficulty has no zombie budget scale");
 	}
 
+	void TestAuthoritativeSimulationTickProtocol()
+	{
+		const auto encoded = Coop::SerializeSimulationTickFrame({0x0102030405060708ULL});
+		const auto decoded = Coop::DeserializeSimulationTickFrame(encoded);
+		Require(decoded && decoded->tick == 0x0102030405060708ULL,
+			"authoritative simulation tick uses an explicit little-endian fixed frame");
+		Require(!Coop::DeserializeSimulationTickFrame(std::span<const std::uint8_t>(encoded.data(), encoded.size() - 1)),
+			"truncated authoritative tick frames are rejected");
+		auto malformed = encoded;
+		malformed[4]++;
+		Require(!Coop::DeserializeSimulationTickFrame(malformed), "unknown authoritative tick protocol versions are rejected");
+		malformed = encoded;
+		malformed[7] = 1;
+		Require(!Coop::DeserializeSimulationTickFrame(malformed), "nonzero reserved tick-frame bytes are rejected");
+
+		Coop::AuthoritativeSimulationClock clock;
+		Require(!clock.CanAdvance(0), "client cannot advance before receiving a host tick");
+		Require(clock.Observe(12) && clock.CanAdvance(11) && !clock.CanAdvance(12),
+			"client advances only up to the latest host-authorized tick");
+		Require(clock.Observe(12) && !clock.Observe(11) && clock.GetLatestTick() == 12,
+			"duplicate host ticks are harmless and stale ticks cannot rewind the clock");
+	}
+
 	void TestCoopClassicLoadouts()
 	{
 		for (const Coop::ClassicMapLoadout& expected : Coop::COOP_CLASSIC_LOADOUTS)
@@ -819,6 +843,28 @@ namespace
 			"one authoritative tick advances every active garden");
 		Require(session.AdvanceSimulationTick() && session.GetGardens()[0].simulationTicks == 2
 			&& session.GetGardens()[1].simulationTicks == 2, "tick update advances every garden together");
+		const auto captureSession = [](const Coop::CoopSession& source)
+		{
+			Coop::CoopSessionSnapshot snapshot;
+			snapshot.started = source.HasStarted();
+			snapshot.hostPlayerId = source.GetHostPlayerId().value_or(0);
+			snapshot.randomSeed = source.GetRandomSeed();
+			snapshot.settings = source.GetLobbySettings();
+			snapshot.nextGardenId = source.GetNextGardenId();
+			snapshot.slots = source.GetSlots();
+			snapshot.gardens = source.GetGardens();
+			return snapshot;
+		};
+		const Coop::CoopSessionSnapshot localSnapshot = captureSession(session);
+		auto replicatedTickSnapshot = localSnapshot;
+		replicatedTickSnapshot.gardens[0].simulationTicks = 500;
+		replicatedTickSnapshot.gardens[1].simulationTicks = 500;
+		Coop::CoopSession tickMirror;
+		Require(tickMirror.ApplySnapshot(localSnapshot), "started tick mirror receives initial state");
+		Require(tickMirror.AdvanceSimulationTick(), "started tick mirror advances its local simulation");
+		Require(tickMirror.ApplySnapshot(replicatedTickSnapshot)
+			&& tickMirror.GetGardens()[0].simulationTicks == 3 && tickMirror.GetGardens()[1].simulationTicks == 3,
+			"running roster snapshots preserve local board ticks until an explicit restore");
 		Require(session.SynchronizeGardenTick(session.GetGardens()[1].id, 900)
 			&& session.GetGardens()[1].simulationTicks == 900
 			&& session.GetGardens()[0].simulationTicks == 2,
@@ -1861,6 +1907,7 @@ int main(int argc, char** argv)
 	TestGardenSnapshotProtocol();
 	TestHeartbeatTimeout();
 	TestCoopDifficultyProfiles();
+	TestAuthoritativeSimulationTickProtocol();
 	TestCoopClassicLoadouts();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();

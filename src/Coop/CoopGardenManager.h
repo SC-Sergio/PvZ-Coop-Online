@@ -11,6 +11,7 @@
 #include "PlayerCommand.h"
 #include "NetworkTransport.h"
 #include "CoopSnapshotProtocol.h"
+#include "SimulationTickProtocol.h"
 #include "../ConstEnums.h"
 
 #include <functional>
@@ -66,6 +67,7 @@ namespace Coop
 		GardenRecoveryStatus GetGardenRecoveryStatus(PlayerId playerId) const noexcept;
 		bool ApplyCompletedSnapshotRecovery();
 		bool AdvanceSimulationTick();
+		bool ShouldSimulateGarden(const Board& board) const noexcept;
 		bool Execute(const PlayerCommand& command) override;
 		bool BeginSnapshotRecovery(TransportPlayerId peerId, PlayerId playerId);
 		void PumpSnapshotSends();
@@ -120,6 +122,8 @@ namespace Coop
 		std::chrono::steady_clock::time_point mLastRestoreConfirmationSend{};
 		std::uint64_t mNextSnapshotTransferId = 1;
 		std::uint64_t mNextLocalCommandSequence = 1;
+		AuthoritativeSimulationClock mAuthoritativeSimulationClock;
+		bool mSimulationTickGranted = false;
 		bool mQueueCommandExecution = false;
 		bool mExecutingScheduledCommand = false;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
