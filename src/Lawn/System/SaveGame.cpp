@@ -799,6 +799,12 @@ static void SyncMessageWidgetTailPortable(PortableSaveContext& theContext, Messa
 	theContext.SyncInt32(theWidget.mSlideOffTime);
 	theContext.SyncBytes(theWidget.mLabelNext, sizeof(theWidget.mLabelNext));
 	SyncEnum32(theContext, theWidget.mMessageStyleNext);
+	if (theContext.mReading && (theContext.mFailed
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theWidget.mMessageStyle),
+			MESSAGE_STYLE_OFF, MESSAGE_STYLE_ACHIEVEMENT + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theWidget.mMessageStyleNext),
+			MESSAGE_STYLE_OFF, MESSAGE_STYLE_ACHIEVEMENT + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncSeedBankTailPortable(PortableSaveContext& theContext, SeedBank& theSeedBank)
@@ -902,6 +908,24 @@ static void SyncMusicTailPortable(PortableSaveContext& theContext, Music& theMus
 	}
 	theContext.SyncInt32(theMusic.mFadeOutCounter);
 	theContext.SyncInt32(theMusic.mFadeOutDuration);
+	if (theContext.mReading && (theContext.mFailed
+		|| (theMusic.mCurMusicTune != MUSIC_TUNE_NONE
+			&& !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mCurMusicTune),
+				MUSIC_TUNE_DAY_GRASSWALK, NUM_MUSIC_TUNES))
+		|| (theMusic.mCurMusicFileMain != MUSIC_FILE_NONE
+			&& !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mCurMusicFileMain),
+				MUSIC_FILE_MAIN_MUSIC, NUM_MUSIC_FILES))
+		|| (theMusic.mCurMusicFileDrums != MUSIC_FILE_NONE
+			&& !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mCurMusicFileDrums),
+				MUSIC_FILE_MAIN_MUSIC, NUM_MUSIC_FILES))
+		|| (theMusic.mCurMusicFileHihats != MUSIC_FILE_NONE
+			&& !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mCurMusicFileHihats),
+				MUSIC_FILE_MAIN_MUSIC, NUM_MUSIC_FILES))
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mMusicBurstState),
+			MUSIC_BURST_OFF, MUSIC_BURST_FINISHING + 1)
+		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theMusic.mMusicDrumsState),
+			MUSIC_DRUMS_OFF, MUSIC_DRUMS_FADING + 1)))
+		theContext.mFailed = true;
 }
 
 static void SyncCustomSurvivalTailPortable(PortableSaveContext& theContext, CustomSurvivalOption& theOption)

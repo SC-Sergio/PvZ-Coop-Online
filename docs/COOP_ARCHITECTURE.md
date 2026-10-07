@@ -36,6 +36,8 @@ GridItems also validate both coordinates against the 9×6 board, and lawn mowers
 
 Challenge SAVE4 state validates its state and conveyor-seed enums, permits only an unset `(-1, -1)` or in-board challenge coordinate, and checks saved challenge/cloud reanimation IDs after effect holders load. Custom Survival's saved background is restricted to known board backgrounds.
 
+MessageWidget styles and saved Music tune/file/burst/drum enums are range checked as well. Invalid presentation or audio state rejects the load instead of entering engine switches with unknown values.
+
 Each SAVE4 attachment is limited to `MAX_EFFECTS_PER_ATTACHMENT` active entries, and each active entry's effect type must be a known enum before the engine's attachment switch runs. Attachment target IDs use `DataArrayTryToGet` and remain subject to cleanup if their target has expired.
 
 After all SAVE4 chunks are applied, optional plant, zombie, projectile, coin, GridItem, and cursor entity/effect references must be null or resolve in the loaded Board/effect holders. Projectile target resolution follows its plant/zombie discriminator. This guards strict engine getters and keeps corrupt cross-entity IDs from surviving post-load repair.
