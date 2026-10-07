@@ -677,11 +677,16 @@ static bool ClearValidatedListForRead(TodList<T>& theList)
 }
 
 template <typename T>
-static bool ResetItemForRead(T& theItem)
+static bool ReleaseItemOwnedResourcesForRead(T& theItem)
 {
 	if constexpr (std::is_same_v<T, TodParticleSystem>)
 	{
 		if (!ClearValidatedListForRead(theItem.mEmitterList))
+			return false;
+	}
+	if constexpr (std::is_same_v<T, TodParticleEmitter>)
+	{
+		if (!ClearValidatedListForRead(theItem.mParticleList))
 			return false;
 	}
 	if constexpr (std::is_same_v<T, Reanimation>)
@@ -702,6 +707,14 @@ static bool ResetItemForRead(T& theItem)
 			theItem.mTrackInstances = nullptr;
 		}
 	}
+	return true;
+}
+
+template <typename T>
+static bool ResetItemForRead(T& theItem)
+{
+	if (!ReleaseItemOwnedResourcesForRead(theItem))
+		return false;
 	std::fill_n(reinterpret_cast<unsigned char*>(&theItem), sizeof(T), 0);
 	return true;
 }
@@ -1867,6 +1880,20 @@ static bool SyncDataArrayHeaderPortable(PortableSaveContext& theContext, DataArr
 		{
 			theContext.mFailed = true;
 			return false;
+		}
+		if (theDataArray.mMaxUsedCount > theDataArray.mMaxSize)
+		{
+			theContext.mFailed = true;
+			return false;
+		}
+		for (uint32_t i = aMaxUsedCount; i < theDataArray.mMaxUsedCount; i++)
+		{
+			if ((theDataArray.mBlock[i].mID & DATA_ARRAY_KEY_MASK) != 0
+				&& !ReleaseItemOwnedResourcesForRead(theDataArray.mBlock[i].mItem))
+			{
+				theContext.mFailed = true;
+				return false;
+			}
 		}
 		theDataArray.mFreeListHead = aFreeListHead;
 		theDataArray.mMaxUsedCount = aMaxUsedCount;
