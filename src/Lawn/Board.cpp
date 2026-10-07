@@ -76,10 +76,6 @@ namespace
 				return;
 			EffectSystem* gardenEffectSystem = board->mGardenEffectSystem;
 			PoolEffect* gardenPoolEffect = board->mGardenPoolEffect;
-			if (mApp->mBoard == board && (!gardenEffectSystem
-				|| (mApp->mEffectSystem == gardenEffectSystem && gEffectSystem == gardenEffectSystem))
-				&& (!gardenPoolEffect || mApp->mPoolEffect == gardenPoolEffect))
-				return;
 
 			mScoped = true;
 			mPreviousBoard = mApp->mBoard;
@@ -88,9 +84,11 @@ namespace
 			mPreviousEffectSystem = mApp->mEffectSystem;
 			mPreviousGlobalEffectSystem = gEffectSystem;
 			mPreviousPoolEffect = mApp->mPoolEffect;
+			mPreviousSawYeti = mApp->mSawYeti;
 			mApp->mBoard = board;
 			mApp->mGameScene = board->mGardenGameScene;
 			mApp->mBoardResult = board->mGardenBoardResult;
+			mApp->mSawYeti = board->mGardenSawYeti;
 			if (gardenEffectSystem)
 			{
 				mApp->mEffectSystem = gardenEffectSystem;
@@ -106,9 +104,11 @@ namespace
 				return;
 			mBoard->mGardenGameScene = mApp->mGameScene;
 			mBoard->mGardenBoardResult = mApp->mBoardResult;
+			mBoard->mGardenSawYeti = mApp->mSawYeti;
 			mApp->mBoard = mPreviousBoard;
 			mApp->mGameScene = mPreviousScene;
 			mApp->mBoardResult = mPreviousResult;
+			mApp->mSawYeti = mPreviousSawYeti;
 			mApp->mEffectSystem = mPreviousEffectSystem;
 			gEffectSystem = mPreviousGlobalEffectSystem;
 			mApp->mPoolEffect = mPreviousPoolEffect;
@@ -120,6 +120,7 @@ namespace
 		Board* mPreviousBoard = nullptr;
 		GameScenes mPreviousScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousResult = BoardResult::BOARDRESULT_NONE;
+		bool mPreviousSawYeti = false;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
 		PoolEffect* mPreviousPoolEffect = nullptr;
@@ -154,6 +155,7 @@ Board::Board(LawnApp* theApp)
 	mApp->mBoard = this;
 	mGardenGameScene = mApp->mGameScene;
 	mGardenBoardResult = mApp->mBoardResult;
+	mGardenSawYeti = mApp->mSawYeti;
 	mGardenStateIsolated = false;
 	mApplyingCooperativeCommand = false;
 	mGardenEffectSystem = nullptr;
@@ -340,6 +342,7 @@ void Board::EnableGardenStateIsolation(bool enabled)
 	{
 		mGardenGameScene = mApp->mGameScene;
 		mGardenBoardResult = mApp->mBoardResult;
+		mGardenSawYeti = mApp->mSawYeti;
 	}
 	mGardenStateIsolated = enabled;
 }

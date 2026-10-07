@@ -46,6 +46,7 @@ namespace Coop
 
 		mPreviousGameScene = mApp->mGameScene;
 		mPreviousBoardResult = mApp->mBoardResult;
+		mPreviousSawYeti = mApp->mSawYeti;
 		mPreviousEffectSystem = mApp->mEffectSystem;
 		mPreviousGlobalEffectSystem = gEffectSystem;
 		mHasAppStateSnapshot = true;
@@ -137,6 +138,7 @@ namespace Coop
 		{
 			mApp->mGameScene = mPreviousGameScene;
 			mApp->mBoardResult = mPreviousBoardResult;
+			mApp->mSawYeti = mPreviousSawYeti;
 			mHasAppStateSnapshot = false;
 		}
 	}
@@ -155,6 +157,7 @@ namespace Coop
 		mApp->mBoard = selected->board;
 		mApp->mGameScene = selected->board->GetGardenGameScene();
 		mApp->mBoardResult = selected->board->GetGardenBoardResult();
+		mApp->mSawYeti = selected->board->mGardenSawYeti;
 		mViewedGarden = gardenId;
 		mApp->mWidgetManager->SetFocus(selected->board);
 		return true;

@@ -168,6 +168,7 @@ public:
 	LawnApp*						mApp;
 	GameScenes						mGardenGameScene;
 	BoardResult						mGardenBoardResult;
+	bool							mGardenSawYeti;
 	bool							mGardenStateIsolated;
 	bool							mApplyingCooperativeCommand;
 	EffectSystem*					mGardenEffectSystem;

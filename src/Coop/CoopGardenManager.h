@@ -105,6 +105,7 @@ namespace Coop
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;
 		BoardResult mPreviousBoardResult = BoardResult::BOARDRESULT_NONE;
+		bool mPreviousSawYeti = false;
 		bool mHasAppStateSnapshot = false;
 		EffectSystem* mPreviousEffectSystem = nullptr;
 		EffectSystem* mPreviousGlobalEffectSystem = nullptr;
