@@ -59,7 +59,7 @@ namespace Coop
 	std::vector<CommandRejection> DrainAuthoritativeCommands(INetworkTransport& transport,
 		const CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor, const AcceptedCommandCallback& onAccepted,
-		const AuthorityResponseCallback& onResponse)
+		const AuthorityResponseCallback& onResponse, const ControlPacketCallback& onControlPacket)
 	{
 		std::vector<CommandRejection> results;
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() != *session.GetHostPlayerId())
@@ -70,6 +70,8 @@ namespace Coop
 
 		while (std::optional<TransportPacket> packet = transport.Receive())
 		{
+			if (onControlPacket && onControlPacket(*packet))
+				continue;
 			const std::optional<PlayerCommand> command = DeserializeCommand(packet->bytes);
 			if (!command)
 			{
@@ -104,7 +106,7 @@ namespace Coop
 
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
 		CoopSession& session, AuthoritativeCommandProcessor& processor,
-		IPlayerCommandExecutor& executor)
+		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket)
 	{
 		std::vector<CommandRejection> results;
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() == *session.GetHostPlayerId())
@@ -120,6 +122,8 @@ namespace Coop
 				results.push_back(CommandRejection::SENDER_MISMATCH);
 				continue;
 			}
+			if (onControlPacket && onControlPacket(*packet))
+				continue;
 			if (const auto snapshot = DeserializeSessionSnapshot(packet->bytes))
 			{
 				results.push_back(session.ApplySnapshot(*snapshot)

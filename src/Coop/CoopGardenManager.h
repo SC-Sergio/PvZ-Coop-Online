@@ -7,6 +7,7 @@
 #define PVZ_COOP_GARDEN_MANAGER_H
 
 #include "CoopSession.h"
+#include "HeartbeatProtocol.h"
 #include "PlayerCommand.h"
 #include "NetworkTransport.h"
 #include "../ConstEnums.h"
@@ -44,6 +45,8 @@ namespace Coop
 		CommandRejection ProcessCommand(const PlayerCommand& command);
 		std::vector<CommandRejection> DrainIncomingCommands(INetworkTransport& transport);
 		void PumpNetwork();
+	bool HandleControlPacket(const TransportPacket& packet);
+	void PumpHeartbeat();
 		bool AdvanceSimulationTick();
 		bool Execute(const PlayerCommand& command) override;
 		void SyncTeamResults();
@@ -71,6 +74,7 @@ namespace Coop
 		AuthoritativeCommandProcessor mCommandProcessor;
 		std::optional<PlayerId> mLocalPlayerId;
 		INetworkTransport* mTransport = nullptr;
+	HeartbeatMonitor mHeartbeatMonitor;
 	std::unordered_set<TransportPlayerId> mLastConnectedPeerIds;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;

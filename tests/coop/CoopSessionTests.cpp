@@ -4,6 +4,7 @@
 #include "../../src/Coop/CommandSerialization.h"
 #include "../../src/Coop/NetworkTransport.h"
 #include "../../src/Coop/CommandEndpoint.h"
+#include "../../src/Coop/HeartbeatProtocol.h"
 #include "../../src/Coop/SessionSnapshotSerialization.h"
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
@@ -211,6 +212,77 @@ namespace
 		Coop::GardenSnapshotAssembler boundsAssembler;
 		Require(boundsAssembler.Accept(oversized, completed) == Coop::SnapshotReceiveResult::REJECTED
 			&& !boundsAssembler.HasPendingSnapshot(), "oversized transfer metadata is rejected before allocation");
+	}
+
+	void TestHeartbeatTimeout()
+	{
+		const auto encoded = Coop::SerializeHeartbeat({Coop::HeartbeatMessageType::PING, 42});
+		const auto decoded = Coop::DeserializeHeartbeat(encoded);
+		Require(decoded && decoded->type == Coop::HeartbeatMessageType::PING && decoded->sequence == 42,
+			"heartbeat ping round-trips its explicit type and sequence");
+		auto invalidVersion = encoded;
+		invalidVersion[4] = 2;
+		Require(!Coop::DeserializeHeartbeat(invalidVersion), "heartbeat protocol version is validated");
+		auto zeroSequence = Coop::SerializeHeartbeat({Coop::HeartbeatMessageType::PONG, 0});
+		Require(!Coop::DeserializeHeartbeat(zeroSequence), "heartbeat zero sequence is rejected");
+		Require(!Coop::DeserializeHeartbeat(std::span<const std::uint8_t>(encoded.data(), encoded.size() - 1)),
+			"truncated heartbeat frames are rejected");
+
+		Coop::LocalTransportHub hub;
+		auto host = hub.CreateTransport(501);
+		auto guest = hub.CreateTransport(502);
+		Require(host && guest, "heartbeat local peers are created");
+		Coop::HeartbeatMonitor hostMonitor;
+		Coop::HeartbeatMonitor guestMonitor;
+		const auto initialTime = Coop::HeartbeatMonitor::Clock::time_point{};
+		auto exchangeHeartbeats = [&](Coop::HeartbeatMonitor::Clock::time_point now)
+		{
+			hostMonitor.Pump(*host, now);
+			guestMonitor.Pump(*guest, now);
+			for (int pass = 0; pass < 3; ++pass)
+			{
+				while (const auto packet = host->Receive())
+					guestMonitor.HandlePacket(*guest, *packet, now);
+				while (const auto packet = guest->Receive())
+					hostMonitor.HandlePacket(*host, *packet, now);
+			}
+		};
+		exchangeHeartbeats(initialTime);
+		Require(hostMonitor.TakeTimedOutPeers().empty() && guestMonitor.TakeTimedOutPeers().empty(),
+			"valid pings and echoed pongs keep both peers alive");
+		hostMonitor.Pump(*host, initialTime + std::chrono::seconds(7));
+		guestMonitor.Pump(*guest, initialTime + std::chrono::seconds(7));
+		Require(hostMonitor.TakeTimedOutPeers().empty() && guestMonitor.TakeTimedOutPeers().empty(),
+			"the configured timeout allows a short packet-loss interval");
+		hostMonitor.Pump(*host, initialTime + std::chrono::seconds(9));
+		guestMonitor.Pump(*guest, initialTime + std::chrono::seconds(9));
+		const auto hostTimeouts = hostMonitor.TakeTimedOutPeers();
+		const auto guestTimeouts = guestMonitor.TakeTimedOutPeers();
+		Require(hostTimeouts == std::vector<Coop::TransportPlayerId>{502}
+			&& guestTimeouts == std::vector<Coop::TransportPlayerId>{501},
+			"silent peers time out after the heartbeat grace interval");
+
+		Coop::HeartbeatMonitor rateMonitor;
+		rateMonitor.Pump(*host, initialTime);
+		const Coop::TransportPacket firstPing{502,
+			Coop::SerializeHeartbeat({Coop::HeartbeatMessageType::PING, 10})};
+		const Coop::TransportPacket rapidPing{502,
+			Coop::SerializeHeartbeat({Coop::HeartbeatMessageType::PING, 11})};
+		Require(rateMonitor.HandlePacket(*host, firstPing, initialTime), "heartbeat peer ping is consumed");
+		Require(rateMonitor.HandlePacket(*host, rapidPing, initialTime + std::chrono::milliseconds(500)),
+			"rapid heartbeat packets are consumed without refreshing liveness");
+		rateMonitor.Pump(*host, initialTime + std::chrono::seconds(8));
+		Require(rateMonitor.TakeTimedOutPeers() == std::vector<Coop::TransportPlayerId>{502},
+			"heartbeat update rate is limited to prevent liveness spoofing");
+
+		Coop::HeartbeatMonitor malformedMonitor;
+		std::vector<std::uint8_t> malformed = encoded;
+		malformed[4] = 2;
+		const Coop::TransportPacket malformedPacket{502, malformed};
+		for (std::size_t i = 0; i < Coop::MAX_INVALID_HEARTBEATS; ++i)
+			malformedMonitor.HandlePacket(*host, malformedPacket, initialTime);
+		Require(malformedMonitor.TakeTimedOutPeers() == std::vector<Coop::TransportPlayerId>{502},
+			"repeated malformed heartbeat messages trigger peer removal");
 	}
 
 	void TestCoopDifficultyProfiles()
@@ -1146,6 +1218,7 @@ int main(int argc, char** argv)
 	TestDynamicPlayerCounts();
 	TestPortableSaveBounds();
 	TestGardenSnapshotProtocol();
+	TestHeartbeatTimeout();
 	TestCoopDifficultyProfiles();
 	TestCapacityIdentityAndLeave();
 	TestReadyAndStartRules();

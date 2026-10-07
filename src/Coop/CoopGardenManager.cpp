@@ -47,6 +47,7 @@ namespace Coop
 		mHasAppStateSnapshot = true;
 		mSession = &session;
 		mTransport = nullptr;
+		mHeartbeatMonitor.Reset();
 		mLastConnectedPeerIds.clear();
 		mCommandProcessor.Reset();
 		mLocalPlayerId = session.GetHostPlayerId();
@@ -122,6 +123,7 @@ namespace Coop
 		mSession = nullptr;
 		mLocalPlayerId.reset();
 		mTransport = nullptr;
+		mHeartbeatMonitor.Reset();
 		if (mHasAppStateSnapshot)
 		{
 			mApp->mGameScene = mPreviousGameScene;
@@ -164,6 +166,7 @@ namespace Coop
 		if (!mSession || !mLocalPlayerId || transport.GetLocalPlayerId() != *mLocalPlayerId)
 			return false;
 		mTransport = &transport;
+		mHeartbeatMonitor.Reset();
 		const auto peers = transport.GetConnectedPeerIds();
 		mLastConnectedPeerIds = std::unordered_set<TransportPlayerId>(peers.begin(), peers.end());
 		return true;
@@ -210,7 +213,7 @@ namespace Coop
 			{
 				if (const auto bytes = SerializeAuthorityResponse(response))
 					transport.SendTo(peerId, *bytes);
-			});
+			}, [this](const TransportPacket& packet) { return HandleControlPacket(packet); });
 	}
 
 	void CoopGardenManager::PumpNetwork()
@@ -223,7 +226,22 @@ namespace Coop
 			return;
 		if (*mLocalPlayerId == *mSession->GetHostPlayerId())
 		{
+			const auto peersBeforePump = mTransport->GetConnectedPeerIds();
+			for (TransportPlayerId peerId : peersBeforePump)
+			{
+				if (mLastConnectedPeerIds.contains(peerId))
+					continue;
+				const auto returningSlot = std::find_if(mSession->GetSlots().begin(), mSession->GetSlots().end(),
+					[peerId](const PlayerSlot& slot)
+					{
+						return slot.playerId == peerId
+							&& (slot.state == PlayerState::DISCONNECTED || slot.state == PlayerState::AI_TEMPORARY);
+					});
+				if (returningSlot != mSession->GetSlots().end())
+					mHeartbeatMonitor.ForgetPeer(peerId);
+			}
 			DrainIncomingCommands(*mTransport);
+			PumpHeartbeat();
 			const auto connectedPeers = mTransport->GetConnectedPeerIds();
 			const std::unordered_set<TransportPlayerId> connectedSet(connectedPeers.begin(), connectedPeers.end());
 			bool disconnected = false;
@@ -248,7 +266,26 @@ namespace Coop
 				BroadcastSessionSnapshot(*mTransport, *mSession);
 		}
 		else
-			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this);
+		{
+			DrainReplicatedCommands(*mTransport, *mSession, mCommandProcessor, *this,
+				[this](const TransportPacket& packet) { return HandleControlPacket(packet); });
+			PumpHeartbeat();
+		}
+	}
+
+	bool CoopGardenManager::HandleControlPacket(const TransportPacket& packet)
+	{
+		return mTransport && mHeartbeatMonitor.HandlePacket(*mTransport, packet,
+			HeartbeatMonitor::Clock::now());
+	}
+
+	void CoopGardenManager::PumpHeartbeat()
+	{
+		if (!mTransport)
+			return;
+		mHeartbeatMonitor.Pump(*mTransport, HeartbeatMonitor::Clock::now());
+		for (TransportPlayerId peerId : mHeartbeatMonitor.TakeTimedOutPeers())
+			mTransport->DisconnectPeer(peerId);
 	}
 
 	bool CoopGardenManager::AdvanceSimulationTick()
