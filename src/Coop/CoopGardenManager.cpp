@@ -274,7 +274,10 @@ namespace Coop
 		const bool replacingTransport = mTransport != nullptr;
 		mTransport = &transport;
 		if (replacingTransport)
+		{
 			mReliableSendQueue.Clear();
+			mScheduledCommands.clear();
+		}
 		mHeartbeatMonitor.Reset();
 		mSnapshotReceiver.Reset();
 		mSnapshotSenders.clear();
@@ -500,6 +503,9 @@ namespace Coop
 				[this](const TransportPacket& packet) { return HandleControlPacket(packet); },
 				[this](const PlayerCommand& command, std::uint64_t executeTick)
 				{
+					if (mLocalPlayerId
+						&& GetGardenRecoveryStatus(*mLocalPlayerId) != GardenRecoveryStatus::NONE)
+						return;
 					if (!QueueAcceptedCommand(command, executeTick))
 						SetGardenRecoveryStatus(command.senderId, GardenRecoveryStatus::FAILED);
 				});
@@ -544,7 +550,10 @@ namespace Coop
 				&& *mLocalPlayerId != *mSession->GetHostPlayerId())
 			{
 				if (result == SnapshotReceiveResult::REJECTED)
+				{
 					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+					mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
+				}
 				else if (result == SnapshotReceiveResult::COMPLETE
 					|| (result == SnapshotReceiveResult::DUPLICATE && mRecoveryStatuses.contains(*mLocalPlayerId)
 						&& mRecoveryStatuses.at(*mLocalPlayerId) == GardenRecoveryStatus::STRUCTURALLY_VALIDATED))
