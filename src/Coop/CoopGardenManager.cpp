@@ -32,6 +32,35 @@ namespace Coop
 	{
 		constexpr std::size_t MAX_SCHEDULED_COMMANDS = 256;
 		constexpr std::uint64_t MAX_COMMAND_SCHEDULE_AHEAD_TICKS = 250;
+
+		class GardenConstructionContext
+		{
+		public:
+			GardenConstructionContext(LawnApp& app, EffectSystem* effectSystem, PlayerInfo* playerInfo)
+				: mApp(app), mPreviousEffectSystem(app.mEffectSystem), mPreviousPlayerInfo(app.mPlayerInfo),
+				  mPreviousGlobalEffectSystem(gEffectSystem)
+			{
+				mApp.mEffectSystem = effectSystem;
+				mApp.mPlayerInfo = playerInfo;
+				gEffectSystem = effectSystem;
+			}
+
+			~GardenConstructionContext()
+			{
+				mApp.mEffectSystem = mPreviousEffectSystem;
+				mApp.mPlayerInfo = mPreviousPlayerInfo;
+				gEffectSystem = mPreviousGlobalEffectSystem;
+			}
+
+			GardenConstructionContext(const GardenConstructionContext&) = delete;
+			GardenConstructionContext& operator=(const GardenConstructionContext&) = delete;
+
+		private:
+			LawnApp& mApp;
+			EffectSystem* mPreviousEffectSystem;
+			PlayerInfo* mPreviousPlayerInfo;
+			EffectSystem* mPreviousGlobalEffectSystem;
+		};
 	}
 
 	CoopGardenManager::CoopGardenManager(LawnApp* app) : mApp(app)
@@ -82,20 +111,12 @@ namespace Coop
 			effectSystem->EffectSystemInitialize();
 			gEffectSystem = previousGlobalEffectSystem;
 
-			EffectSystem* previousAppEffectSystem = mApp->mEffectSystem;
-			PlayerInfo* previousPlayerInfo = mApp->mPlayerInfo;
-			previousGlobalEffectSystem = gEffectSystem;
-			mApp->mEffectSystem = effectSystem.get();
-			mApp->mPlayerInfo = playerInfo.get();
-			gEffectSystem = effectSystem.get();
 			Board* board = nullptr;
 			{
+				GardenConstructionContext gardenContext(*mApp, effectSystem.get(), playerInfo.get());
 				Sexy::ScopedRandomGenerator randomContext(randomGenerator.get());
 				board = new Board(mApp);
 			}
-			mApp->mEffectSystem = previousAppEffectSystem;
-			mApp->mPlayerInfo = previousPlayerInfo;
-			gEffectSystem = previousGlobalEffectSystem;
 			board->mGardenEffectSystem = effectSystem.get();
 			board->mGardenEffectSystemOwner = effectSystem;
 			board->mGardenPoolEffect = poolEffect.get();
