@@ -129,7 +129,8 @@ namespace Coop
 	std::vector<CommandRejection> DrainReplicatedCommands(INetworkTransport& transport,
 		CoopSession& session, AuthoritativeCommandProcessor& processor,
 		IPlayerCommandExecutor& executor, const ControlPacketCallback& onControlPacket,
-		const ScheduledCommandCallback& onScheduledCommand)
+		const ScheduledCommandCallback& onScheduledCommand,
+		const ReplicationFailureCallback& onReplicationFailure)
 	{
 		std::vector<CommandRejection> results;
 		if (!session.GetHostPlayerId() || transport.GetLocalPlayerId() == *session.GetHostPlayerId())
@@ -176,9 +177,16 @@ namespace Coop
 					results.push_back(result);
 					if (result == CommandRejection::NONE)
 						onScheduledCommand(*response->acceptedCommand, response->serverTick);
+					else if (onReplicationFailure)
+						onReplicationFailure(*response->acceptedCommand, result);
 				}
 				else
-					results.push_back(processor.Process(session, *response->acceptedCommand, executor));
+				{
+					const CommandRejection result = processor.Process(session, *response->acceptedCommand, executor);
+					results.push_back(result);
+					if (result != CommandRejection::NONE && onReplicationFailure)
+						onReplicationFailure(*response->acceptedCommand, result);
+				}
 				continue;
 			}
 			const std::optional<PlayerCommand> command = DeserializeCommand(packet->bytes);

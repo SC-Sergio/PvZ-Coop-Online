@@ -1635,6 +1635,45 @@ namespace
 			&& guestExecutor.executions == 0 && scheduledServerTick == observedServerTick,
 			"client validates the host receipt and queues its intent for the canonical tick");
 
+		Coop::CoopSession desynchronizedSession;
+		Require(desynchronizedSession.Join(91, "Host").has_value()
+			&& desynchronizedSession.Join(92, "Guest").has_value()
+			&& desynchronizedSession.SetReady(91, true) && desynchronizedSession.SetReady(92, true)
+			&& desynchronizedSession.StartGame(91) && desynchronizedSession.MarkDisconnected(92),
+			"replication failure fixture creates a stale local roster");
+		Coop::LocalTransportHub recoveryHub;
+		auto recoveryHost = recoveryHub.CreateTransport(91);
+		auto recoveryGuest = recoveryHub.CreateTransport(92);
+		Coop::PlayerCommand acceptedByHost;
+		acceptedByHost.senderId = 92;
+		acceptedByHost.gardenId = desynchronizedSession.GetSlots()[1].gardenId.value();
+		acceptedByHost.sequence = 1;
+		acceptedByHost.type = Coop::CommandType::PLACE_PLANT;
+		acceptedByHost.x = 2;
+		acceptedByHost.y = 3;
+		acceptedByHost.value = static_cast<std::int32_t>(SeedType::SEED_PEASHOOTER);
+		Coop::CommandAuthorityResponse acceptedReceipt;
+		acceptedReceipt.recipientPlayerId = 92;
+		acceptedReceipt.sequence = acceptedByHost.sequence;
+		acceptedReceipt.serverTick = Coop::COMMAND_EXECUTION_LEAD_TICKS;
+		acceptedReceipt.acceptedCommand = acceptedByHost;
+		const auto acceptedReceiptBytes = Coop::SerializeAuthorityResponse(acceptedReceipt);
+		Require(acceptedReceiptBytes && recoveryHost->SendTo(92, *acceptedReceiptBytes),
+			"host delivers a canonical accepted action to the stale client");
+		Coop::AuthoritativeCommandProcessor staleClientProcessor;
+		RecordingExecutor staleClientExecutor;
+		bool replicationFailureNotified = false;
+		const auto staleResult = Coop::DrainReplicatedCommands(*recoveryGuest, desynchronizedSession,
+			staleClientProcessor, staleClientExecutor, {}, {},
+			[&replicationFailureNotified](const Coop::PlayerCommand& failedCommand, Coop::CommandRejection reason)
+			{
+				replicationFailureNotified = failedCommand.sequence == 1
+					&& reason == Coop::CommandRejection::PLAYER_NOT_PLAYING;
+			});
+		Require(staleResult.size() == 1 && staleResult[0] == Coop::CommandRejection::PLAYER_NOT_PLAYING
+			&& replicationFailureNotified && staleClientExecutor.executions == 0,
+			"a locally unapplyable host-accepted command reports a replication failure for snapshot recovery");
+
 		command.sequence = 2;
 		command.x = Coop::BOARD_COLUMNS;
 		Require(Coop::SendCommandToHost(*guest, 81, command), "invalid follow-up intent reaches authority for rejection");

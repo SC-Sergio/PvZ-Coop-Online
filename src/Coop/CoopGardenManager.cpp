@@ -520,6 +520,16 @@ namespace Coop
 						if (mTransport && mSession && mSession->GetHostPlayerId())
 							mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
 					}
+				},
+				[this](const PlayerCommand&, CommandRejection)
+				{
+					// The host accepted this intent, so a local validation failure means this
+					// client cannot apply the canonical command stream safely.
+					if (!mLocalPlayerId || !mSession || !mSession->GetHostPlayerId())
+						return;
+					SetGardenRecoveryStatus(*mLocalPlayerId, GardenRecoveryStatus::FAILED);
+					if (mTransport)
+						mTransport->DisconnectPeer(*mSession->GetHostPlayerId());
 				});
 			ApplyCompletedSnapshotRecovery();
 			if (mPendingRestoreConfirmation
