@@ -128,11 +128,23 @@ namespace Coop
 	void CoopLobbyController::PumpConnection()
 	{
 #if defined(PVZ_COOP_HAS_WEBRTC)
+		if (auto* currentTransport = dynamic_cast<WebRtcSignalingTransport*>(mTransport.get());
+			currentTransport && currentTransport->IsRoomClosed())
+		{
+			mReconnectTerminated = true;
+			mConnectionError = "The lobby host closed the room.";
+		}
 		if (mReconnectFuture.valid())
 		{
 			if (mReconnectFuture.wait_for(std::chrono::milliseconds::zero()) != std::future_status::ready)
 				return;
 			ReconnectResult result = mReconnectFuture.get();
+			if (mReconnectTerminated)
+			{
+				if (result.transport)
+					result.transport->Close();
+				return;
+			}
 			if (result.transport)
 			{
 				auto* internetTransport = dynamic_cast<WebRtcSignalingTransport*>(result.transport.get());
@@ -154,9 +166,18 @@ namespace Coop
 			else
 			{
 				mConnectionError = std::move(result.error);
+				if (mConnectionError.find("(ROOM_NOT_FOUND)") != std::string::npos
+					|| mConnectionError.find("(REJOIN_REJECTED)") != std::string::npos)
+				{
+					mReconnectTerminated = true;
+					mConnectionError = "The lobby session can no longer be resumed.";
+					return;
+				}
 				mNextReconnectAttempt = std::chrono::steady_clock::now() + std::chrono::seconds(3);
 			}
 		}
+		if (mReconnectTerminated)
+			return;
 
 		if (mIsHost)
 			return;

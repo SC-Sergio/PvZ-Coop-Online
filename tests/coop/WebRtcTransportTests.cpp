@@ -367,6 +367,31 @@ namespace
 			if (!reconnectPacket || reconnectPacket->senderId != returningPlayerId || reconnectPacket->bytes != reconnectProbe)
 				throw std::runtime_error("rejoined peer did not deliver its packet over the replacement DataChannel");
 			returnedTransport->Close();
+
+			auto* hostSignalingTransport = dynamic_cast<Coop::WebRtcSignalingTransport*>(host->GetTransport());
+			if (!hostSignalingTransport)
+				throw std::runtime_error("host signaling transport was lost before host-close test");
+			hostSignalingTransport->Close();
+			const auto hostCloseDeadline = std::chrono::steady_clock::now() + 5s;
+			bool allGuestsStoppedRejoining = false;
+			while (std::chrono::steady_clock::now() < hostCloseDeadline)
+			{
+				for (auto& guest : guests)
+					guest->PumpConnection();
+				allGuestsStoppedRejoining = std::all_of(guests.begin(), guests.end(), [](const auto& guest)
+					{ return guest->GetConnectionError() == "The lobby host closed the room."
+						|| guest->GetConnectionError() == "The lobby session can no longer be resumed."; });
+				if (allGuestsStoppedRejoining)
+					break;
+				std::this_thread::sleep_for(10ms);
+			}
+			if (!allGuestsStoppedRejoining)
+			{
+				std::string errors;
+				for (const auto& guest : guests)
+					errors += " [" + guest->GetConnectionError() + "]";
+				throw std::runtime_error("guests did not stop retrying after the host closed the Internet room:" + errors);
+			}
 		}
 		std::cout << "Two/three/four-player signaling, lobby, authoritative commands, and WebRTC reconnect tests passed\n";
 		return 0;

@@ -34,6 +34,7 @@ namespace Coop
 		TransportPlayerId hostPlayerId;
 		bool isHost;
 		bool closed = false;
+		bool roomClosed = false;
 		bool socketOpen = false;
 		bool joined = false;
 		rtc::Configuration iceConfiguration;
@@ -281,6 +282,10 @@ namespace Coop
 			{
 				if (type == "room-closed")
 				{
+					{
+						std::lock_guard lock(state->mutex);
+						state->roomClosed = true;
+					}
 					SetError(state, "The lobby host closed the room.");
 					return;
 				}
@@ -610,7 +615,12 @@ namespace Coop
 	{
 		std::lock_guard lock(mState->mutex);
 		return !mState->isHost && !mState->roomCode.empty() && !mState->resumeToken.empty()
-			&& !mState->signalingUrl.empty();
+			&& !mState->signalingUrl.empty() && !mState->roomClosed;
+	}
+	bool WebRtcSignalingTransport::IsRoomClosed() const noexcept
+	{
+		std::lock_guard lock(mState->mutex);
+		return mState->roomClosed;
 	}
 	std::string WebRtcSignalingTransport::GetRoomCode() const { std::lock_guard lock(mState->mutex); return mState->roomCode; }
 	std::string WebRtcSignalingTransport::GetResumeToken() const { std::lock_guard lock(mState->mutex); return mState->resumeToken; }

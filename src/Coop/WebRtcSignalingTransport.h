@@ -46,6 +46,7 @@ namespace Coop
 		bool DisconnectPeer(TransportPlayerId peerId) noexcept override;
 		bool CanResumeSession() const noexcept override;
 		void Close() noexcept override;
+		bool IsRoomClosed() const noexcept;
 
 		std::string GetRoomCode() const;
 	std::string GetResumeToken() const;

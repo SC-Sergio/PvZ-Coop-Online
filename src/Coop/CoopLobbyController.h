@@ -70,6 +70,7 @@ namespace Coop
 		std::string mSignalingUrl;
 		std::string mResumeToken;
 		std::string mConnectionError;
+		bool mReconnectTerminated = false;
 		std::future<ReconnectResult> mReconnectFuture;
 		std::chrono::steady_clock::time_point mNextReconnectAttempt{};
 	};
