@@ -229,6 +229,12 @@ inline bool IsValidPortableSaveReanimationTypeBinding(std::int32_t actualType,
 		&& actualType == expectedType;
 }
 
+inline bool IsValidPortableSaveTrackDefinition(std::int32_t trackCount,
+	bool hasTrackArray) noexcept
+{
+	return trackCount >= 0 && (trackCount == 0 || hasTrackArray);
+}
+
 template <typename IsValidId>
 inline bool IsValidPortableSaveDataIdList(const std::vector<std::uint32_t>& ids,
 	std::uint32_t capacity, IsValidId isValidId)

@@ -217,6 +217,11 @@ namespace
 			&& !IsValidPortableSaveReanimationTypeBinding(-1, 0, NUM_REANIMS)
 			&& !IsValidPortableSaveReanimationTypeBinding(NUM_REANIMS, NUM_REANIMS, NUM_REANIMS),
 			"portable save reanimation types match their definitions, including the empty sentinel");
+		Require(IsValidPortableSaveTrackDefinition(0, false)
+			&& IsValidPortableSaveTrackDefinition(4, true)
+			&& !IsValidPortableSaveTrackDefinition(-1, false)
+			&& !IsValidPortableSaveTrackDefinition(4, false),
+			"portable save reanimation track descriptors reject negative counts and missing arrays");
 		const std::vector<std::uint32_t> particleIds{0x00010000U, 0x00010002U};
 		Require(IsValidPortableSaveDataIdList(particleIds, 2,
 			[](std::uint32_t id) { return id == 0x00010000U || id == 0x00010002U; }),

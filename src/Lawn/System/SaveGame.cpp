@@ -1559,6 +1559,12 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 			aDef = nullptr;
 		}
 	}
+	if (theContext.mReading && aDef
+		&& !IsValidPortableSaveTrackDefinition(aDef->mTracks.count, aDef->mTracks.tracks != nullptr))
+	{
+		theContext.mFailed = true;
+		return;
+	}
 
 	theContext.SyncEnum(theReanimation->mReanimationType);
 	theContext.SyncFloat(theReanimation->mAnimTime);
@@ -1606,7 +1612,7 @@ static void SyncReanimationPortable(Board* theBoard, Reanimation* theReanimation
 			theContext.mFailed = true;
 	}
 
-	if (aDef && aDef->mTracks.count != 0)
+	if (aDef && aDef->mTracks.count > 0)
 	{
 		int aCount = aDef->mTracks.count;
 		bool aUseTemp = (theReanimation->mTrackInstances == nullptr);
@@ -3275,7 +3281,9 @@ static bool ValidateV4EntityReferences(Board* theBoard)
 	Reanimation* aReanimation = nullptr;
 	while (theBoard->mApp->mEffectSystem->mReanimationHolder->mReanimations.IterateNext(aReanimation))
 	{
-		if (aReanimation->mDefinition == nullptr || aReanimation->mDefinition->mTracks.count < 0
+		if (aReanimation->mDefinition == nullptr
+			|| !IsValidPortableSaveTrackDefinition(aReanimation->mDefinition->mTracks.count,
+				aReanimation->mDefinition->mTracks.tracks != nullptr)
 			|| (aReanimation->mDefinition->mTracks.count > 0 && aReanimation->mTrackInstances == nullptr))
 			return false;
 		for (int aTrackIndex = 0; aTrackIndex < aReanimation->mDefinition->mTracks.count; ++aTrackIndex)
