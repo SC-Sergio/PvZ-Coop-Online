@@ -1038,7 +1038,9 @@ static void SyncZombieTailPortable(PortableSaveContext& theContext, Zombie& theZ
 			HELMTYPE_NONE, HELMTYPE_GIGA_FOOTBALL + 1)
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theZombie.mShieldType),
 			SHIELDTYPE_NONE, SHIELDTYPE_LADDER + 1)
-		|| !IsValidPortableSaveRow(theZombie.mRow, MAX_GRID_SIZE_Y)))
+		|| !IsValidPortableSaveRow(theZombie.mRow, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveWaveSource(theZombie.mFromWave,
+			Zombie::ZOMBIE_WAVE_WINNER, MAX_ZOMBIE_WAVES)))
 		theContext.mFailed = true;
 }
 

@@ -26,6 +26,8 @@ Zombie and projectile SAVE4 readers also validate inherited `GameObject::mRow` a
 
 Portable plant and projectile state also bounds `mStartRow` and `mCobTargetRow` to the board and validates the optional torchwood column (`-1` or a board column). This prevents a peer-provided garden snapshot from restoring these gameplay indices out of range before simulation resumes.
 
+Zombie wave origin values are bounded to wave slots or the engine's four reserved negative origins (`-1` through `-4`); arbitrary values are rejected during SAVE4 entity decoding.
+
 `SessionSnapshotSerialization.*` adds a separate, fixed-schema v2, length-capped session snapshot for the four lobby slots, host identity, shared match seed, next garden ID, selected map/difficulty/mode, and garden owner/result/tick metadata. It preserves empty slots without allocating gardens and can rebuild a `CoopSession` without reusing IDs from a departed slot. The shared seed plus stable player/garden IDs initializes repeatable garden-local Mersenne Twister streams. The current bootstrap consumes map IDs and three difficulty presets; only Classic mode is accepted. The payload remains lobby/session metadata; it contains no `Board` entities, economy, active RNG state, seed-bank state, wave queues, or effects and therefore cannot restore an active game after reconnect. The engine's existing SAVE4 chunks cover many of those fields, but the file-path reader applies chunks incrementally; see the architecture note before reusing it for hostile packet data.
 
 ## Message families

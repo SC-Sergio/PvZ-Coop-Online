@@ -142,6 +142,13 @@ namespace
 			&& !IsValidPortableSaveWaveState(101, 0, 100)
 			&& !IsValidPortableSaveWaveState(10, 11, 100),
 			"portable save wave cursors stay within wave count and capacity");
+		Require(IsValidPortableSaveWaveSource(-4, -4, 100)
+			&& IsValidPortableSaveWaveSource(-1, -4, 100)
+			&& IsValidPortableSaveWaveSource(0, -4, 100)
+			&& IsValidPortableSaveWaveSource(99, -4, 100)
+			&& !IsValidPortableSaveWaveSource(-5, -4, 100)
+			&& !IsValidPortableSaveWaveSource(100, -4, 100),
+			"portable zombie wave sources accept only defined sentinels and wave slots");
 		Require(IsValidPortableSaveSeedType(SEED_NONE, SEED_NONE, NUM_SEED_TYPES,
 			SEED_ZOMBIE_IMP + 1, true)
 			&& IsValidPortableSaveSeedType(NUM_SEED_TYPES - 1, SEED_NONE, NUM_SEED_TYPES,

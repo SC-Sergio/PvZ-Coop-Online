@@ -139,6 +139,13 @@ inline bool IsValidPortableSaveWaveState(std::int32_t waveCount,
 		&& currentWave <= waveCount;
 }
 
+inline bool IsValidPortableSaveWaveSource(std::int32_t waveSource,
+	std::int32_t firstReservedValue, std::uint32_t waveCapacity) noexcept
+{
+	return waveSource >= firstReservedValue
+		&& (waveSource < 0 || static_cast<std::uint32_t>(waveSource) < waveCapacity);
+}
+
 inline bool IsValidPortableSaveSeedType(std::int32_t value,
 	std::int32_t noneValue, std::int32_t numSeedTypes,
 	std::int32_t endExtendedSeedTypes, bool allowExtended) noexcept

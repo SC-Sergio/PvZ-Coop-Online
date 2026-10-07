@@ -28,3 +28,10 @@
 - **Verification:** both MSVC Debug variants rebuilt; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. Existing boundary tests cover valid rows and optional indices plus negative/one-past-end cases. `git diff --check` passed.
 - **Known limit:** validation helper coverage does not replace a SAVE4 load against a live initialized Board.
 - **Next:** audit remaining direct-index fields and extend malformed snapshot tests where runtime-independent validation can cover them.
+
+### Checkpoint: SAVE4 zombie wave source
+
+- **Change:** zombie `mFromWave` now accepts only wave indices below `MAX_ZOMBIE_WAVES` or the engine's reserved values `-1` through `-4`. Arbitrary negative and oversized values are rejected before the entity can resume simulation.
+- **Verification:** both MSVC 19.44 Debug app builds succeeded; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. Helper tests cover every boundary and reserved-range edges.
+- **Known limit:** malformed-load behavior is helper/build covered; an initialized-Board save restore still awaits legal game assets.
+- **Next:** continue checking bounded counters and gameplay indices, prioritizing values directly used by array lookup or arithmetic.

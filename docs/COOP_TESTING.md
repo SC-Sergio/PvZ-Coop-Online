@@ -88,3 +88,5 @@ The loader also bounds plant and GridItem coordinates to the fixed 9×6 board, v
 The SAVE4 row helper accepts 0 through `rowCount - 1` and rejects negative and one-past-end values. Zombie and projectile readers apply this validation to their inherited `GameObject::mRow` before restored objects can use the row to access board arrays. Both Debug configurations rebuilt successfully; CTest passed 2/2 without WebRTC and 4/4 with WebRTC.
 
 SAVE4 also checks plant `mStartRow` and projectile `mCobTargetRow`, and restricts `mHitTorchwoodGridX` to the null sentinel or board columns. The helper boundary tests cover the valid endpoints, sentinel, negative and one-past-end cases; initialized-Board behavior remains unverified without assets.
+
+Zombie `mFromWave` validation accepts only `-4` through `-1` (the engine's reserved debug/cutscene/UI/winner sources) or a wave index below capacity. Tests cover both reserved-range boundaries and the first/last valid wave indices, while rejecting one-past-end and values below the reserved range. Both Debug CTest suites pass after integration.
