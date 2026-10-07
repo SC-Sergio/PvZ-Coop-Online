@@ -102,3 +102,5 @@ The GitHub Actions workflow now includes `feature/coop-online` for pushes and pu
 Portable-save world-coordinate helpers accept ±10,000 pixels, reject non-finite floats and reject extents outside 0–10,000. They are applied to base GameObject geometry, plant targets, zombie/projectile/coin/mower/GridItem positions, collision rectangles, particle/trail vectors, and attachment/reanimation matrices. Helper tests cover boundaries and infinities; both Debug CTest suites pass. Board-backed load behavior remains unverified.
 
 Garden-scoped profile, effect, pool, and RNG objects are shared-owned by both the manager and Board. This keeps them alive through `SafeDeleteWidget`'s deferred Board destructor after manager teardown. Both MSVC Debug builds and CTest suites pass with this ownership path; no engine test currently exercises deferred teardown with initialized garden resources.
+
+Cooperative determinism also disables the legacy Board typing-code path and per-Board speed button. Both standard and WebRTC MSVC Debug builds compile the guard and pass CTest (2/2 and 4/4). There is no initialized-Board input test in the current asset-free environment.
