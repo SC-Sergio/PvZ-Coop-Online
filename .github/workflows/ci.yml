@@ -465,6 +465,22 @@ jobs:
           build-wasm/pvz-mod.js
           build-wasm/pvz-mod.wasm
 
+  validate-coop-deployment:
+    name: Validate Co-op Internet deployment template
+    runs-on: ubuntu-24.04
+    env:
+      COOP_SIGNAL_DOMAIN: coop.example.net
+      TURN_EXTERNAL_IP: 203.0.113.10
+      COOP_TURN_SHARED_SECRET: ci-placeholder-secret-not-for-deployment
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Validate Compose configuration
+      working-directory: services/coop-signaling
+      run: |
+        docker compose version
+        docker compose config --quiet
+
   release:
     name: Release
     needs: ['build-archlinux', 'build-windows-msys2-ucrt64', 'build-windows-msvc-x64', 'build-macos', 'build-android', 'build-ios', 'build-wasm']
