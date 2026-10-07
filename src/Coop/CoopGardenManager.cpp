@@ -37,7 +37,8 @@ namespace Coop
 		{
 		public:
 			GardenConstructionContext(LawnApp& app, EffectSystem* effectSystem, PlayerInfo* playerInfo)
-				: mApp(app), mPreviousEffectSystem(app.mEffectSystem), mPreviousPlayerInfo(app.mPlayerInfo),
+				: mApp(app), mPreviousBoard(app.mBoard), mPreviousEffectSystem(app.mEffectSystem),
+				  mPreviousPlayerInfo(app.mPlayerInfo),
 				  mPreviousGlobalEffectSystem(gEffectSystem)
 			{
 				mApp.mEffectSystem = effectSystem;
@@ -47,6 +48,7 @@ namespace Coop
 
 			~GardenConstructionContext()
 			{
+				mApp.mBoard = mPreviousBoard;
 				mApp.mEffectSystem = mPreviousEffectSystem;
 				mApp.mPlayerInfo = mPreviousPlayerInfo;
 				gEffectSystem = mPreviousGlobalEffectSystem;
@@ -57,9 +59,26 @@ namespace Coop
 
 		private:
 			LawnApp& mApp;
+			Board* mPreviousBoard;
 			EffectSystem* mPreviousEffectSystem;
 			PlayerInfo* mPreviousPlayerInfo;
 			EffectSystem* mPreviousGlobalEffectSystem;
+		};
+
+		class ScopedGlobalEffectSystem
+		{
+		public:
+			explicit ScopedGlobalEffectSystem(EffectSystem* effectSystem) : mPrevious(gEffectSystem)
+			{
+				gEffectSystem = effectSystem;
+			}
+
+			~ScopedGlobalEffectSystem() { gEffectSystem = mPrevious; }
+			ScopedGlobalEffectSystem(const ScopedGlobalEffectSystem&) = delete;
+			ScopedGlobalEffectSystem& operator=(const ScopedGlobalEffectSystem&) = delete;
+
+		private:
+			EffectSystem* mPrevious;
 		};
 	}
 
@@ -97,51 +116,61 @@ namespace Coop
 		mReliableSendQueue.Clear();
 		mLocalPlayerId = session.GetHostPlayerId();
 		mNextLocalCommandSequence = 1;
-		for (const GardenInstance& garden : session.GetGardens())
+		try
 		{
-			const std::uint32_t gardenSeed = session.GetRandomSeed()
-				^ (garden.id * 0x9e3779b9U) ^ (garden.owner * 0x85ebca6bU);
-			std::shared_ptr<Sexy::MTRand> randomGenerator = std::make_shared<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
-			std::shared_ptr<PoolEffect> poolEffect = std::make_shared<PoolEffect>();
-			poolEffect->PoolEffectInitialize();
-			std::shared_ptr<PlayerInfo> playerInfo = std::make_shared<PlayerInfo>(*mApp->mPlayerInfo);
-			std::shared_ptr<EffectSystem> effectSystem = std::make_shared<EffectSystem>();
-			EffectSystem* previousGlobalEffectSystem = gEffectSystem;
-			gEffectSystem = nullptr;
-			effectSystem->EffectSystemInitialize();
-			gEffectSystem = previousGlobalEffectSystem;
-
-			Board* board = nullptr;
+			mGardens.reserve(session.GetGardenCount());
+			for (const GardenInstance& garden : session.GetGardens())
 			{
-				GardenConstructionContext gardenContext(*mApp, effectSystem.get(), playerInfo.get());
-				Sexy::ScopedRandomGenerator randomContext(randomGenerator.get());
-				board = new Board(mApp);
-			}
-			board->mGardenEffectSystem = effectSystem.get();
-			board->mGardenEffectSystemOwner = effectSystem;
-			board->mGardenPoolEffect = poolEffect.get();
-			board->mGardenPoolEffectOwner = poolEffect;
-			board->mGardenRandomGenerator = randomGenerator.get();
-			board->mGardenRandomGeneratorOwner = randomGenerator;
-			board->mGardenPlayerInfo = playerInfo.get();
-			board->mGardenPlayerInfoOwner = playerInfo;
-			board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
-			board->EnableGardenStateIsolation(true);
-			board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
-			board->mVisible = false;
-			mApp->mWidgetManager->AddWidget(board);
-			mApp->mWidgetManager->BringToBack(board);
-			mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(poolEffect),
-				std::move(randomGenerator), std::move(playerInfo)});
+				const std::uint32_t gardenSeed = session.GetRandomSeed()
+					^ (garden.id * 0x9e3779b9U) ^ (garden.owner * 0x85ebca6bU);
+				std::shared_ptr<Sexy::MTRand> randomGenerator = std::make_shared<Sexy::MTRand>(static_cast<unsigned long>(gardenSeed));
+				std::shared_ptr<PoolEffect> poolEffect = std::make_shared<PoolEffect>();
+				poolEffect->PoolEffectInitialize();
+				std::shared_ptr<PlayerInfo> playerInfo = std::make_shared<PlayerInfo>(*mApp->mPlayerInfo);
+				std::shared_ptr<EffectSystem> effectSystem = std::make_shared<EffectSystem>();
+				{
+					ScopedGlobalEffectSystem clearGlobalEffectSystem(nullptr);
+					effectSystem->EffectSystemInitialize();
+				}
 
-			if (!mViewedGarden)
-				mViewedGarden = garden.id;
+				Board* board = nullptr;
+				{
+					GardenConstructionContext gardenContext(*mApp, effectSystem.get(), playerInfo.get());
+					Sexy::ScopedRandomGenerator randomContext(randomGenerator.get());
+					board = new Board(mApp);
+				}
+				board->mGardenEffectSystem = effectSystem.get();
+				board->mGardenEffectSystemOwner = effectSystem;
+				board->mGardenPoolEffect = poolEffect.get();
+				board->mGardenPoolEffectOwner = poolEffect;
+				board->mGardenRandomGenerator = randomGenerator.get();
+				board->mGardenRandomGeneratorOwner = randomGenerator;
+				board->mGardenPlayerInfo = playerInfo.get();
+				board->mGardenPlayerInfoOwner = playerInfo;
+				board->mBoardRandSeed = static_cast<std::int32_t>(gardenSeed);
+				board->EnableGardenStateIsolation(true);
+				board->Resize(0, 0, mApp->mWidth, mApp->mHeight);
+				board->mVisible = false;
+				mGardens.push_back({garden.id, garden.owner, board, std::move(effectSystem), std::move(poolEffect),
+					std::move(randomGenerator), std::move(playerInfo)});
 
-			if (!configureGarden(*board, garden))
-			{
-				Stop();
-				return false;
+				if (!mViewedGarden)
+					mViewedGarden = garden.id;
+
+				mApp->mWidgetManager->AddWidget(board);
+				mApp->mWidgetManager->BringToBack(board);
+
+				if (!configureGarden(*board, garden))
+				{
+					Stop();
+					return false;
+				}
 			}
+		}
+		catch (...)
+		{
+			Stop();
+			return false;
 		}
 
 		return mViewedGarden && SelectGarden(*mViewedGarden);
