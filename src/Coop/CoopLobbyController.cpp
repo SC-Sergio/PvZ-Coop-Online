@@ -5,6 +5,7 @@
 
 #include "CoopLobbyController.h"
 
+#include "DetachedFuture.h"
 #include "LobbyProtocol.h"
 
 #if defined(PVZ_COOP_HAS_WEBRTC)
@@ -13,7 +14,6 @@
 #endif
 
 #include <algorithm>
-#include <thread>
 #include <vector>
 
 namespace Coop
@@ -216,9 +216,7 @@ namespace Coop
 		const std::string resumeToken = mResumeToken;
 		const std::string signalingUrl = mSignalingUrl;
 		mConnectionError = "Reconnecting to the host...";
-		auto resultPromise = std::make_shared<std::promise<ReconnectResult>>();
-		mReconnectFuture = resultPromise->get_future();
-		auto reconnectTask = [resultPromise, localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
+		auto reconnectTask = [localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
 			{
 				ReconnectResult result;
 				try
@@ -238,21 +236,20 @@ namespace Coop
 				{
 					result.error = "Rejoin failed with an unknown error.";
 				}
-				resultPromise->set_value(std::move(result));
+				return result;
 			};
-		std::thread reconnectWorker;
 		try
 		{
-			reconnectWorker = std::thread(std::move(reconnectTask));
+			mReconnectFuture = LaunchDetachedFuture<ReconnectResult>(std::move(reconnectTask));
 		}
 		catch (const std::exception& exception)
 		{
 			ReconnectResult result;
 			result.error = std::string("Could not start the reconnect worker: ") + exception.what();
-			resultPromise->set_value(std::move(result));
+			std::promise<ReconnectResult> failurePromise;
+			mReconnectFuture = failurePromise.get_future();
+			failurePromise.set_value(std::move(result));
 		}
-		if (reconnectWorker.joinable())
-			reconnectWorker.detach();
 #endif
 	}
 

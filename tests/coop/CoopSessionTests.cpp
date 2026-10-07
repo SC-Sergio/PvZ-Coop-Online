@@ -11,6 +11,7 @@
 #include "../../src/Coop/SessionSnapshotSerialization.h"
 #include "../../src/Coop/LobbyProtocol.h"
 #include "../../src/Coop/CoopLobbyController.h"
+#include "../../src/Coop/DetachedFuture.h"
 #include "../../src/Coop/CoopSnapshotProtocol.h"
 #include "../../src/Coop/PendingSunLedger.h"
 #include "../../src/ConstEnums.h"
@@ -19,6 +20,7 @@
 #include "../../src/Lawn/System/PortableSaveValidation.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
@@ -71,6 +73,47 @@ namespace
 			&& Coop::GetNextViewedGardenId(gardens, 44) == 11
 			&& Coop::GetNextViewedGardenId(gardens, 99) == 11,
 			"multi-garden view cycling advances, wraps, and recovers an unknown selection");
+	}
+
+	void TestDetachedFutureDoesNotBlockOnDestruction()
+	{
+		std::atomic_bool workerStarted = false;
+		std::atomic_bool releaseWorker = false;
+		std::atomic_bool workerFinished = false;
+		std::chrono::steady_clock::time_point destroyStarted;
+		std::thread releaseWatchdog;
+		{
+			auto result = Coop::LaunchDetachedFuture<int>([&]()
+				{
+					workerStarted = true;
+					while (!releaseWorker)
+						std::this_thread::yield();
+					workerFinished = true;
+					return 7;
+				});
+			const auto startDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+			while (!workerStarted && std::chrono::steady_clock::now() < startDeadline)
+				std::this_thread::yield();
+			Require(workerStarted, "detached future worker starts before its result is discarded");
+			Require(result.valid(), "detached worker exposes a result future");
+			releaseWatchdog = std::thread([&releaseWorker]()
+				{
+					const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+					while (!releaseWorker && std::chrono::steady_clock::now() < deadline)
+						std::this_thread::yield();
+					releaseWorker = true;
+				});
+			destroyStarted = std::chrono::steady_clock::now();
+		}
+		const auto destroyDuration = std::chrono::steady_clock::now() - destroyStarted;
+		Require(destroyDuration < std::chrono::milliseconds(250),
+			"destroying a pending detached future does not wait for its worker");
+		releaseWorker = true;
+		releaseWatchdog.join();
+		const auto finishDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+		while (!workerFinished && std::chrono::steady_clock::now() < finishDeadline)
+			std::this_thread::yield();
+		Require(workerFinished, "discarded result does not cancel or strand its detached worker");
 	}
 
 	void TestClientRecoveryPolicy()
@@ -2266,6 +2309,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestDetachedFutureDoesNotBlockOnDestruction();
 	TestClientRecoveryPolicy();
 	TestPendingSunLedger();
 	TestGardenLevelStatsRecords();
