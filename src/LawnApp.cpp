@@ -409,11 +409,14 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 
 	mSinglePlayerInfoBeforeCoop = mPlayerInfo;
 	mSinglePlayerModeBeforeCoop = mGameMode;
-	mCoopSandboxPlayerInfo = std::make_unique<PlayerInfo>(*mPlayerInfo);
+	// Every peer must simulate gameplay from the same profile state. Copying the
+	// local save here lets purchases and Zen Garden inventory change loot and
+	// board setup, which makes deterministic garden streams diverge across peers.
+	mCoopSandboxPlayerInfo = std::make_unique<PlayerInfo>();
 	const std::uint32_t sessionProfileId = 0x80000000U
 		| ((lobby->GetSession().GetRandomSeed() ^ 0x6d2b79f5U) & 0x7fffffffU);
 	mCoopSandboxPlayerInfo->mId = sessionProfileId;
-	mCoopSandboxPlayerInfo->mName = mPlayerInfo->mName + " (Co-op)";
+	mCoopSandboxPlayerInfo->mName = "Co-op";
 	mCoopSandboxPlayerInfo->mLevel = coopLevel;
 	mCoopSandboxPlayerInfo->mFinishedAdventure = 1;
 	mPlayerInfo = mCoopSandboxPlayerInfo.get();
