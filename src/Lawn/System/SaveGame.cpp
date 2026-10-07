@@ -2922,6 +2922,24 @@ static bool ValidateV4RequiredReanimationReferences(Board* theBoard)
 	return true;
 }
 
+static bool ValidateV4ZombieReferences(Board* theBoard)
+{
+	Zombie* aZombie = nullptr;
+	while (theBoard->mZombies.IterateNext(aZombie))
+	{
+		if (!IsValidPortableSaveReference(static_cast<uint32_t>(aZombie->mRelatedZombieID), true,
+			[&](uint32_t id) { return theBoard->ZombieTryToGet(static_cast<ZombieID>(id)) != nullptr; }))
+			return false;
+		for (ZombieID aFollowerID : aZombie->mFollowerZombieID)
+		{
+			if (!IsValidPortableSaveReference(static_cast<uint32_t>(aFollowerID), true,
+				[&](uint32_t id) { return theBoard->ZombieTryToGet(static_cast<ZombieID>(id)) != nullptr; }))
+				return false;
+		}
+	}
+	return true;
+}
+
 static bool ValidateV4SeedBankIndices(Board* theBoard)
 {
 	if (!IsValidPortableSaveCount(theBoard->mSeedBank->mNumPackets, SEEDBANK_MAX)
@@ -3155,6 +3173,8 @@ static bool LawnLoadGameV4FromBytesImpl(Board* theBoard,
 	if (!aBaseLoaded)
 		return false;
 	if (!ValidateV4RequiredReanimationReferences(theBoard))
+		return false;
+	if (!ValidateV4ZombieReferences(theBoard))
 		return false;
 	if (!ValidateV4SeedBankIndices(theBoard))
 		return false;
