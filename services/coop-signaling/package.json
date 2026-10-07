@@ -1,0 +1,17 @@
+{
+  "name": "pvz-coop-signaling",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ephemeral WebRTC room signaling for PvZ Cooperative Online",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

@@ -6,6 +6,7 @@ endif()
 project(pvz-mod LANGUAGES C CXX ASM)
 
 option(BUILD_STATIC "Static link for a standalone exe (Windows, non-MSVC)" OFF)
+option(COOP_ENABLE_WEBRTC "Enable the optional WebRTC transport (also enable the coop-webrtc vcpkg feature)" OFF)
 if(BUILD_STATIC)
 	if(WIN32 AND NOT MSVC)
 		set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
@@ -60,6 +61,11 @@ list(APPEND SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/LobbyProtocol.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/CoopLobbyController.cpp
 )
+
+if(COOP_ENABLE_WEBRTC)
+	find_package(LibDataChannel CONFIG REQUIRED)
+	list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/Coop/WebRtcNetworkTransport.cpp)
+endif()
 
 # these files are included and must not be built in the project
 list(REMOVE_ITEM SOURCES
@@ -221,6 +227,10 @@ target_compile_definitions(pvz-mod PRIVATE
 	$<$<BOOL:${DO_FIX_BUGS}>:DO_FIX_BUGS>
 )
 target_compile_features(pvz-mod PRIVATE cxx_std_20)
+if(COOP_ENABLE_WEBRTC)
+	target_compile_definitions(pvz-mod PRIVATE PVZ_COOP_HAS_WEBRTC=1)
+	target_link_libraries(pvz-mod PRIVATE LibDataChannel::LibDataChannel)
+endif()
 set_target_properties(pvz-mod PROPERTIES CXX_EXTENSIONS OFF)
 if(WIN32)
 	target_link_libraries(pvz-mod PRIVATE ws2_32)
@@ -236,6 +246,15 @@ if(BUILD_COOP_TESTS)
 	if(WIN32)
 		target_link_libraries(coop-session-tests PRIVATE ws2_32)
 		add_test(NAME coop-tcp-lobby-process COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File ${CMAKE_CURRENT_SOURCE_DIR}/tests/coop/RunTcpLobbySmoke.ps1 -Executable $<TARGET_FILE:coop-session-tests>)
+	endif()
+	if(COOP_ENABLE_WEBRTC)
+		add_executable(coop-webrtc-transport-tests tests/coop/WebRtcTransportTests.cpp
+			src/Coop/WebRtcNetworkTransport.cpp)
+		target_include_directories(coop-webrtc-transport-tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+		target_compile_features(coop-webrtc-transport-tests PRIVATE cxx_std_20)
+		set_target_properties(coop-webrtc-transport-tests PROPERTIES CXX_EXTENSIONS OFF)
+		target_link_libraries(coop-webrtc-transport-tests PRIVATE LibDataChannel::LibDataChannel)
+		add_test(NAME coop-webrtc-transport-tests COMMAND coop-webrtc-transport-tests)
 	endif()
 endif()
 

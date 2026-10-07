@@ -22,6 +22,27 @@ ctest --test-dir build/coop-tests --output-on-failure
 
 Set `-DBUILD_COOP_TESTS=OFF` only when producing an application-only build. A headless roster test does not require game assets; launching a playable game does.
 
+## Optional Internet transport and signaling service
+
+The WebRTC adapter is optional so ordinary and non-desktop builds do not acquire WebRTC dependencies. With vcpkg manifest mode, enable both the CMake option and manifest feature:
+
+```powershell
+cmake -S . -B build/webrtc -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_MANIFEST_FEATURES=coop-webrtc -DCOOP_ENABLE_WEBRTC=ON
+cmake --build build/webrtc --config Debug
+```
+
+The signaling service has its own lockfile and tests:
+
+```powershell
+cd services/coop-signaling
+npm ci
+npm test
+```
+
+Those tests cover local room allocation, four-player admission, host-only star-topology signaling, malformed identities, host-close notification, and the health endpoint. They do not test NAT traversal, TURN, a public deployment, or a complete game connection.
+
+When the manifest feature and CMake option are enabled, CTest also builds `coop-webrtc-transport-tests`. It creates two local libdatachannel peers, negotiates an ICE DataChannel, and verifies transport peer identity and binary packet bytes. This validates the adapter on one machine, not Internet reachability.
+
 ## Coverage added
 
 `CoopLobbyController` is exercised end to end over `LocalTransportHub`: host creation, guest join, roster snapshot, host-only map/difficulty/mode selection, ready replication, host-only start, and final started snapshot. The assertions confirm that connected players own exactly their gardens and unused slots stay empty. Host/client settings authorization and schema-v2 snapshot replication are covered. On Windows, `coop-tcp-lobby-process` starts separate host and client executables on ephemeral localhost ports for both 3-player and 4-player lobbies, completes handshake/JOIN/READY/START, checks every process exit code, and verifies each client receives the exact garden count, the host's map/difficulty, and EMPTY remaining slots. This proves same-machine TCP session setup across processes; it does not prove distinct-machine LAN or Internet reachability or that settings configure engine Boards.
