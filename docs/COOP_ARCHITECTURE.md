@@ -84,3 +84,7 @@ SAVE4 reading rejects noncanonical boolean bytes (only 0 and 1), non-finite floa
 `DataReader::OpenMemory` resets the in-memory cursor on every buffer assignment. The standalone cooperative test target links the small `DataSync.cpp` reader surface so malformed boolean bytes are exercised through the actual decoder; noncanonical 0/1 encodings are rejected before writing into a C++ `bool` object.
 
 Before SAVE4 reads variable arrays or allocates each seed-packet field blob, it validates the count against the fixed destination capacity and available input bytes. Related-zombie counts, grid-item motion-trail counts, trail point counts, resource IDs, and serialized ID-list lengths are bounded before use. Particle emitter and particle list IDs are checked against active `DataArray` entries, duplicate IDs are rejected, particle crossfade references are checked, and emitter-definition indexes are validated before access. This closes specific out-of-bounds and allocation-bomb paths; remaining field semantics/reference checks and transactional application are still required before network use.
+
+### Deferred garden service lifetime
+
+Each isolated Board retains shared ownership of its temporary profile, effect system, pool effect, and RNG until its destructor completes. `SafeDeleteWidget` defers Board destruction, so clearing the garden manager's collection must not invalidate pointers consumed by the Board's scoped destructor.
