@@ -58,6 +58,7 @@ namespace Coop
 		{
 			std::unique_ptr<INetworkTransport> transport;
 			std::string error;
+			bool terminalFailure = false;
 		};
 
 		std::unique_ptr<INetworkTransport> mTransport;

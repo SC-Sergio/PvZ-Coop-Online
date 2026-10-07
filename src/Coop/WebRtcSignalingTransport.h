@@ -16,6 +16,15 @@
 
 namespace Coop
 {
+	enum class WebRtcRejoinError
+	{
+		NONE,
+		ROOM_NOT_FOUND,
+		REJOIN_REJECTED,
+		HOST_UNAVAILABLE,
+		OTHER
+	};
+
 	// Internet session adapter: a small WebSocket signaling control plane negotiates
 	// peer connections; gameplay packets flow directly through DTLS DataChannels.
 	class WebRtcSignalingTransport final : public INetworkTransport
@@ -34,7 +43,8 @@ namespace Coop
 		static std::unique_ptr<WebRtcSignalingTransport> RejoinRoom(
 			TransportPlayerId localPlayerId, const std::string& roomCode, const std::string& resumeToken,
 			const std::string& signalingUrl, const rtc::Configuration& iceConfiguration,
-			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(30));
+			std::string* error = nullptr, std::chrono::milliseconds timeout = std::chrono::seconds(30),
+			WebRtcRejoinError* rejoinError = nullptr);
 		~WebRtcSignalingTransport() override;
 		WebRtcSignalingTransport(const WebRtcSignalingTransport&) = delete;
 		WebRtcSignalingTransport& operator=(const WebRtcSignalingTransport&) = delete;

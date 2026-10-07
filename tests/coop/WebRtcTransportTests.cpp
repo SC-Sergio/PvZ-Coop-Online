@@ -371,6 +371,14 @@ namespace
 			auto* hostSignalingTransport = dynamic_cast<Coop::WebRtcSignalingTransport*>(host->GetTransport());
 			if (!hostSignalingTransport)
 				throw std::runtime_error("host signaling transport was lost before host-close test");
+			std::string rejectedRejoinError;
+			Coop::WebRtcRejoinError rejectedRejoinCode = Coop::WebRtcRejoinError::NONE;
+			auto rejectedRejoin = Coop::WebRtcSignalingTransport::RejoinRoom(returningPlayerId,
+				hostSignalingTransport->GetRoomCode(), std::string(43, 'x'), hostSignalingTransport->GetSignalingUrl(),
+				rtc::Configuration{}, &rejectedRejoinError, 5s, &rejectedRejoinCode);
+			if (rejectedRejoin || rejectedRejoinCode != Coop::WebRtcRejoinError::REJOIN_REJECTED)
+				throw std::runtime_error("invalid resume credentials did not produce a typed REJOIN_REJECTED result: "
+					+ rejectedRejoinError);
 			hostSignalingTransport->Close();
 			const auto hostCloseDeadline = std::chrono::steady_clock::now() + 5s;
 			bool allGuestsStoppedRejoining = false;

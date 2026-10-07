@@ -166,8 +166,7 @@ namespace Coop
 			else
 			{
 				mConnectionError = std::move(result.error);
-				if (mConnectionError.find("(ROOM_NOT_FOUND)") != std::string::npos
-					|| mConnectionError.find("(REJOIN_REJECTED)") != std::string::npos)
+				if (result.terminalFailure)
 				{
 					mReconnectTerminated = true;
 					mConnectionError = "The lobby session can no longer be resumed.";
@@ -220,10 +219,13 @@ namespace Coop
 			[localPlayerId, roomCode, resumeToken, signalingUrl]() mutable
 			{
 				ReconnectResult result;
+				WebRtcRejoinError failure = WebRtcRejoinError::OTHER;
 				rtc::Configuration configuration;
 				auto transport = WebRtcSignalingTransport::RejoinRoom(localPlayerId, roomCode, resumeToken,
-					signalingUrl, configuration, &result.error, std::chrono::seconds(10));
+					signalingUrl, configuration, &result.error, std::chrono::seconds(10), &failure);
 				result.transport = std::move(transport);
+				result.terminalFailure = failure == WebRtcRejoinError::ROOM_NOT_FOUND
+					|| failure == WebRtcRejoinError::REJOIN_REJECTED;
 				return result;
 			});
 #endif

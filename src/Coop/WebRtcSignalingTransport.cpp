@@ -35,6 +35,7 @@ namespace Coop
 		bool isHost;
 		bool closed = false;
 		bool roomClosed = false;
+		std::string signalingErrorCode;
 		bool socketOpen = false;
 		bool joined = false;
 		rtc::Configuration iceConfiguration;
@@ -90,14 +91,29 @@ namespace Coop
 			return IsValidResumeToken(token);
 		}
 
-		void SetError(const std::shared_ptr<WebRtcSignalingTransport::State>& state, std::string error)
+		void SetError(const std::shared_ptr<WebRtcSignalingTransport::State>& state, std::string error,
+			std::string errorCode = {})
 		{
 			{
 				std::lock_guard lock(state->mutex);
 				if (!state->closed && state->error.empty())
+				{
 					state->error = std::move(error);
+					state->signalingErrorCode = std::move(errorCode);
+				}
 			}
 			state->changed.notify_all();
+		}
+
+		WebRtcRejoinError ParseRejoinErrorCode(const std::string& code)
+		{
+			if (code == "ROOM_NOT_FOUND")
+				return WebRtcRejoinError::ROOM_NOT_FOUND;
+			if (code == "REJOIN_REJECTED")
+				return WebRtcRejoinError::REJOIN_REJECTED;
+			if (code == "HOST_UNAVAILABLE")
+				return WebRtcRejoinError::HOST_UNAVAILABLE;
+			return WebRtcRejoinError::OTHER;
 		}
 
 		bool SendJson(const std::shared_ptr<WebRtcSignalingTransport::State>& state, const Json& message)
@@ -298,7 +314,7 @@ namespace Coop
 			{
 				const std::string code = message.contains("code") && message["code"].is_string()
 					? message["code"].get<std::string>() : "UNKNOWN";
-				SetError(state, "Signaling service rejected the request (" + code + ").");
+				SetError(state, "Signaling service rejected the request (" + code + ").", code);
 			}
 		}
 
@@ -556,8 +572,10 @@ namespace Coop
 	std::unique_ptr<WebRtcSignalingTransport> WebRtcSignalingTransport::RejoinRoom(
 		TransportPlayerId localPlayerId, const std::string& roomCode, const std::string& resumeToken,
 		const std::string& signalingUrl, const rtc::Configuration& iceConfiguration,
-		std::string* error, std::chrono::milliseconds timeout)
+		std::string* error, std::chrono::milliseconds timeout, WebRtcRejoinError* rejoinError)
 	{
+		if (rejoinError)
+			*rejoinError = WebRtcRejoinError::OTHER;
 		if (localPlayerId == 0 || roomCode.size() != 16 || !IsValidResumeToken(resumeToken)
 			|| signalingUrl.empty() || timeout <= std::chrono::milliseconds::zero())
 		{
@@ -582,6 +600,8 @@ namespace Coop
 		const auto deadline = std::chrono::steady_clock::now() + timeout;
 		if (!state->changed.wait_until(lock, deadline, [&state] { return state->joined || !state->error.empty(); }) || !state->joined)
 		{
+			if (rejoinError)
+				*rejoinError = ParseRejoinErrorCode(state->signalingErrorCode);
 			if (error) *error = state->error.empty() ? "Timed out rejoining the signaling room." : state->error;
 			lock.unlock();
 			state->socket->close();
@@ -592,12 +612,16 @@ namespace Coop
 			state->changed.wait_until(lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(50)));
 		if (state->packets.GetConnectedPeerIds().empty())
 		{
+			if (rejoinError)
+				*rejoinError = ParseRejoinErrorCode(state->signalingErrorCode);
 			if (error) *error = state->error.empty() ? "Timed out negotiating the host data channel." : state->error;
 			lock.unlock();
 			state->socket->close();
 			return {};
 		}
 		lock.unlock();
+		if (rejoinError)
+			*rejoinError = WebRtcRejoinError::NONE;
 		return std::unique_ptr<WebRtcSignalingTransport>(new WebRtcSignalingTransport(std::move(state)));
 	}
 
