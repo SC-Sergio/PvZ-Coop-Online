@@ -130,7 +130,7 @@ namespace
 	{
 	try
 	{
-		for (const std::size_t playerCount : {3U, 4U})
+		for (const std::size_t playerCount : {2U, 3U, 4U})
 		{
 			rtc::Configuration configuration;
 			const Coop::PlayerId hostId = static_cast<Coop::PlayerId>(playerCount * 10);
@@ -188,9 +188,10 @@ namespace
 			}
 			if (!allReplicated() || host->GetSession().GetGardenCount() != playerCount)
 				throw std::runtime_error("WebRTC lobby did not replicate the active-player garden count");
-			if ((playerCount == 3 && host->GetSession().GetSlots()[3].state != Coop::PlayerState::EMPTY)
-				|| (playerCount == 4 && host->GetSession().GetSlots()[3].state == Coop::PlayerState::EMPTY))
-				throw std::runtime_error("WebRTC lobby did not preserve the expected EMPTY slot state");
+			for (std::size_t slotIndex = playerCount; slotIndex < Coop::MAX_PLAYERS; ++slotIndex)
+				if (host->GetSession().GetSlots()[slotIndex].state != Coop::PlayerState::EMPTY
+					|| host->GetSession().GetSlots()[slotIndex].gardenId)
+					throw std::runtime_error("WebRTC lobby did not leave unused player slots and gardens empty");
 			if (!host->SetLocalReady(true))
 				throw std::runtime_error("host could not ready in the WebRTC lobby");
 			for (auto& guest : guests)
@@ -219,6 +220,11 @@ namespace
 			if (std::any_of(guests.begin(), guests.end(), [playerCount](const auto& guest)
 				{ return !guest->GetSession().HasStarted() || guest->GetSession().GetGardenCount() != playerCount; }))
 				throw std::runtime_error("WebRTC lobby did not replicate the started garden session");
+			for (const auto& guest : guests)
+				for (std::size_t slotIndex = playerCount; slotIndex < Coop::MAX_PLAYERS; ++slotIndex)
+					if (guest->GetSession().GetSlots()[slotIndex].state != Coop::PlayerState::EMPTY
+						|| guest->GetSession().GetSlots()[slotIndex].gardenId)
+						throw std::runtime_error("WebRTC client snapshot created an unused player slot or garden");
 
 			// Exchange owner-bound gameplay intents through the production authority
 			// endpoints before exercising same-ID WebRTC reconnect below.
@@ -356,7 +362,7 @@ namespace
 				throw std::runtime_error("rejoined peer did not deliver its packet over the replacement DataChannel");
 			returnedTransport->Close();
 		}
-		std::cout << "Three/four-player signaling, lobby, authoritative commands, and WebRTC reconnect tests passed\n";
+		std::cout << "Two/three/four-player signaling, lobby, authoritative commands, and WebRTC reconnect tests passed\n";
 		return 0;
 	}
 	catch (const std::exception& exception)
