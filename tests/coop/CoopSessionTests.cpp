@@ -10,6 +10,7 @@
 #include "../../src/Coop/CoopLobbyController.h"
 #include "../../src/Coop/CoopSnapshotProtocol.h"
 #include "../../src/ConstEnums.h"
+#include "../../src/Lawn/LevelStats.h"
 #include "../../src/Lawn/System/DataSync.h"
 #include "../../src/Lawn/System/PortableSaveValidation.h"
 
@@ -55,6 +56,17 @@ namespace
 			&& Coop::GetNextViewedGardenId(gardens, 44) == 11
 			&& Coop::GetNextViewedGardenId(gardens, 99) == 11,
 			"multi-garden view cycling advances, wraps, and recovers an unknown selection");
+	}
+
+	void TestGardenLevelStatsRecords()
+	{
+		LevelStats gardenA;
+		LevelStats gardenB;
+		gardenA.mUnusedLawnMowers = 3;
+		gardenB.mUnusedLawnMowers = 1;
+		gardenB.Reset();
+		Require(gardenA.mUnusedLawnMowers == 3 && gardenB.mUnusedLawnMowers == 0,
+			"resetting one garden's result stats does not change another garden's record");
 	}
 
 	void TestPortableSaveBounds()
@@ -1767,6 +1779,7 @@ int main(int argc, char** argv)
 	if (argc == 5 && (std::string(argv[1]) == "--tcp-host" || std::string(argv[1]) == "--tcp-guest"))
 		return RunTcpLobbyProcess(argv[1], argv[2], argv[3], argv[4]);
 	TestDynamicPlayerCounts();
+	TestGardenLevelStatsRecords();
 	TestPortableSaveBounds();
 	TestGardenSnapshotProtocol();
 	TestHeartbeatTimeout();
