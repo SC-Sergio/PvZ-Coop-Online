@@ -1109,7 +1109,8 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 		|| !IsValidPortableSaveCount(thePlant.mRelatedZombieCount,
 			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))
 		|| !IsValidPortableSaveGridPosition(thePlant.mPlantCol, thePlant.mRow,
-			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)))
+			MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y)
+		|| !IsValidPortableSaveRow(thePlant.mStartRow, MAX_GRID_SIZE_Y)))
 	{
 		theContext.mFailed = true;
 		return;
@@ -1167,6 +1168,8 @@ static void SyncProjectileTailPortable(PortableSaveContext& theContext, Projecti
 		|| !IsValidPortableSaveEnumValue(static_cast<int32_t>(theProjectile.mProjectileType),
 			PROJECTILE_PEA, NUM_PROJECTILES)
 		|| !IsValidPortableSaveOptionalIndex(theProjectile.mLastPortalX, MAX_GRID_SIZE_X)
+		|| !IsValidPortableSaveOptionalIndex(theProjectile.mHitTorchwoodGridX, MAX_GRID_SIZE_X)
+		|| !IsValidPortableSaveRow(theProjectile.mCobTargetRow, MAX_GRID_SIZE_Y)
 		|| !IsValidPortableSaveRow(theProjectile.mRow, MAX_GRID_SIZE_Y)))
 		theContext.mFailed = true;
 }

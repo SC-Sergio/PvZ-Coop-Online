@@ -21,3 +21,10 @@
 - **Verification:** MSVC 19.44 Debug app builds succeeded in `out/build-vs-vcpkg` and `out/webrtc-build`; CTest passed 2/2 and 4/4 respectively. `git diff --check` passed.
 - **Known limit:** reader validation compiles and helper bounds are tested, but no initialized-Board SAVE4 load can run without user-supplied legal assets.
 - **Next:** continue the hostile snapshot entity-field audit and test remaining bounded index/coordinate fields.
+
+### Checkpoint: SAVE4 gameplay index fields
+
+- **Change:** plant `mStartRow` and projectile `mCobTargetRow` must be valid board rows; projectile `mHitTorchwoodGridX` accepts only its `-1` sentinel or a board column. These values feed row conversion/rendering and torchwood column comparisons.
+- **Verification:** both MSVC Debug variants rebuilt; CTest passed 2/2 without WebRTC and 4/4 with WebRTC. Existing boundary tests cover valid rows and optional indices plus negative/one-past-end cases. `git diff --check` passed.
+- **Known limit:** validation helper coverage does not replace a SAVE4 load against a live initialized Board.
+- **Next:** audit remaining direct-index fields and extend malformed snapshot tests where runtime-independent validation can cover them.
