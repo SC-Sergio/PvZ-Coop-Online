@@ -410,8 +410,7 @@ bool LawnApp::StartCoopMatch(std::unique_ptr<Coop::CoopLobbyController> lobby)
 	mCoopSandboxPlayerInfo = std::make_unique<PlayerInfo>(*mPlayerInfo);
 	const std::uint32_t sessionProfileId = 0x80000000U
 		| ((lobby->GetSession().GetRandomSeed() ^ 0x6d2b79f5U) & 0x7fffffffU);
-	mCoopSandboxPlayerInfo->mId = sessionProfileId == mSinglePlayerInfoBeforeCoop->mId
-		? (0x80000000U | ((sessionProfileId + 1U) & 0x7fffffffU)) : sessionProfileId;
+	mCoopSandboxPlayerInfo->mId = sessionProfileId;
 	mCoopSandboxPlayerInfo->mName = mPlayerInfo->mName + " (Co-op)";
 	mCoopSandboxPlayerInfo->mLevel = coopLevel;
 	mCoopSandboxPlayerInfo->mFinishedAdventure = 1;
