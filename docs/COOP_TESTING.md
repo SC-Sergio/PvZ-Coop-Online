@@ -37,6 +37,8 @@ cmake -S . -B build/webrtc -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/build
 cmake --build build/webrtc --config Debug
 ```
 
+The lobby Join action performs DNS resolution, TCP connect/handshake, or WebRTC signaling/peer negotiation in a background task. The dialog reads the completed result from its update loop; leaving or closing the dialog drops that result without a callback into destroyed UI. Current verification is compile plus the existing lobby process suites; interactive responsiveness and leave-during-negotiation still require a manual UI run.
+
 The signaling service has its own lockfile and tests:
 
 ```powershell

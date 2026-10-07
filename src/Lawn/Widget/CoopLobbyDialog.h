@@ -11,6 +11,8 @@
 #include "widget/EditListener.h"
 #include "../../Coop/CoopLobbyController.h"
 
+#include <memory>
+
 class CoopLobbyDialog : public LawnDialog, public EditListener
 {
 public:
@@ -26,6 +28,7 @@ public:
 	virtual bool AllowChar(int id, char character);
 
 private:
+	struct PendingJoin;
 	void SetStatus(std::string status);
 	void StartIfReplicated();
 	void ApplySelectedSettings();
@@ -46,6 +49,7 @@ private:
 	bool mUseInternet;
 	std::string mRoomCode;
 	std::unique_ptr<Coop::CoopLobbyController> mLobby;
+	std::shared_ptr<PendingJoin> mPendingJoin;
 	Coop::CoopLobbySettings mSelectedSettings;
 	std::string mStatus;
 };

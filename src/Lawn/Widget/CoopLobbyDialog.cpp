@@ -23,7 +23,11 @@
 
 #include <cstdlib>
 #include <algorithm>
+#include <exception>
+#include <memory>
+#include <mutex>
 #include <random>
+#include <thread>
 
 namespace
 {
@@ -77,6 +81,15 @@ namespace
 #endif
 }
 
+struct CoopLobbyDialog::PendingJoin
+{
+	std::mutex mutex;
+	bool completed = false;
+	std::unique_ptr<Coop::CoopLobbyController> lobby;
+	std::string roomCode;
+	std::string status;
+};
+
 CoopLobbyDialog::CoopLobbyDialog(LawnApp* app)
 	: LawnDialog(app, Dialogs::DIALOG_COOP_LOBBY, true, "CO-OP ONLINE", "Create a private LAN or Internet lobby.", "Internet play needs a WSS signaling URL and TURN settings.", Dialog::BUTTONS_NONE),
 	  mNameEdit(nullptr), mAddressEdit(nullptr), mCreateButton(nullptr), mJoinButton(nullptr),
@@ -119,6 +132,7 @@ CoopLobbyDialog::CoopLobbyDialog(LawnApp* app)
 
 CoopLobbyDialog::~CoopLobbyDialog()
 {
+	mPendingJoin.reset();
 	if (mLobby && !mLobby->GetSession().HasStarted())
 		mLobby->Leave();
 	delete mNameEdit;
@@ -202,8 +216,33 @@ void CoopLobbyDialog::Draw(Graphics* graphics)
 void CoopLobbyDialog::Update()
 {
 	LawnDialog::Update();
+	if (mPendingJoin)
+	{
+		std::unique_ptr<Coop::CoopLobbyController> joinedLobby;
+		std::string joinedRoomCode;
+		std::string joinStatus;
+		{
+			std::lock_guard<std::mutex> lock(mPendingJoin->mutex);
+			if (mPendingJoin->completed)
+			{
+				joinedLobby = std::move(mPendingJoin->lobby);
+				joinedRoomCode = std::move(mPendingJoin->roomCode);
+				joinStatus = std::move(mPendingJoin->status);
+				mPendingJoin.reset();
+			}
+		}
+		if (!joinStatus.empty())
+		{
+			mLobby = std::move(joinedLobby);
+			mRoomCode = std::move(joinedRoomCode);
+			SetStatus(std::move(joinStatus));
+		}
+	}
 	if (!mLobby)
+	{
+		MarkDirty();
 		return;
+	}
 	mLobby->PumpLobby();
 	StartIfReplicated();
 	if (mLobby)
@@ -218,7 +257,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 {
 	if (id == TRANSPORT_BUTTON_ID && mTransportButton)
 	{
-		if (mLobby)
+		if (mLobby || mPendingJoin)
 		{
 			SetStatus("Leave the current lobby before changing transport.");
 			return;
@@ -241,7 +280,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 	}
 	else if (id == CREATE_BUTTON_ID)
 	{
-		if (mLobby)
+		if (mLobby || mPendingJoin)
 		{
 			SetStatus("A lobby is already open.");
 			return;
@@ -283,7 +322,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 	}
 	else if (id == JOIN_BUTTON_ID)
 	{
-		if (mLobby)
+		if (mLobby || mPendingJoin)
 		{
 			SetStatus("Leave the current lobby before joining another.");
 			return;
@@ -292,11 +331,11 @@ void CoopLobbyDialog::ButtonDepress(int id)
 		Coop::PlayerId localId = static_cast<Coop::PlayerId>(random());
 		if (localId == 0 || localId == HOST_PLAYER_ID)
 			localId = HOST_PLAYER_ID + 1;
+		std::string signalingUrl;
+		std::string roomCode;
 		if (mUseInternet)
 		{
 #if defined(PVZ_COOP_HAS_WEBRTC)
-			std::string signalingUrl;
-			std::string roomCode;
 			if (!ParseInternetInvite(mAddressEdit->mString, signalingUrl, roomCode))
 			{
 				SetStatus("Paste the full Internet invite URL from the host.");
@@ -307,27 +346,72 @@ void CoopLobbyDialog::ButtonDepress(int id)
 				SetStatus("Use a wss:// invite URL for Internet play. Plain ws:// is limited to localhost.");
 				return;
 			}
-			rtc::Configuration iceConfiguration;
-			std::string error;
-			auto transport = Coop::WebRtcSignalingTransport::JoinRoom(localId, roomCode, signalingUrl,
-				iceConfiguration, &error);
-			if (transport)
-			{
-				const Coop::PlayerId hostId = transport->GetHostPlayerId();
-				mRoomCode = transport->GetRoomCode();
-				mLobby = Coop::CoopLobbyController::Join(std::move(transport), hostId, mNameEdit->mString);
-			}
-			SetStatus(mLobby ? "Internet peer connected. Waiting for lobby updates." :
-				(error.empty() ? "Could not join the Internet room." : error));
 #else
 			SetStatus("This build does not include the optional WebRTC transport.");
+			return;
 #endif
 		}
-		else
+		const bool useInternet = mUseInternet;
+		const std::string displayName = mNameEdit->mString;
+		const std::string address = useInternet ? signalingUrl : mAddressEdit->mString;
+		auto pendingJoin = std::make_shared<PendingJoin>();
+		mPendingJoin = pendingJoin;
+		SetStatus("Connecting to host...");
+		try
 		{
-			mLobby = Coop::CoopLobbyController::JoinTcp(localId, HOST_PLAYER_ID, mNameEdit->mString,
-				mAddressEdit->mString.c_str(), COOP_TCP_PORT);
-			SetStatus(mLobby ? "Connected to host. Waiting for lobby updates." : "Could not connect to that host.");
+			std::thread([pendingJoin, useInternet, localId, displayName, address, roomCode]() mutable
+			{
+				std::unique_ptr<Coop::CoopLobbyController> lobby;
+				std::string joinedRoomCode;
+				std::string status;
+				try
+				{
+					if (useInternet)
+					{
+#if defined(PVZ_COOP_HAS_WEBRTC)
+						rtc::Configuration iceConfiguration;
+						std::string error;
+						auto transport = Coop::WebRtcSignalingTransport::JoinRoom(localId, roomCode, address,
+							iceConfiguration, &error);
+						if (transport)
+						{
+							const Coop::PlayerId hostId = transport->GetHostPlayerId();
+							joinedRoomCode = transport->GetRoomCode();
+							lobby = Coop::CoopLobbyController::Join(std::move(transport), hostId, displayName);
+						}
+						status = lobby ? "Internet peer connected. Waiting for lobby updates."
+							: (error.empty() ? "Could not join the Internet room." : error);
+#else
+						status = "This build does not include the optional WebRTC transport.";
+#endif
+					}
+					else
+					{
+						lobby = Coop::CoopLobbyController::JoinTcp(localId, HOST_PLAYER_ID, displayName,
+							address.c_str(), COOP_TCP_PORT);
+						status = lobby ? "Connected to host. Waiting for lobby updates."
+							: "Could not connect to that host.";
+					}
+				}
+				catch (const std::exception& error)
+				{
+					status = error.what();
+				}
+				catch (...)
+				{
+					status = "Could not complete the connection.";
+				}
+				std::lock_guard<std::mutex> lock(pendingJoin->mutex);
+				pendingJoin->lobby = std::move(lobby);
+				pendingJoin->roomCode = std::move(joinedRoomCode);
+				pendingJoin->status = std::move(status);
+				pendingJoin->completed = true;
+			}).detach();
+		}
+		catch (const std::exception& error)
+		{
+			mPendingJoin.reset();
+			SetStatus(error.what());
 		}
 	}
 	else if (id == READY_BUTTON_ID && mLobby)
@@ -349,6 +433,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 	}
 	else if (id == LEAVE_BUTTON_ID)
 	{
+		mPendingJoin.reset();
 		if (mLobby && !mLobby->GetSession().HasStarted())
 			mLobby->Leave();
 		mLobby.reset();
