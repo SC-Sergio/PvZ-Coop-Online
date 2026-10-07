@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { after, before, test } from "node:test";
 import { WebSocket } from "ws";
 import { createSignalingServer } from "./server.js";
@@ -17,9 +18,9 @@ after(async () => {
   await server.close();
 });
 
-function connect() {
+function connect(url = endpoint) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(endpoint);
+    const socket = new WebSocket(url);
     socket.once("open", () => {
       messageQueues.set(socket, []);
       socket.on("message", (data) => {
@@ -138,6 +139,49 @@ test("rejects invalid room IDs, peer IDs, and signal payloads", async (t) => {
 
   send(socket, { type: "create", playerId: "4294967296" });
   assert.deepEqual(await waitForType(socket, "error"), { type: "error", code: "INVALID_CREATE" });
+});
+
+test("issues per-player short-lived TURN credentials without disclosing the shared secret", async (t) => {
+  const sharedSecret = "only-a-test-secret-value-longer-than-32-characters";
+  assert.throws(() => createSignalingServer({
+    turnUrl: "turn:turn.example.test:3478?transport=udp",
+    turnSharedSecret: "short",
+  }), /at least 32 characters/);
+  const turnServer = createSignalingServer({
+    host: "127.0.0.1",
+    port: 0,
+    stunUrl: "stun:stun.example.test:3478",
+    turnUrl: "turn:turn.example.test:3478?transport=udp",
+    turnSharedSecret: sharedSecret,
+    turnCredentialLifetimeSeconds: 300,
+  });
+  const address = await turnServer.listen();
+  const turnEndpoint = `ws://127.0.0.1:${address.port}`;
+  const host = await connect(turnEndpoint);
+  const guest = await connect(turnEndpoint);
+  t.after(async () => {
+    host.terminate();
+    guest.terminate();
+    await turnServer.close();
+  });
+
+  send(host, { type: "create", playerId: "101" });
+  const created = await waitForType(host, "created");
+  send(guest, { type: "join", playerId: "202", roomCode: created.roomCode });
+  const joined = await waitForType(guest, "joined");
+  const hostTurn = created.iceServers.find((server) => server.urls.startsWith("turn:"));
+  const guestTurn = joined.iceServers.find((server) => server.urls.startsWith("turn:"));
+  assert.ok(hostTurn);
+  assert.ok(guestTurn);
+  assert.match(hostTurn.username, /^\d+:101$/);
+  assert.match(guestTurn.username, /^\d+:202$/);
+  assert.notEqual(hostTurn.username, guestTurn.username);
+  assert.equal(hostTurn.urls, "turn:turn.example.test:3478?transport=udp");
+  const expectedPassword = createHmac("sha1", sharedSecret).update(hostTurn.username).digest("base64");
+  assert.equal(hostTurn.credential, expectedPassword);
+  assert.ok(Number(hostTurn.username.split(":")[0]) <= Math.floor(Date.now() / 1000) + 300);
+  assert.ok(!JSON.stringify([created, joined]).includes(sharedSecret));
+  assert.ok(created.iceServers.some((server) => server.urls.startsWith("stun:")));
 });
 
 test("exposes a no-store health endpoint", async () => {

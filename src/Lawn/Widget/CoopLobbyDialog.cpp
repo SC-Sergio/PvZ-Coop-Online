@@ -17,7 +17,6 @@
 #if defined(PVZ_COOP_HAS_WEBRTC)
 #include "../../Coop/WebRtcSignalingTransport.h"
 #include <rtc/configuration.hpp>
-#include <charconv>
 #endif
 
 #include <cstdlib>
@@ -40,27 +39,6 @@ namespace
 	constexpr Coop::PlayerId HOST_PLAYER_ID = 1;
 
 #if defined(PVZ_COOP_HAS_WEBRTC)
-	rtc::Configuration MakeIceConfiguration()
-	{
-		rtc::Configuration configuration;
-		if (const char* stunUrl = std::getenv("PVZ_COOP_STUN_URL"); stunUrl && *stunUrl)
-			configuration.iceServers.emplace_back(stunUrl);
-		const char* turnHost = std::getenv("PVZ_COOP_TURN_HOST");
-		const char* turnUsername = std::getenv("PVZ_COOP_TURN_USERNAME");
-		const char* turnPassword = std::getenv("PVZ_COOP_TURN_PASSWORD");
-		const char* turnPortText = std::getenv("PVZ_COOP_TURN_PORT");
-		if (turnHost && *turnHost && turnUsername && turnPassword && turnPortText)
-		{
-			unsigned int port = 0;
-			const std::string portString(turnPortText);
-			const auto parsed = std::from_chars(portString.data(), portString.data() + portString.size(), port);
-			if (parsed.ec == std::errc{} && parsed.ptr == portString.data() + portString.size()
-				&& port > 0 && port <= 65535)
-				configuration.iceServers.emplace_back(turnHost, static_cast<std::uint16_t>(port), turnUsername, turnPassword);
-		}
-		return configuration;
-	}
-
 	bool ParseInternetInvite(std::string value, std::string& signalingUrl, std::string& roomCode)
 	{
 		const std::size_t slash = value.find_last_of('/');
@@ -274,7 +252,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 				SetStatus("Use wss:// for Internet signaling. ws:// is allowed only on localhost.");
 				return;
 			}
-			rtc::Configuration iceConfiguration = MakeIceConfiguration();
+			rtc::Configuration iceConfiguration;
 			std::string roomCode;
 			std::string error;
 			auto transport = Coop::WebRtcSignalingTransport::CreateHost(HOST_PLAYER_ID, mAddressEdit->mString,
@@ -327,7 +305,7 @@ void CoopLobbyDialog::ButtonDepress(int id)
 				SetStatus("Use a wss:// invite URL for Internet play. Plain ws:// is limited to localhost.");
 				return;
 			}
-			rtc::Configuration iceConfiguration = MakeIceConfiguration();
+			rtc::Configuration iceConfiguration;
 			std::string error;
 			auto transport = Coop::WebRtcSignalingTransport::JoinRoom(localId, roomCode, signalingUrl,
 				iceConfiguration, &error);

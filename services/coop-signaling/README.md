@@ -14,7 +14,18 @@ $env:COOP_SIGNAL_PORT = "8765"
 npm start
 ```
 
-The health endpoint is `http://127.0.0.1:8765/healthz`; WebSocket clients connect to `ws://127.0.0.1:8765`. A public deployment must terminate TLS and expose `wss://` through a reverse proxy, protect the service with connection/rate limits, and keep only short-lived room signaling in memory. Do not put TURN passwords or cloud credentials in this repository.
+To use ICE services, configure them only on the signaling server:
+
+```powershell
+$env:COOP_STUN_URL = "stun:stun.example.net:3478"
+$env:COOP_TURN_URL = "turn:turn.example.net:3478?transport=udp"
+$env:COOP_TURN_SHARED_SECRET = "<at-least-32-random-characters-from-your-secret-store>"
+$env:COOP_TURN_CREDENTIAL_LIFETIME_SECONDS = "1800"
+```
+
+The service returns Coturn REST-style, per-player credentials with an expiry to each room member over the signaling connection. The shared secret stays server-side. Omit TURN settings for direct-connect-only development; restrictive NAT/firewall pairs may then fail. Protect the WSS endpoint and secret in deployment, and rotate the shared secret if exposed.
+
+The health endpoint is `http://127.0.0.1:8765/healthz`; WebSocket clients connect to `ws://127.0.0.1:8765`. A public deployment must terminate TLS and expose `wss://` through a reverse proxy, protect the service with connection/rate limits, and keep only short-lived room signaling in memory. Never commit the TURN shared secret or other credentials.
 
 ## Wire messages
 

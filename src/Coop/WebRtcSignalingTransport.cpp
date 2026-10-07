@@ -92,6 +92,44 @@ namespace Coop
 				{"kind", kind}, {"payload", payload}});
 		}
 
+		bool ApplyIceServers(const std::shared_ptr<WebRtcSignalingTransport::State>& state, const Json& message)
+		{
+			const auto iceServers = message.find("iceServers");
+			if (iceServers == message.end())
+				return true;
+			if (!iceServers->is_array() || iceServers->size() > 4)
+				return false;
+			std::vector<rtc::IceServer> parsedServers;
+			for (const Json& item : *iceServers)
+			{
+				if (!item.is_object() || !item.contains("urls") || !item["urls"].is_string())
+					return false;
+				const std::string url = item["urls"].get<std::string>();
+				if (url.empty() || url.size() > 512
+					|| (!url.starts_with("stun:") && !url.starts_with("turn:") && !url.starts_with("turns:")))
+					return false;
+				rtc::IceServer server(url);
+				if (item.contains("username") || item.contains("credential"))
+				{
+					if (!item.contains("username") || !item["username"].is_string()
+						|| !item.contains("credential") || !item["credential"].is_string())
+						return false;
+					server.username = item["username"].get<std::string>();
+					server.password = item["credential"].get<std::string>();
+					if (server.username.empty() || server.username.size() > 256
+						|| server.password.empty() || server.password.size() > 256)
+						return false;
+				}
+				parsedServers.push_back(std::move(server));
+			}
+			std::lock_guard lock(state->mutex);
+			if (state->closed)
+				return false;
+			state->iceConfiguration.iceServers.insert(state->iceConfiguration.iceServers.end(),
+				parsedServers.begin(), parsedServers.end());
+			return true;
+		}
+
 		void AddPeer(const std::shared_ptr<WebRtcSignalingTransport::State>& state,
 			TransportPlayerId peerId, bool createOffer);
 
@@ -150,6 +188,8 @@ namespace Coop
 				const auto code = message.find("roomCode");
 				if (code == message.end() || !code->is_string())
 					return SetError(state, "Signaling service returned an invalid room code.");
+				if (!ApplyIceServers(state, message))
+					return SetError(state, "Signaling service returned invalid ICE server configuration.");
 				{
 					std::lock_guard lock(state->mutex);
 					state->roomCode = code->get<std::string>();
@@ -162,6 +202,8 @@ namespace Coop
 				TransportPlayerId hostId = 0;
 				if (!message.contains("hostId") || !ParsePlayerId(message["hostId"], hostId))
 					return SetError(state, "Signaling service returned an invalid host identity.");
+				if (!ApplyIceServers(state, message))
+					return SetError(state, "Signaling service returned invalid ICE server configuration.");
 				{
 					std::lock_guard lock(state->mutex);
 					state->joined = true;

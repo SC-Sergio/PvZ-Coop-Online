@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 
@@ -20,7 +20,38 @@ function validPlayerId(value) {
     && Number(value) <= 0xFFFFFFFF;
 }
 
-export function createSignalingServer({ host = "127.0.0.1", port = 0 } = {}) {
+export function createSignalingServer({
+  host = "127.0.0.1",
+  port = 0,
+  stunUrl = process.env.COOP_STUN_URL,
+  turnUrl = process.env.COOP_TURN_URL,
+  turnSharedSecret = process.env.COOP_TURN_SHARED_SECRET,
+  turnCredentialLifetimeSeconds = process.env.COOP_TURN_CREDENTIAL_LIFETIME_SECONDS === undefined
+    ? 1800 : Number(process.env.COOP_TURN_CREDENTIAL_LIFETIME_SECONDS),
+} = {}) {
+  if (stunUrl !== undefined && (!/^stun:[^\s]{1,507}$/.test(stunUrl)))
+    throw new Error("COOP_STUN_URL must be a STUN URL no longer than 512 characters");
+  if (turnUrl !== undefined && (!/^turns?:[^\s]{1,506}$/.test(turnUrl)))
+    throw new Error("COOP_TURN_URL must be a TURN URL no longer than 512 characters");
+  if (turnUrl && (!turnSharedSecret || turnSharedSecret.length < 32))
+    throw new Error("COOP_TURN_SHARED_SECRET must contain at least 32 characters when TURN is enabled");
+  if (!Number.isInteger(turnCredentialLifetimeSeconds) || turnCredentialLifetimeSeconds < 60
+    || turnCredentialLifetimeSeconds > 86_400)
+    throw new Error("TURN credential lifetime must be between 60 and 86400 seconds");
+
+  function issueIceServers(playerId) {
+    const iceServers = [];
+    if (stunUrl)
+      iceServers.push({ urls: stunUrl });
+    if (turnUrl) {
+      const expires = Math.floor(Date.now() / 1000) + turnCredentialLifetimeSeconds;
+      const username = `${expires}:${playerId}`;
+      const credential = createHmac("sha1", turnSharedSecret).update(username).digest("base64");
+      iceServers.push({ urls: turnUrl, username, credential });
+    }
+    return iceServers;
+  }
+
   const rooms = new Map();
   const sessions = new Map();
   const httpServer = createServer((request, response) => {
@@ -122,7 +153,7 @@ export function createSignalingServer({ host = "127.0.0.1", port = 0 } = {}) {
         } while (rooms.has(roomCode));
         rooms.set(roomCode, { hostId: message.playerId, players: new Map() });
         assign(socket, roomCode, message.playerId, "host");
-        send(socket, { type: "created", roomCode, hostId: message.playerId });
+        send(socket, { type: "created", roomCode, hostId: message.playerId, iceServers: issueIceServers(message.playerId) });
         return;
       }
 
@@ -147,7 +178,7 @@ export function createSignalingServer({ host = "127.0.0.1", port = 0 } = {}) {
         }
         assign(socket, message.roomCode, message.playerId, "guest");
         const host = room.players.get(room.hostId);
-        send(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId] });
+        send(socket, { type: "joined", hostId: room.hostId, peers: [room.hostId], iceServers: issueIceServers(message.playerId) });
         if (host)
           send(host.socket, { type: "peer-joined", playerId: message.playerId });
         return;
