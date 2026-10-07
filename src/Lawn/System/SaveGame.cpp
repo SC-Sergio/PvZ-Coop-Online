@@ -1047,7 +1047,9 @@ static void SyncPlantTailPortable(PortableSaveContext& theContext, Plant& thePla
 	theContext.SyncInt32(thePlant.mRelatedZombieCount);
 	if (theContext.mReading && (theContext.mFailed
 		|| !IsValidPortableSaveCount(thePlant.mRelatedZombieCount,
-			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))))
+			static_cast<uint32_t>(std::size(thePlant.mRelatedZombieID)))
+		|| !IsValidPortableSaveCount(thePlant.mPlantCol, MAX_GRID_SIZE_X - 1)
+		|| !IsValidPortableSaveCount(thePlant.mRow, MAX_GRID_SIZE_Y - 1)))
 	{
 		theContext.mFailed = true;
 		return;
