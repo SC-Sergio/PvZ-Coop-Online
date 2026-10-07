@@ -490,6 +490,40 @@ namespace
 		Require(completedAck && Coop::DeserializeGardenSnapshotAck(completedAck->bytes).has_value()
 			&& receivedSnapshot && receivedSnapshot->bytes == source && receivedSnapshot->serverTick == 987654,
 			"receiver exposes a complete authenticated snapshot without applying it to a Board");
+
+		Coop::LocalTransportHub rejectedHub;
+		auto rejectedHost = rejectedHub.CreateTransport(83);
+		auto rejectedClient = rejectedHub.CreateTransport(84);
+		Coop::GardenSnapshotReceiver rejectedReceiver;
+		Require(rejectedHost && rejectedClient && rejectedReceiver.Configure(83, 84, 77),
+			"snapshot receiver can be configured for structural-preflight rejection");
+		for (std::size_t index = 0; index < frames->size(); ++index)
+		{
+			Require(rejectedHost->SendTo(84, (*frames)[index]), "test sends a complete candidate snapshot");
+			auto packet = rejectedClient->Receive();
+			Require(packet.has_value(), "receiver reads each candidate snapshot fragment");
+			const auto result = rejectedReceiver.HandlePacket(*rejectedClient, *packet,
+				[](std::span<const std::uint8_t>) { return false; });
+			if (index + 1 == frames->size())
+			{
+				Require(result == Coop::SnapshotReceiveResult::REJECTED
+					&& !rejectedHost->Receive().has_value(),
+					"receiver rejects invalid completed snapshot structure before sending its final ACK");
+			}
+			else
+			{
+				Require(result == Coop::SnapshotReceiveResult::INCOMPLETE
+					&& rejectedHost->Receive().has_value(),
+					"receiver acknowledges bounded fragments while structural validation is pending");
+			}
+		}
+		Require(rejectedHost->SendTo(84, frames->back()), "test retries the rejected final fragment");
+		auto rejectedFinal = rejectedClient->Receive();
+		Require(rejectedFinal
+			&& rejectedReceiver.HandlePacket(*rejectedClient, *rejectedFinal,
+				[](std::span<const std::uint8_t>) { return true; }) == Coop::SnapshotReceiveResult::REJECTED
+			&& !rejectedHost->Receive().has_value(),
+			"receiver never ACKs a cached structurally rejected transfer on retry");
 		Require(sender.Begin(*host, 72, 11, 77, 1236, source)
 			&& host->DisconnectPeer(72)
 			&& sender.Pump(*host, now) == Coop::SnapshotSendStatus::PEER_DISCONNECTED

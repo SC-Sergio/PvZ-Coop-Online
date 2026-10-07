@@ -28,6 +28,14 @@ namespace Sexy { class MTRand; }
 
 namespace Coop
 {
+	enum class GardenRecoveryStatus
+	{
+		NONE,
+		TRANSFERRING,
+		STRUCTURALLY_VALIDATED,
+		FAILED
+	};
+
 	class CoopGardenManager : public IPlayerCommandExecutor
 	{
 	public:
@@ -51,10 +59,12 @@ namespace Coop
 	bool HandleControlPacket(const TransportPacket& packet);
 	void PumpHeartbeat();
 		std::optional<GardenSnapshot> TakeCompletedSnapshotRecovery();
+		GardenRecoveryStatus GetGardenRecoveryStatus(PlayerId playerId) const noexcept;
 		bool AdvanceSimulationTick();
 		bool Execute(const PlayerCommand& command) override;
 		bool BeginSnapshotRecovery(TransportPlayerId peerId, PlayerId playerId);
 		void PumpSnapshotSends();
+		void SetGardenRecoveryStatus(PlayerId playerId, GardenRecoveryStatus status);
 		void SyncTeamResults();
 		void ProcessDeleteQueues();
 		TeamResult GetTeamResult() const noexcept;
@@ -84,6 +94,7 @@ namespace Coop
 	std::unordered_set<TransportPlayerId> mLastConnectedPeerIds;
 		GardenSnapshotReceiver mSnapshotReceiver;
 		std::unordered_map<TransportPlayerId, GardenSnapshotSender> mSnapshotSenders;
+		std::unordered_map<PlayerId, GardenRecoveryStatus> mRecoveryStatuses;
 		std::uint64_t mNextSnapshotTransferId = 1;
 		std::uint64_t mNextLocalCommandSequence = 1;
 		GameScenes mPreviousGameScene = GameScenes::SCENE_LOADING;

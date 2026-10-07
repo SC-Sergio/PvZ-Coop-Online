@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <span>
@@ -432,7 +433,8 @@ namespace Coop
 			return true;
 		}
 
-		SnapshotReceiveResult HandlePacket(INetworkTransport& transport, const TransportPacket& packet)
+		SnapshotReceiveResult HandlePacket(INetworkTransport& transport, const TransportPacket& packet,
+			const std::function<bool(std::span<const std::uint8_t>)>& validateCompletedSnapshot = {})
 		{
 			if (mExpectedHostId == 0 || transport.GetLocalPlayerId() != mLocalPlayerId
 				|| packet.senderId != mExpectedHostId || packet.bytes.size() < COOP_SNAPSHOT_HEADER_BYTES
@@ -443,6 +445,8 @@ namespace Coop
 			const std::uint64_t transferId = ReadSnapshotU64(packet.bytes, 8);
 			const GardenId gardenId = ReadSnapshotU32(packet.bytes, 16);
 			const std::uint16_t chunkIndex = ReadSnapshotU16(packet.bytes, 34);
+			if (mRejectedTransferId == transferId && mRejectedGardenId == gardenId)
+				return SnapshotReceiveResult::REJECTED;
 			if (mCompletedTransferId == transferId && mCompletedGardenId == gardenId
 				&& chunkIndex < mCompletedChunkCount)
 			{
@@ -457,6 +461,12 @@ namespace Coop
 				return result;
 			if (result == SnapshotReceiveResult::COMPLETE)
 			{
+				if (validateCompletedSnapshot && !validateCompletedSnapshot(completed.bytes))
+				{
+					mRejectedTransferId = completed.transferId;
+					mRejectedGardenId = completed.gardenId;
+					return SnapshotReceiveResult::REJECTED;
+				}
 				mCompletedTransferId = completed.transferId;
 				mCompletedGardenId = completed.gardenId;
 				mCompletedChunkCount = static_cast<std::uint16_t>(ReadSnapshotU16(packet.bytes, 32));
@@ -483,6 +493,8 @@ namespace Coop
 			mCompletedTransferId = 0;
 			mCompletedGardenId = 0;
 			mCompletedChunkCount = 0;
+			mRejectedTransferId = 0;
+			mRejectedGardenId = 0;
 			mAssembler.Reset();
 			mCompleted.reset();
 		}
@@ -494,6 +506,8 @@ namespace Coop
 		std::uint64_t mCompletedTransferId = 0;
 		GardenId mCompletedGardenId = 0;
 		std::uint16_t mCompletedChunkCount = 0;
+		std::uint64_t mRejectedTransferId = 0;
+		GardenId mRejectedGardenId = 0;
 		GardenSnapshotAssembler mAssembler;
 		std::optional<GardenSnapshot> mCompleted;
 	};
