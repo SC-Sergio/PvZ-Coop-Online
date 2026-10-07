@@ -5112,7 +5112,12 @@ void Board::MouseUp(int x, int y, int theClickCount)
 		}
 		if (mSpeedButton && mSpeedButton->IsMouseOver() && !mApp->GetDialog(Dialogs::DIALOG_GAME_OVER) && !mApp->GetDialog(Dialogs::DIALOG_LEVEL_COMPLETE))
 		{
-			if(std::abs(mSpeed - 1.0) < 1e-6){
+			if (mGardenStateIsolated && mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
+			{
+				mSpeed = 1.0;
+				mSpeedButton->SetLabel("1x");
+			}
+			else if(std::abs(mSpeed - 1.0) < 1e-6){
 				mSpeed = 1.5;
 				mSpeedButton->SetLabel("1.5x");
 			}
@@ -6267,7 +6272,9 @@ void Board::Update()
 	}
 	mMenuButton->Update();
 	if(mSpeedButton && !mSpeedButton->mBtnNoDraw){
-		mSpeedButton->mDisabled = aDisabled;
+		const bool aCoopMatchActive = mGardenStateIsolated && mApp->mCoopGardenManager
+			&& mApp->mCoopGardenManager->IsActive();
+		mSpeedButton->mDisabled = aDisabled || aCoopMatchActive;
 		mSpeedButton->Update();
 	}
 	if (mStoreButton)
@@ -6343,6 +6350,12 @@ void Board::UpdateAll(ModalFlags* theFlags)
 void Board::UpdateSimulation()
 {
 	ScopedGardenSimulationState aGardenState(this);
+	if (mGardenStateIsolated && mApp->mCoopGardenManager && mApp->mCoopGardenManager->IsActive())
+	{
+		mSpeed = 1.0;
+		if (mSpeedButton)
+			mSpeedButton->SetLabel("1x");
+	}
 	if (mGardenStateIsolated && mApp->mEffectSystem)
 		mApp->mEffectSystem->Update();
 	if (mTimeStopCounter > 0)
