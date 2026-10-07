@@ -4861,7 +4861,8 @@ void Board::MouseDown(int x, int y, int theClickCount)
 		mCutScene->MouseDown(x, y);
 	}
 	
-	if (mApp->mTodCheatKeys && !mApp->IsScaryPotterLevel() && mNextSurvivalStageCounter > 0)
+	if (!mGardenStateIsolated && mApp->mTodCheatKeys
+		&& !mApp->IsScaryPotterLevel() && mNextSurvivalStageCounter > 0)
 	{
 		mNextSurvivalStageCounter = 2;
 		for (int i = 0; i < MAX_GRID_SIZE_Y; i++)
