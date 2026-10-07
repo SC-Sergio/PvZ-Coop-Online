@@ -42,6 +42,7 @@
 #include "misc/Buffer.h"
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 static constexpr const char* FILE_COMPILE_TIME_STRING = "Jul  2 201011:47:03"; // The compile time of 1.2.0.1073 GOTY
@@ -1137,6 +1138,12 @@ static bool ReadPodTailField(const unsigned char* theData, size_t theSize, TObje
 
 static void WriteTLVBlob(PortableSaveContext& theContext, const std::vector<unsigned char>& theBlob)
 {
+	if (theBlob.size() > MAX_PORTABLE_SAVE_BLOB_BYTES
+		|| theBlob.size() > std::numeric_limits<uint32_t>::max())
+	{
+		theContext.mFailed = true;
+		return;
+	}
 	uint32_t aSize = static_cast<uint32_t>(theBlob.size());
 	theContext.SyncUInt32(aSize);
 	if (aSize > 0)
@@ -1435,6 +1442,16 @@ static bool SyncDataArrayHeaderPortable(PortableSaveContext& theContext, DataArr
 	return true;
 }
 
+template <typename T>
+static bool ValidateDataArrayEntriesPortable(const DataArray<T>& theDataArray)
+{
+	return IsValidPortableSaveArrayEntries(theDataArray.mMaxUsedCount, theDataArray.mSize,
+		theDataArray.mFreeListHead, [&theDataArray](std::uint32_t index)
+		{
+			return theDataArray.mBlock[index].mID;
+		});
+}
+
 template <typename T, typename TSyncFn>
 static void SyncDataArrayPortable(PortableSaveContext& theContext, DataArray<T>& theDataArray, TSyncFn theSyncFn)
 {
@@ -1444,8 +1461,14 @@ static void SyncDataArrayPortable(PortableSaveContext& theContext, DataArray<T>&
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
 		theContext.SyncUInt32(theDataArray.mBlock[i].mID);
+		if (theContext.mFailed)
+			return;
 		theSyncFn(theDataArray.mBlock[i].mItem);
+		if (theContext.mFailed)
+			return;
 	}
+	if (theContext.mReading && !ValidateDataArrayEntriesPortable(theDataArray))
+		theContext.mFailed = true;
 }
 
 template <typename T>
@@ -1457,7 +1480,11 @@ static void SyncDataArrayIdsOnlyPortable(PortableSaveContext& theContext, DataAr
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
 		theContext.SyncUInt32(theDataArray.mBlock[i].mID);
+		if (theContext.mFailed)
+			return;
 	}
+	if (theContext.mReading && !ValidateDataArrayEntriesPortable(theDataArray))
+		theContext.mFailed = true;
 }
 
 template <typename T, typename TWriteFn, typename TReadFn>
@@ -1469,6 +1496,8 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 	for (uint32_t i = 0; i < theDataArray.mMaxUsedCount; i++)
 	{
 		theContext.SyncUInt32(theDataArray.mBlock[i].mID);
+		if (theContext.mFailed)
+			return;
 		if (theContext.mReading)
 		{
 			uint32_t aItemSize = 0;
@@ -1509,6 +1538,11 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 			if (aActive)
 			{
 				theWriteFn(aItemData, theDataArray.mBlock[i].mItem);
+				if (aItemData.size() > MAX_PORTABLE_SAVE_BLOB_BYTES)
+				{
+					theContext.mFailed = true;
+					return;
+				}
 				aItemSize = static_cast<uint32_t>(aItemData.size());
 			}
 			theContext.SyncUInt32(aItemSize);
@@ -1516,6 +1550,8 @@ static void SyncDataArrayPortableTLV(PortableSaveContext& theContext, DataArray<
 				theContext.SyncBytes(aItemData.data(), aItemSize);
 		}
 	}
+	if (theContext.mReading && !ValidateDataArrayEntriesPortable(theDataArray))
+		theContext.mFailed = true;
 }
 
 // Field IDs for Board base: These IDs are part of the on-disk format and must NOT be renumbered.

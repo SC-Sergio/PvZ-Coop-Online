@@ -60,6 +60,21 @@ namespace
 			"save array zero generation key is rejected");
 		Require(!IsValidPortableSaveArrayHeader(0, 20, 8, 42, 127, 128),
 			"save array capacity mismatch is rejected");
+		const std::vector<std::uint32_t> validIds{0x00010000U, 2U};
+		Require(IsValidPortableSaveArrayEntries(2, 1, 1,
+			[&validIds](std::uint32_t index) { return validIds[index]; }),
+			"active entry identity and complete free-list chain are accepted");
+		const std::vector<std::uint32_t> mismatchedIds{0x00010001U, 2U};
+		Require(!IsValidPortableSaveArrayEntries(2, 1, 1,
+			[&mismatchedIds](std::uint32_t index) { return mismatchedIds[index]; }),
+			"an active entry whose ID points at a different array slot is rejected");
+		const std::vector<std::uint32_t> cyclicIds{0x00010000U, 1U};
+		Require(!IsValidPortableSaveArrayEntries(2, 1, 1,
+			[&cyclicIds](std::uint32_t index) { return cyclicIds[index]; }),
+			"a cyclic free-list chain is rejected");
+		Require(!IsValidPortableSaveArrayEntries(2, 1, 2,
+			[&validIds](std::uint32_t index) { return validIds[index]; }),
+			"an unreachable free entry is rejected");
 		Require(IsValidPortableSaveBlobSize(64, 64), "a blob fitting the remaining input is accepted");
 		Require(!IsValidPortableSaveBlobSize(65, 64), "a blob extending beyond remaining input is rejected");
 		Require(!IsValidPortableSaveBlobSize(MAX_PORTABLE_SAVE_BLOB_BYTES + 1, MAX_PORTABLE_SAVE_BLOB_BYTES + 1),

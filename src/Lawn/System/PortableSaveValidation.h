@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <cstddef>
+#include <vector>
 
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_ARRAY_CAPACITY = 65536;
 inline constexpr std::uint32_t MAX_PORTABLE_SAVE_BLOB_BYTES = 16 * 1024 * 1024;
@@ -29,6 +30,51 @@ inline bool IsValidPortableSaveBlobSize(std::uint32_t blobSize,
 	std::uint32_t remainingBytes) noexcept
 {
 	return blobSize <= MAX_PORTABLE_SAVE_BLOB_BYTES && blobSize <= remainingBytes;
+}
+
+template <typename GetEntryId>
+inline bool IsValidPortableSaveArrayEntries(std::uint32_t maxUsedCount,
+	std::uint32_t size, std::uint32_t freeListHead, GetEntryId getEntryId)
+{
+	if (maxUsedCount > MAX_PORTABLE_SAVE_ARRAY_CAPACITY || size > maxUsedCount
+		|| freeListHead > maxUsedCount)
+		return false;
+	std::vector<std::uint8_t> isFree(maxUsedCount, 0);
+	std::vector<std::uint8_t> freeListVisited(maxUsedCount, 0);
+	std::uint32_t activeCount = 0;
+	for (std::uint32_t index = 0; index < maxUsedCount; ++index)
+	{
+		const std::uint32_t id = getEntryId(index);
+		if ((id & 0xFFFF0000U) != 0)
+		{
+			if ((id & 0x0000FFFFU) != index)
+				return false;
+			++activeCount;
+		}
+		else
+		{
+			if (id > maxUsedCount)
+				return false;
+			isFree[index] = 1;
+		}
+	}
+	if (activeCount != size)
+		return false;
+
+	std::uint32_t index = freeListHead;
+	while (index < maxUsedCount)
+	{
+		if (!isFree[index] || freeListVisited[index])
+			return false;
+		freeListVisited[index] = 1;
+		index = getEntryId(index);
+	}
+	if (index != maxUsedCount)
+		return false;
+	for (std::uint32_t i = 0; i < maxUsedCount; ++i)
+		if (isFree[i] != freeListVisited[i])
+			return false;
+	return true;
 }
 
 inline bool ValidatePortableSavePayload(const std::uint8_t* payload, std::size_t payloadSize,
