@@ -8,6 +8,7 @@
 
 #include "CoopSession.h"
 
+#include <chrono>
 #include <cstdint>
 #include <unordered_map>
 
@@ -15,6 +16,8 @@ namespace Coop
 {
 	constexpr std::uint16_t PROTOCOL_VERSION = 1;
 	constexpr std::uint32_t MAX_RESOURCE_TRANSFER = 2500;
+	constexpr double COMMAND_RATE_LIMIT_PER_SECOND = 20.0;
+	constexpr double COMMAND_RATE_BURST = 32.0;
 	constexpr std::int16_t BOARD_COLUMNS = 9;
 	constexpr std::int16_t BOARD_ROWS = 6;
 
@@ -73,9 +76,10 @@ namespace Coop
 		INVALID_COORDINATES,
 		INVALID_VALUE,
 		INVALID_TARGET,
-	EXECUTION_FAILED,
-	SENDER_MISMATCH,
-	NOT_AUTHORITY
+		EXECUTION_FAILED,
+		INVALID_RATE,
+		SENDER_MISMATCH,
+		NOT_AUTHORITY
 	};
 
 	// Validates intent only. The authoritative gameplay adapter still checks live resources,
@@ -83,11 +87,20 @@ namespace Coop
 	class PlayerCommandValidator
 	{
 	public:
-		CommandRejection Validate(const CoopSession& session, const PlayerCommand& command);
-		void Reset() { mLastSequenceByPlayer.clear(); }
+		using Clock = std::chrono::steady_clock;
+		CommandRejection Validate(const CoopSession& session, const PlayerCommand& command,
+			Clock::time_point now = Clock::now());
+		void Reset() { mLastSequenceByPlayer.clear(); mRateByPlayer.clear(); }
 
 	private:
 		std::unordered_map<PlayerId, std::uint64_t> mLastSequenceByPlayer;
+		struct RateState
+		{
+			double tokens = COMMAND_RATE_BURST;
+			Clock::time_point updatedAt{};
+			bool initialized = false;
+		};
+		std::unordered_map<PlayerId, RateState> mRateByPlayer;
 	};
 
 	class IPlayerCommandExecutor

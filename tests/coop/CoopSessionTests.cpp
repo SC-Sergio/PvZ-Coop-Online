@@ -1031,6 +1031,27 @@ namespace
 		command.sequence = 8;
 		command.type = static_cast<Coop::CommandType>(255);
 		Require(validator.Validate(session, command) == Coop::CommandRejection::INVALID_COMMAND, "unknown command type is rejected");
+
+		Coop::PlayerCommandValidator rateValidator;
+		auto rateCommand = command;
+		rateCommand.type = Coop::CommandType::PING;
+		rateCommand.value = static_cast<std::int32_t>(Coop::PingType::ALL_GOOD);
+		rateCommand.x = -1;
+		rateCommand.y = -1;
+		rateCommand.sequence = 1;
+		const auto rateStart = Coop::PlayerCommandValidator::Clock::time_point{};
+		for (std::uint64_t sequence = 1; sequence <= static_cast<std::uint64_t>(Coop::COMMAND_RATE_BURST); ++sequence)
+		{
+			rateCommand.sequence = sequence;
+			Require(rateValidator.Validate(session, rateCommand, rateStart) == Coop::CommandRejection::NONE,
+				"command rate limiter permits its configured initial burst");
+		}
+		rateCommand.sequence = static_cast<std::uint64_t>(Coop::COMMAND_RATE_BURST) + 1;
+		Require(rateValidator.Validate(session, rateCommand, rateStart) == Coop::CommandRejection::INVALID_RATE,
+			"command rate limiter rejects traffic beyond the burst");
+		const auto refill = rateStart + std::chrono::milliseconds(50);
+		Require(rateValidator.Validate(session, rateCommand, refill) == Coop::CommandRejection::NONE,
+			"command rate limiter refills deterministically and does not consume rejected sequence");
 	}
 
 	class RecordingExecutor final : public Coop::IPlayerCommandExecutor
@@ -1245,6 +1266,12 @@ namespace
 		const auto rejectedRoundTrip = rejectedResponse ? Coop::DeserializeAuthorityResponse(*rejectedResponse) : std::nullopt;
 		Require(rejectedRoundTrip && rejectedRoundTrip->rejection == response.rejection,
 			"rejected authority response carries an explicit reason");
+		response.rejection = Coop::CommandRejection::INVALID_RATE;
+		const auto rateRejectedResponse = Coop::SerializeAuthorityResponse(response);
+		const auto rateRejectedRoundTrip = rateRejectedResponse
+			? Coop::DeserializeAuthorityResponse(*rateRejectedResponse) : std::nullopt;
+		Require(rateRejectedRoundTrip && rateRejectedRoundTrip->rejection == Coop::CommandRejection::INVALID_RATE,
+			"rate-limit rejection is preserved by the authority response serializer");
 		response.acceptedCommand = Coop::PlayerCommand{};
 		Require(!Coop::SerializeAuthorityResponse(response), "rejected response cannot smuggle an accepted command");
 		auto tamperedRejection = *rejectedResponse;

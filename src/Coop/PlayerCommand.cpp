@@ -10,7 +10,8 @@
 
 namespace Coop
 {
-	CommandRejection PlayerCommandValidator::Validate(const CoopSession& session, const PlayerCommand& command)
+	CommandRejection PlayerCommandValidator::Validate(const CoopSession& session, const PlayerCommand& command,
+		Clock::time_point now)
 	{
 		if (command.protocolVersion != PROTOCOL_VERSION)
 			return CommandRejection::WRONG_PROTOCOL;
@@ -82,6 +83,23 @@ namespace Coop
 		default:
 			return CommandRejection::INVALID_COMMAND;
 		}
+
+		auto& rate = mRateByPlayer[command.senderId];
+		if (!rate.initialized)
+		{
+			rate.updatedAt = now;
+			rate.initialized = true;
+		}
+		else if (now > rate.updatedAt)
+		{
+			const double elapsed = std::chrono::duration<double>(now - rate.updatedAt).count();
+			rate.tokens = std::min(COMMAND_RATE_BURST,
+				rate.tokens + elapsed * COMMAND_RATE_LIMIT_PER_SECOND);
+			rate.updatedAt = now;
+		}
+		if (rate.tokens < 1.0)
+			return CommandRejection::INVALID_RATE;
+		rate.tokens -= 1.0;
 
 		mLastSequenceByPlayer[command.senderId] = command.sequence;
 		return CommandRejection::NONE;
