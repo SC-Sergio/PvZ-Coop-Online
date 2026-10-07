@@ -4,6 +4,10 @@
 
 The main repository does not currently declare a project-level test suite. CMake builds the `pvz-mod` application and now optionally builds `coop-session-tests` (enabled by default). The game requires CMake, a C++20 toolchain, SDL2, zlib, JPEG, PNG, and the audio libraries documented by the root README. Test the engine with legal user-provided game data; never commit that data.
 
+## Legal game data for manual play
+
+Desktop builds resolve resources relative to the executable directory, not the shell's current directory. Put a legally obtained `main.pak` and the matching `properties/` directory beside the built `pvz-mod.exe` (for example, in `out/build-vs-vcpkg/Debug/`), or pass `-resdir="C:\path\to\your\game-data"` to point at a separate directory. Keep these files outside Git; the root README documents supported GOTY versions and project asset policy. The protocol and roster tests do not need game data, but Board initialization, multiplayer matches, save/load, and reconnect runtime checks do.
+
 ## Build and run
 
 ```powershell
